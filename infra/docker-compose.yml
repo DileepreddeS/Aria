@@ -1,0 +1,28 @@
+# Local development Postgres only. Nothing else runs in Docker in Phase 0.
+# Bound to 127.0.0.1 so the database is never reachable from the network.
+services:
+  postgres:
+    image: postgres:16.6-alpine
+    container_name: aria-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aria
+      POSTGRES_USER: aria_owner
+      # Local development only. The real password lives in .env (gitignored);
+      # this default exists so a fresh clone comes up without editing files.
+      POSTGRES_PASSWORD: ${ARIA_POSTGRES_OWNER_PASSWORD:-aria_local_dev}
+      ARIA_APP_PASSWORD: ${ARIA_POSTGRES_APP_PASSWORD:-aria_local_dev}
+      ARIA_MIGRATE_PASSWORD: ${ARIA_POSTGRES_MIGRATE_PASSWORD:-aria_local_dev}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - aria_pgdata:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aria_owner -d aria"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  aria_pgdata:
