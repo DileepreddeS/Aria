@@ -75,7 +75,11 @@ disallow_untyped_decorators = false
 [tool.pytest.ini_options]
 testpaths = ["packages/core/tests", "services/llm_gateway/tests", "apps/api/tests"]
 asyncio_mode = "auto"
-addopts = "-q --strict-markers"
+# importlib import mode: each workspace member has its own tests directory, and the
+# default prepend mode would import the first "tests" package it finds and then fail
+# to see the others. No __init__.py in the test directories, for the same reason.
+addopts = "-q --strict-markers --import-mode=importlib"
+consider_namespace_packages = true
 markers = [
     "db: needs the local Postgres from infra/docker-compose.yml",
 ]

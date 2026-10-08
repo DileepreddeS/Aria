@@ -2,8 +2,8 @@
     ARIA local task runner (Windows).
 
     Usage:  ./tasks.ps1 <task>
-    Tasks:  setup, up, down, kms-init, keys-init, migrate, test, test-db, lint, fmt,
-            typecheck, secrets, audit, check, gateway, api
+    Tasks:  setup, up, down, kms-init, keys-init, migrate, anchor, test, test-db, lint,
+            fmt, typecheck, secrets, audit, check, gateway, api
 
     CI uses the Makefile. This file is for local development on Windows.
 #>
@@ -50,6 +50,10 @@ switch ($Task) {
     "keys-init" {
         $home = Get-AriaHome
         Invoke-Step "ApplyTask Ed25519 keypair" { uv run python -m aria_core.apply_task.keys_init --path (Join-Path $home "apply-task-signing.key") --kid "dev-1" }
+    }
+    "anchor" {
+        $home = Get-AriaHome
+        Invoke-Step "anchor audit chain heads" { uv run python -m aria_core.audit.record_anchors --path (Join-Path $home "audit-anchors.jsonl") }
     }
     "migrate" {
         Invoke-Step "alembic upgrade head" { uv run alembic -c infra/alembic.ini upgrade head }

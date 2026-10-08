@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import ipaddress
 import os
+from collections.abc import Mapping
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Self
@@ -22,7 +23,14 @@ from typing import Literal, Self
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-__all__ = ["Settings", "get_settings"]
+__all__ = [
+    "MIGRATION_ENV_FILE",
+    "MIGRATION_ENV_VAR",
+    "MigrationSettings",
+    "Settings",
+    "assert_no_migration_credentials",
+    "get_settings",
+]
 
 Environment = Literal["dev", "ci", "staging", "prod"]
 
@@ -46,10 +54,12 @@ class Settings(BaseSettings):
     env: Environment = "dev"
 
     # ---------------------------------------------------------------- database
-    #: The API connects as aria_app and is subject to row-level security.
+    #: The API connects as aria_app and is subject to row-level security. There is
+    #: deliberately no field for the migration role's DSN: aria_migrate owns the
+    #: tables and bypasses the tenant policies through its maintenance policy, so
+    #: its credentials must never be reachable from a process that serves requests.
+    #: Alembic reads them through MigrationSettings instead, from a separate file.
     database_url: SecretStr
-    #: Alembic connects as aria_migrate, which owns the tables.
-    migrate_database_url: SecretStr | None = None
 
     # ------------------------------------------------- envelope encryption (S2)
     #: Dev-only KMS root key. Refused outside dev/ci by the validator below.
@@ -114,13 +124,52 @@ class Settings(BaseSettings):
     def database_dsn(self) -> str:
         return self.database_url.get_secret_value()
 
+
+MIGRATION_ENV_VAR = "ARIA_MIGRATE_DATABASE_URL"
+MIGRATION_ENV_FILE = ".env.migrate"
+
+
+class MigrationSettings(BaseSettings):
+    """Alembic's configuration, read from its own file.
+
+    Kept apart from :class:`Settings` so there is no field, no property and no
+    accessor on the application's configuration that could hand out the migration
+    role's credentials. A process that serves requests cannot reach them by
+    accident, because the object it holds does not have them.
+    """
+
+    model_config = SettingsConfigDict(
+        env_prefix="ARIA_",
+        env_file=(".env", MIGRATION_ENV_FILE),
+        env_file_encoding="utf-8",
+        extra="ignore",
+        frozen=True,
+    )
+
+    env: Environment = "dev"
+    migrate_database_url: SecretStr
+
     def migrate_dsn(self) -> str:
-        """Alembic's DSN, falling back to the app DSN only in development."""
-        if self.migrate_database_url is not None:
-            return self.migrate_database_url.get_secret_value()
-        if not self.is_development:
-            raise ValueError("migrate_database_url is required outside dev/ci")
-        return self.database_dsn()
+        return self.migrate_database_url.get_secret_value()
+
+
+def assert_no_migration_credentials(environment: Mapping[str, str] | None = None) -> None:
+    """Refuse to start a request-serving process that can see aria_migrate's DSN.
+
+    Checked against the real environment rather than against a settings object: the
+    failure this prevents is a deployment handing the API the wrong secret, and by
+    the time it reaches a typed field it is already in the process.
+
+    Called by the API and the gateway at start-up.
+    """
+    environment = os.environ if environment is None else environment
+    present = sorted(name for name in environment if name.upper() == MIGRATION_ENV_VAR)
+    if present:
+        raise RuntimeError(
+            f"{', '.join(present)} is set in this process's environment. The migration role owns the "
+            "tables and bypasses tenant isolation; a process that serves requests must never hold its "
+            f"credentials. Keep them in {MIGRATION_ENV_FILE}, which only Alembic reads."
+        )
 
 
 @lru_cache(maxsize=1)

@@ -22,7 +22,7 @@ from sqlalchemy import delete, insert, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from aria_core.config import Settings
+from aria_core.config import MigrationSettings, Settings
 from aria_core.db.models import Tenant, User
 from aria_core.db.session import create_engine, platform_transaction, tenant_transaction
 from aria_core.schemas.identity import TenantId, UserId, new_id
@@ -62,7 +62,7 @@ async def _drop_tenant(engine: AsyncEngine, tenant_id: TenantId) -> None:
 
 
 @pytest_asyncio.fixture
-async def migrate_engine(settings: Settings) -> AsyncIterator[AsyncEngine]:
+async def migrate_engine() -> AsyncIterator[AsyncEngine]:
     """An engine for the migration role, which owns the tables.
 
     Only the tamper-evidence tests use it: they need to alter the audit log the way
@@ -70,7 +70,7 @@ async def migrate_engine(settings: Settings) -> AsyncIterator[AsyncEngine]:
     is not a security boundary — it can drop the tables — so giving it a
     maintenance policy costs nothing and keeps backfills possible.
     """
-    engine = create_engine(settings.migrate_dsn())
+    engine = create_engine(MigrationSettings().migrate_dsn())
     try:
         yield engine
     finally:

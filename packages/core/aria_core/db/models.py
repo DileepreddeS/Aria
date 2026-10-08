@@ -39,6 +39,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from aria_core.schemas.identity import new_id
+from aria_core.sensitivity import Sensitivity
 from aria_core.state_machines.application import ApplicationState
 
 __all__ = [
@@ -122,7 +123,11 @@ class TenantDataKey(Base):
         UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), primary_key=True
     )
     key_version: Mapped[int] = mapped_column(primary_key=True)
-    wrapped_dek: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    wrapped_dek: Mapped[bytes] = mapped_column(
+        LargeBinary,
+        nullable=False,
+        info={"sensitivity": Sensitivity.S3, "accessor": "aria_core.crypto.data_keys"},
+    )
     #: Which KMS key wrapped it, so a rotated root key can still unwrap old DEKs.
     kms_key_id: Mapped[str] = mapped_column(String(200), nullable=False)
     created_at: Mapped[dt.datetime] = _created_at()
@@ -148,8 +153,12 @@ class SensitiveProfile(Base):
     )
     #: Which tenant data key version these ciphertexts were written with.
     key_version: Mapped[int] = mapped_column(nullable=False)
-    work_authorization_ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary)
-    eeo_answers_ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary)
+    work_authorization_ciphertext: Mapped[bytes | None] = mapped_column(
+        LargeBinary, info={"sensitivity": Sensitivity.S2, "accessor": "aria_core.db.sensitive_profile"}
+    )
+    eeo_answers_ciphertext: Mapped[bytes | None] = mapped_column(
+        LargeBinary, info={"sensitivity": Sensitivity.S2, "accessor": "aria_core.db.sensitive_profile"}
+    )
     created_at: Mapped[dt.datetime] = _created_at()
     updated_at: Mapped[dt.datetime] = _created_at()
 
@@ -281,6 +290,17 @@ class ConsumedApplyTaskJti(Base):
     expires_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     __table_args__ = (Index("ix_consumed_apply_task_jtis_expires_at", "expires_at"),)
+
+
+#: Columns holding S2 or S3 data carry their class and their one legitimate accessor
+#: module in ``info``:
+#:
+#:     info={"sensitivity": Sensitivity.S2, "accessor": "aria_core.db.sensitive_profile"}
+#:
+#: ``test_architecture_s2.py`` reads these markers and fails if such a column is
+#: mapped as anything but binary, if a ``*_ciphertext`` column is unmarked, or if any
+#: module other than its declared accessor so much as mentions it. The encryption is
+#: only as good as the number of places that can bypass it.
 
 
 #: Tables whose rows belong to exactly one tenant and must therefore be covered by
