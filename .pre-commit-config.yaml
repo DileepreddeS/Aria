@@ -30,8 +30,7 @@ repos:
 
       - id: mypy-core
         name: mypy (strict)
-        entry: uv run mypy
-        args: ["packages/core", "services/llm_gateway", "apps/api"]
+        entry: bash -c "uv run mypy packages/core && uv run mypy services/llm_gateway && uv run mypy apps/api"
         language: system
         types: [python]
         pass_filenames: false

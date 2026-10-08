@@ -9,7 +9,11 @@ lint:
 	uv run ruff format --check .
 
 typecheck:
-	uv run mypy packages/core services/llm_gateway apps/api
+	# One invocation per workspace member: each has its own tests package, and mypy
+	# cannot hold two modules of the same name in one run.
+	uv run mypy packages/core
+	uv run mypy services/llm_gateway
+	uv run mypy apps/api
 
 test:
 	uv run pytest

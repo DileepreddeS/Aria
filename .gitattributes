@@ -1,0 +1,6 @@
+# Keep LF in the repository and let Windows check out what it likes.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.png binary
+*.pdf binary
+*.key binary

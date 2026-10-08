@@ -69,7 +69,11 @@ switch ($Task) {
         Invoke-Step "ruff check --fix" { uv run ruff check --fix . }
     }
     "typecheck" {
-        Invoke-Step "mypy" { uv run mypy packages/core services/llm_gateway apps/api }
+        # One invocation per workspace member: each has its own tests package, and
+        # mypy cannot hold two modules of the same name in one run.
+        Invoke-Step "mypy (core)" { uv run mypy packages/core }
+        Invoke-Step "mypy (llm_gateway)" { uv run mypy services/llm_gateway }
+        Invoke-Step "mypy (api)" { uv run mypy apps/api }
     }
     "secrets" {
         Invoke-Step "gitleaks" { gitleaks dir . --redact --verbose }
