@@ -1,0 +1,167 @@
+name: CI
+
+# Every job states what it needs and nothing more (SECURITY.md §15):
+#   - actions are pinned by commit SHA, not by tag, because a tag can be moved;
+#   - the default token is read-only and jobs raise it only if they must;
+#   - the dependency set is installed from the lockfile, never resolved afresh.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # No secrets are needed by CI. The database is a throwaway service container, the
+  # dev KMS key is generated per run, and no LLM provider is called.
+  ARIA_ENV: ci
+  ARIA_DATABASE_URL: postgresql+asyncpg://aria_app:ci_only@127.0.0.1:5433/aria
+  ARIA_LLM_GATEWAY_SERVICE_TOKEN: ci-only-not-a-real-secret
+  ARIA_OTEL_EXPORTER: none
+  ARIA_DEV_KMS_KEY_PATH: /tmp/aria/dev-kms-root.key
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+      - run: uv sync --all-packages --frozen
+      - run: make lint
+
+  typecheck:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+      - run: uv sync --all-packages --frozen
+      - run: make typecheck
+
+  test:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16.6-alpine@sha256:1d04b9ba1d4996401f2552b51beda8187f175c0645c091e4781134fc9c9a3eef
+        env:
+          POSTGRES_DB: aria
+          POSTGRES_USER: aria_owner
+          POSTGRES_PASSWORD: ci_only
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U aria_owner -d aria"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+      - run: uv sync --all-packages --frozen
+
+      # The roles the migration and the row-level security tests depend on. The
+      # service container cannot run our init script, so it is applied here; the
+      # same three roles, with the same privileges, as infra/postgres/init.
+      - name: Create database roles
+        env:
+          PGPASSWORD: ci_only
+        run: |
+          psql -h 127.0.0.1 -p 5433 -U aria_owner -d aria -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE aria_app LOGIN PASSWORD 'ci_only'
+              NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+          CREATE ROLE aria_migrate LOGIN PASSWORD 'ci_only'
+              NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+          GRANT USAGE, CREATE ON SCHEMA public TO aria_migrate;
+          GRANT USAGE ON SCHEMA public TO aria_app;
+          ALTER DEFAULT PRIVILEGES FOR ROLE aria_migrate IN SCHEMA public
+              GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO aria_app;
+          ALTER DEFAULT PRIVILEGES FOR ROLE aria_migrate IN SCHEMA public
+              GRANT USAGE, SELECT ON SEQUENCES TO aria_app;
+          REVOKE ALL ON DATABASE aria FROM PUBLIC;
+          GRANT CONNECT ON DATABASE aria TO aria_app, aria_migrate;
+          REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+          SQL
+
+      # The migration role's DSN lives in its own file, which the API and the
+      # gateway never load — the same separation as in development.
+      - name: Write the migration environment
+        run: |
+          echo "ARIA_MIGRATE_DATABASE_URL=postgresql+asyncpg://aria_migrate:ci_only@127.0.0.1:5433/aria" \
+            > .env.migrate
+
+      - name: Generate the development KMS key
+        # Outside the workspace: kms_init refuses to write a key inside the repo.
+        run: uv run python -m aria_core.crypto.kms_init --path /tmp/aria/dev-kms-root.key
+
+      - name: Migrate
+        run: uv run alembic -c infra/alembic.ini upgrade head
+
+      - name: Test
+        run: make test
+
+  secrets:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # gitleaks scans history as well as the working tree.
+          fetch-depth: 0
+
+      # Installed from the pinned release and checked against its published
+      # digest, rather than through a third-party action: one fewer thing in the
+      # supply chain, and the same binary the pre-commit hook uses locally.
+      - name: Install gitleaks
+        env:
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          set -euo pipefail
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL -o "$archive" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${archive}"
+          echo "${GITLEAKS_SHA256}  ${archive}" | sha256sum --check --strict
+          tar -xzf "$archive" gitleaks
+          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+
+      - name: Scan the working tree
+        run: make secrets
+
+      - name: Scan the history
+        run: gitleaks git . --redact --verbose --exit-code 1
+
+  sast:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+      # Pinned, and run without telemetry. The ARIA ruleset in .semgrep/ encodes
+      # this codebase's own invariants; the registry rulesets cover the generic
+      # Python and security checks.
+      - name: Install semgrep
+        run: |
+          uv tool install semgrep==1.180.0
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - run: make sast
+
+  dependencies:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+      - run: uv sync --all-packages --frozen
+      - run: make audit

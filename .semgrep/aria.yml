@@ -1,0 +1,152 @@
+# ARIA's own invariants, as static rules.
+#
+# The registry rulesets (p/python, p/security-audit) cover generic Python and
+# security problems. These cover the rules that are specific to this codebase and
+# that a reviewer would otherwise have to remember — the boundaries from
+# SECURITY.md that are easy to cross by accident in a hurry.
+#
+# Each rule says what to do instead, because a rule that only says "no" gets
+# worked around.
+rules:
+  - id: aria-no-direct-llm-provider
+    languages: [python]
+    severity: ERROR
+    paths:
+      exclude:
+        - /services/llm_gateway/
+    pattern-either:
+      - pattern: import anthropic
+      - pattern: import openai
+      - pattern: from anthropic import $NAME
+      - pattern: from openai import $NAME
+      - pattern: import litellm
+      - pattern: from litellm import $NAME
+    message: >-
+      Only services/llm_gateway may talk to a model provider (SECURITY.md §2, §13).
+      Call the gateway instead: it enforces the data-class rules, keeps untrusted
+      content out of instructions, and accounts for cost.
+
+  - id: aria-no-session-factory-outside-session-module
+    languages: [python]
+    severity: ERROR
+    paths:
+      exclude:
+        - /packages/core/aria_core/db/session.py
+        - /infra/migrations/
+    pattern-either:
+      - pattern: async_sessionmaker(...)
+      - pattern: sessionmaker(...)
+    message: >-
+      Open transactions through aria_core.db.session.tenant_transaction or
+      platform_transaction. They set the session variables the row-level security
+      policies read; a session built elsewhere is a query with no tenant scope.
+
+  - id: aria-no-raw-set-local-for-tenant
+    languages: [python]
+    severity: ERROR
+    paths:
+      exclude:
+        - /packages/core/aria_core/db/session.py
+    patterns:
+      - pattern-regex: (SET\s+LOCAL\s+aria\.|set_config\s*\(\s*['\"]aria\.)
+    message: >-
+      The transaction scope is set in aria_core.db.session and nowhere else.
+      Setting aria.tenant_id by hand bypasses the one place that guarantees every
+      query is scoped.
+
+  - id: aria-untrusted-content-not-in-an-f-string
+    languages: [python]
+    severity: WARNING
+    paths:
+      exclude:
+        # The one place that is supposed to render untrusted text: the gateway's
+        # prompt assembler, which puts it in its own labelled block. The tests in
+        # services/llm_gateway/tests assert the separation holds there.
+        - /services/llm_gateway/aria_llm_gateway/prompt.py
+    pattern-either:
+      - pattern: f"...{$CONTENT.text}..."
+      - pattern: $PREFIX + $CONTENT.text
+      - pattern: $CONTENT.text + $SUFFIX
+    message: >-
+      Untrusted content is data, never part of an instruction (SECURITY.md §5).
+      Pass the UntrustedContent block itself to the gateway, which renders it as its
+      own labelled message. Interpolating .text is how a job description becomes a
+      prompt.
+
+  - id: aria-no-broad-candidate-getter
+    languages: [python]
+    severity: ERROR
+    pattern-either:
+      - pattern: "def get_user_data(...): ..."
+      - pattern: "def get_candidate_data(...): ..."
+      - pattern: "def get_all_facts(...): ..."
+      - pattern: "def get_profile(...): ..."
+    message: >-
+      Agent tools are narrow getters — get_candidate_email(),
+      get_facts_for_requirements(ids) — never one call that returns everything
+      (SECURITY.md §4). A broad getter is how S2 data reaches a prompt.
+
+  - id: aria-no-plaintext-s2-column
+    languages: [python]
+    severity: ERROR
+    patterns:
+      - pattern-regex: (work_authorization|eeo_answers|visa_status|date_of_birth|ssn)\s*:\s*Mapped\[str
+    message: >-
+      S2 columns hold AES-GCM ciphertext and are mapped as LargeBinary named
+      *_ciphertext, written through aria_core.db.sensitive_profile (SECURITY.md §3).
+      test_architecture_s2.py enforces the same rule from the other direction.
+
+  - id: aria-no-naive-datetime
+    languages: [python]
+    severity: ERROR
+    pattern-either:
+      - pattern: datetime.datetime.utcnow()
+      - pattern: datetime.utcnow()
+      - pattern: datetime.datetime.now()
+      - pattern: datetime.now()
+    message: >-
+      Use aria_core.schemas.base.utc_now(). Every ARIA timestamp is timezone-aware:
+      a naive one silently becomes wrong the moment it crosses a boundary, and an
+      ApplyTask's validity window depends on it.
+
+  - id: aria-no-insecure-http-request
+    languages: [python]
+    severity: ERROR
+    pattern-regex: \b(?:httpx|requests)\.(?:get|post|put|patch|delete|request)\(\s*["']http://
+    message: >-
+      HTTPS only (SECURITY.md §10). Server-side fetches additionally go through the
+      egress proxy and the SSRF checks in the NAVIGATE policy rule.
+
+  - id: aria-no-verify-false
+    languages: [python]
+    severity: ERROR
+    pattern-either:
+      - pattern: httpx.Client(..., verify=False, ...)
+      - pattern: httpx.AsyncClient(..., verify=False, ...)
+      - pattern: requests.$METHOD(..., verify=False, ...)
+      - pattern: ssl._create_unverified_context(...)
+    message: >-
+      Certificate verification is never disabled. If a host's certificate does not
+      validate, that is the finding.
+
+  - id: aria-no-captcha-or-stealth-tooling
+    languages: [python]
+    severity: ERROR
+    pattern-either:
+      - pattern-regex: \b(2captcha|anticaptcha|capmonster|deathbycaptcha|captcha_solver)\b
+      - pattern-regex: \b(playwright_stealth|puppeteer_extra|undetected_chromedriver|selenium_stealth)\b
+    message: >-
+      ARIA does not solve CAPTCHAs and does not evade bot detection (PRODUCT_SPEC
+      §1.4). The user solves a CAPTCHA through the Liaison; applications run in the
+      user's own browser at human pace.
+
+  - id: aria-no-secrets-in-source
+    languages: [python]
+    severity: ERROR
+    paths:
+      exclude:
+        - "**/tests/**"
+    pattern-regex: (?i)(api_key|secret_key|password|access_token)\s*=\s*["'][A-Za-z0-9/+_\-]{16,}["']
+    message: >-
+      Secrets come from configuration, never from source (SECURITY.md §10). Add a
+      typed SecretStr field to aria_core.config.Settings.
