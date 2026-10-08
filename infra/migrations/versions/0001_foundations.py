@@ -279,6 +279,15 @@ def _enable_row_security() -> None:
     for table in ("tenants", "audit_events", *TENANT_ID_TABLES):
         op.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")
         op.execute(f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY")
+        # FORCE applies to the owner too, which would otherwise leave aria_migrate
+        # unable to see any row — breaking data backfills and verification tooling.
+        # It gets explicit access instead. This is not a weakening: aria_migrate can
+        # drop these tables outright, so it was never a security boundary. The
+        # boundary is aria_app, which owns nothing and is covered by the policies
+        # below.
+        op.execute(
+            f"CREATE POLICY maintenance ON {table} FOR ALL TO aria_migrate USING (true) WITH CHECK (true)"
+        )
 
     # A tenant sees its own row; platform scope provisions new tenants.
     _execute_each(

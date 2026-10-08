@@ -62,6 +62,22 @@ async def _drop_tenant(engine: AsyncEngine, tenant_id: TenantId) -> None:
 
 
 @pytest_asyncio.fixture
+async def migrate_engine(settings: Settings) -> AsyncIterator[AsyncEngine]:
+    """An engine for the migration role, which owns the tables.
+
+    Only the tamper-evidence tests use it: they need to alter the audit log the way
+    database-level access could, which aria_app cannot do by design. aria_migrate
+    is not a security boundary — it can drop the tables — so giving it a
+    maintenance policy costs nothing and keeps backfills possible.
+    """
+    engine = create_engine(settings.migrate_dsn())
+    try:
+        yield engine
+    finally:
+        await engine.dispose()
+
+
+@pytest_asyncio.fixture
 async def tenant_a(engine: AsyncEngine) -> AsyncIterator[TenantId]:
     tenant_id = await _create_tenant(engine, "a")
     try:
