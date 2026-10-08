@@ -47,6 +47,7 @@ select = [
     "UP",            # pyupgrade
     "B",             # bugbear
     "S",             # bandit: security
+    "DTZ",           # naive datetimes: every ARIA timestamp is timezone-aware
     "ASYNC",
     "RUF",
 ]
