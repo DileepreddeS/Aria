@@ -34,3 +34,5 @@ node_modules/
 .idea/
 Thumbs.db
 desktop.ini
+CLAUDE.md
+.claude/
