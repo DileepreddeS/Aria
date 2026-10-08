@@ -27,11 +27,38 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Final
 
-__all__ = ["Finding", "redact_sensitive", "scan_for_sensitive"]
+__all__ = [
+    "IDENTIFIERS",
+    "SELF_DECLARATIONS",
+    "Finding",
+    "PatternGroup",
+    "redact_sensitive",
+    "scan_for_sensitive",
+]
 
 MARKER: Final = "[redacted:{name}]"
+
+
+class PatternGroup(StrEnum):
+    """Why a pattern exists, which decides where it is enforced.
+
+    ``IDENTIFIER`` patterns name a person's identifiers and have no legitimate place
+    in any text ARIA sends anywhere — not in our own payloads, not in a job
+    description, not in a page we scraped.
+
+    ``SELF_DECLARATION`` patterns are the candidate's own answers about protected
+    characteristics or immigration status. They must never appear in ARIA's own
+    payloads, but they do appear innocently in untrusted text: an EEO dropdown on a
+    form lists "Hispanic or Latino" as an option, and a posting states its
+    sponsorship position. Blocking those would stop the Answer Engine reading the
+    form it has to fill in, so this group is not enforced against untrusted content.
+    """
+
+    IDENTIFIER = "identifier"
+    SELF_DECLARATION = "self_declaration"
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +66,7 @@ class Finding:
     """One match. ``excerpt`` is never the matched text — only its shape."""
 
     name: str
+    group: PatternGroup
     start: int
     end: int
 
@@ -47,18 +75,20 @@ class Finding:
         return f"{self.name}@{self.start}:{self.end}"
 
 
-#: (name, pattern). Ordered: earlier patterns win where two could overlap.
-_PATTERNS: Final[tuple[tuple[str, re.Pattern[str]], ...]] = (
+#: (name, group, pattern). Ordered: earlier patterns win where two could overlap.
+_PATTERNS: Final[tuple[tuple[str, PatternGroup, re.Pattern[str]], ...]] = (
     # A US Social Security number. ARIA never collects one; if a form asks, the
     # application goes to the user (SECURITY.md §3).
-    ("ssn", re.compile(r"\b(?!000|666|9\d\d)\d{3}-(?!00)\d{2}-(?!0000)\d{4}\b")),
+    ("ssn", PatternGroup.IDENTIFIER, re.compile(r"\b(?!000|666|9\d\d)\d{3}-(?!00)\d{2}-(?!0000)\d{4}\b")),
     (
         "ssn_labelled",
+        PatternGroup.IDENTIFIER,
         re.compile(r"\b(?:ssn|social security(?:\s+number)?)\b\D{0,12}\d{3}\D?\d{2}\D?\d{4}\b", re.I),
     ),
     # Date of birth, only when labelled. A bare date is usually a start date.
     (
         "date_of_birth",
+        PatternGroup.IDENTIFIER,
         re.compile(
             r"\b(?:date of birth|d\.?o\.?b\.?|birth\s*date|born on)\b\W{0,8}"
             r"(?:\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}|[A-Z][a-z]{2,8}\s+\d{1,2},?\s+\d{4})",
@@ -69,6 +99,7 @@ _PATTERNS: Final[tuple[tuple[str, re.Pattern[str]], ...]] = (
     # (a posting id, a requisition number) do not match.
     (
         "government_id",
+        PatternGroup.IDENTIFIER,
         re.compile(
             r"\b(?:passport|driver'?s? licen[sc]e|national id|aadhaar|pan card|alien registration|"
             r"a-?number|uscis number|i-?94|ead(?: card)? number)\b\W{0,12}[A-Z0-9][A-Z0-9-]{5,}\b",
@@ -79,6 +110,7 @@ _PATTERNS: Final[tuple[tuple[str, re.Pattern[str]], ...]] = (
     # S2 and are filled in deterministically — they never belong in a prompt.
     (
         "eeo_answer",
+        PatternGroup.SELF_DECLARATION,
         re.compile(
             r"\b(?:decline to (?:self-?identify|answer)|i (?:do not )?(?:wish|choose) not to disclose|"
             r"protected veteran|disabled veteran|veteran status\s*[:=]|disability status\s*[:=]|"
@@ -92,6 +124,7 @@ _PATTERNS: Final[tuple[tuple[str, re.Pattern[str]], ...]] = (
     # posting's sponsorship language.
     (
         "self_immigration_status",
+        PatternGroup.SELF_DECLARATION,
         re.compile(
             r"\b(?:my (?:visa|immigration|work authorization|citizenship) status|"
             r"i am (?:currently )?on (?:an? )?(?:f-?1|h-?1b|j-?1|l-?1|o-?1|tn|opt|stem opt|cpt|ead)\b|"
@@ -105,6 +138,7 @@ _PATTERNS: Final[tuple[tuple[str, re.Pattern[str]], ...]] = (
     # posting is public.
     (
         "home_address",
+        PatternGroup.IDENTIFIER,
         re.compile(
             r"\b(?:home|residential|mailing|street) address\b\W{0,8}\d+\s+[A-Za-z0-9.\s]{3,40}"
             r"\b(?:street|st|avenue|ave|road|rd|boulevard|blvd|lane|ln|drive|dr|court|ct|way)\b",
@@ -114,16 +148,29 @@ _PATTERNS: Final[tuple[tuple[str, re.Pattern[str]], ...]] = (
 )
 
 
-def scan_for_sensitive(text: str) -> list[Finding]:
+IDENTIFIERS: Final = frozenset({PatternGroup.IDENTIFIER})
+SELF_DECLARATIONS: Final = frozenset({PatternGroup.SELF_DECLARATION})
+ALL_GROUPS: Final = IDENTIFIERS | SELF_DECLARATIONS
+
+
+def scan_for_sensitive(text: str, groups: frozenset[PatternGroup] | None = None) -> list[Finding]:
     """Every high-confidence sensitive match in ``text``, earliest first.
 
-    Returns findings, never the matched text, so a caller logging the result
-    cannot re-leak what was found.
+    ``groups`` narrows which patterns apply; the default is all of them. Callers
+    scanning untrusted content pass :data:`IDENTIFIERS` only (see
+    :class:`PatternGroup`).
+
+    Returns findings, never the matched text, so a caller logging the result cannot
+    re-leak what was found.
     """
+    wanted = ALL_GROUPS if groups is None else groups
     findings: list[Finding] = []
-    for name, pattern in _PATTERNS:
+    for name, group, pattern in _PATTERNS:
+        if group not in wanted:
+            continue
         findings.extend(
-            Finding(name=name, start=match.start(), end=match.end()) for match in pattern.finditer(text)
+            Finding(name=name, group=group, start=match.start(), end=match.end())
+            for match in pattern.finditer(text)
         )
     return sorted(findings, key=lambda finding: (finding.start, finding.end))
 
@@ -142,7 +189,9 @@ def redact_sensitive(text: str) -> tuple[str, list[str]]:
     for finding in findings:
         if merged and finding.start < merged[-1].end:
             previous = merged[-1]
-            merged[-1] = Finding(previous.name, previous.start, max(previous.end, finding.end))
+            merged[-1] = Finding(
+                previous.name, previous.group, previous.start, max(previous.end, finding.end)
+            )
             continue
         merged.append(finding)
 
