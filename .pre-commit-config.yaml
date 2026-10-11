@@ -21,6 +21,12 @@ repos:
 
   - repo: local
     hooks:
+      - id: no-control-characters
+        name: no stray control characters
+        entry: uv run python infra/checks/no_control_characters.py
+        language: system
+        types: [text]
+
       - id: gitleaks-system
         name: gitleaks (system binary)
         entry: gitleaks
