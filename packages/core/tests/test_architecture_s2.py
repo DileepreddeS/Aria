@@ -34,9 +34,10 @@ SOURCE_ROOTS = (
     REPO_ROOT / "apps" / "api" / "aria_api",
 )
 
-#: Allowed to name an encrypted column regardless of its declared accessor:
-#: the model that defines it, and the migrations that create it.
-ALWAYS_ALLOWED = ("aria_core.db.models",)
+#: Allowed to name an encrypted column regardless of its declared accessor: the
+#: modules that define the tables, and the migrations that create them. A prefix,
+#: because the models are a package.
+ALWAYS_ALLOWED_PREFIX = "aria_core.db.models"
 MIGRATIONS = REPO_ROOT / "infra" / "migrations"
 
 
@@ -130,10 +131,9 @@ class TestNothingElseTouchesAnEncryptedColumn:
         for table, column, _, sensitivity, accessor in _encrypted_columns():
             if sensitivity < Sensitivity.S2:
                 continue
-            allowed = {accessor, *ALWAYS_ALLOWED}
             for path in _python_files():
                 module = _module_name(path)
-                if module in allowed:
+                if module == accessor or module.startswith(ALWAYS_ALLOWED_PREFIX):
                     continue
                 if column in path.read_text(encoding="utf-8"):
                     violations.append(f"{module} mentions {table}.{column} (accessor: {accessor})")
