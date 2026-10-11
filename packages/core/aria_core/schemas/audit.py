@@ -38,10 +38,14 @@ class SubjectKind(StrEnum):
     TENANT = "tenant"
     USER = "user"
     SENSITIVE_FIELD = "sensitive_field"
+    FACT = "fact"
+    UPLOAD = "upload"
+    CANDIDATE = "candidate"
     CREDENTIAL = "credential"
     LLM_REQUEST = "llm_request"
     APPLY_TASK = "apply_task"
     SERVICE = "service"
+    USER_QUESTION = "user_question"
 
 
 class AuditOutcome(StrEnum):
@@ -52,10 +56,32 @@ class AuditOutcome(StrEnum):
 
 
 class AuditAction(StrEnum):
-    """Actions Phase 0 can record. Extended by the phase that adds the behaviour."""
+    """Every action ARIA records. Extended by the phase that adds the behaviour.
+
+    A closed set rather than free strings: the audit verifier reconstructs events
+    from stored rows and converts this column back through the enum, so an action it
+    does not recognise is a loud failure rather than an unexplained row.
+    """
 
     APPLICATION_STATE_CHANGED = "application.state_changed"
     POLICY_DECIDED = "policy.decided"
+    FACT_APPROVED = "fact.approved"
+    FACT_EDITED = "fact.edited"
+    FACT_REJECTED = "fact.rejected"
+    FACT_RECONSIDERED = "fact.reconsidered"
+    FACT_MERGED = "fact.merged"
+    GRAPH_IMPORTED = "graph.imported"
+    GRAPH_ENTITY_APPROVED = "graph_entity.approved"
+    GRAPH_ENTITY_REJECTED = "graph_entity.rejected"
+    GRAPH_ENTITY_RECONSIDERED = "graph_entity.reconsidered"
+    USER_QUESTION_ASKED = "user_question.asked"
+    USER_QUESTION_ANSWERED = "user_question.answered"
+    USER_QUESTION_DISMISSED = "user_question.dismissed"
+    UPLOAD_RECEIVED = "upload.received"
+    UPLOAD_SCANNED = "upload.scanned"
+    UPLOAD_PARSED = "upload.parsed"
+    UPLOAD_REFUSED = "upload.refused"
+    UPLOAD_ORIGINAL_DELETED = "upload.original_deleted"
     SENSITIVE_FIELD_READ = "sensitive_field.read"
     SENSITIVE_FIELD_WRITTEN = "sensitive_field.written"
     DATA_KEY_ROTATED = "data_key.rotated"
