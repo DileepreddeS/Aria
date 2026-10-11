@@ -227,7 +227,7 @@ aria/
 | # | Phase | Done when |
 |---|---|---|
 | 0 | **Foundations:** repo, tooling, CI, Docker Postgres, core schemas, tenant model + RLS, audit log, config/secrets layout, LLM gateway skeleton, policy engine skeleton, tracing | CI green; cross-tenant read test fails as expected; audit events written for a sample transition |
-| 1 | **Candidate Graph + onboarding:** secure upload → resume import → fact approval UI/CLI → enrichment + motivations interview | Founder's graph complete; every fact verified; skill-years computed correctly |
+| 1 | **Candidate Graph + onboarding:** secure upload → geometric resume intake (RESUME_ENGINE §5) → fact approval UI/CLI → enrichment + motivations interview | Founder's graph complete; every fact verified; skill-years computed correctly; **intake corpus of ≥50 real-world resume PDFs passes with false-entry rate 0, and the pathological fixtures fail cleanly with a reason rather than parsing** |
 | 2 | **Resume Engine** end to end | 30-JD eval: 0 truth violations, 0 banned words, 100% one page, ≥90% 6-second pass, founder rates ≥8/10 resumes as "would send" |
 | 3 | **Crawler + Job Store + Screener + preferences/policies** | Full crawl of seed boards; screener decisions explained; ask-me policies reach the Liaison |
 | 4 | **Answer Engine + Liaison + answer library** | 50 real questions: 0 false answers; open-ended answers pass the Truth check; unknown questions reach Telegram and are reused |

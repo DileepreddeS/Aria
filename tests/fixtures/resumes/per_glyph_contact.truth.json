@@ -1,0 +1,76 @@
+{
+  "fixture": "per_glyph_contact.pdf",
+  "generator": "Chromium headless print-to-PDF",
+  "identity": "synthetic",
+  "pathology": "styled <span>/<a> in the contact line; Chromium emits per-character Td/Tm operators",
+  "must_fail": false,
+  "fail_reason": null,
+  "notes": "Baseline-equivalence fixture. Styled inline elements put Td/Tm operator boundaries inside the contact line; character-gap word reconstruction (RESUME_ENGINE 5.3) must be unaffected by them, yielding the same nine entries and the same contact string as clean_inline_block.pdf. Not a cross-extractor disagreement fixture: on the pinned pypdf (6.19.0) both extractors read the contact line identically, verified 2026-10-11.",
+  "contact_line": "(555) 014-2288 | jordan.rivera@example.com | linkedin.com/in/jordan-rivera-example | github.com/jordan-rivera-example | Portland, OR",
+  "entries": [
+    {
+      "section": "education",
+      "bullet_count": 0,
+      "employer": "Cascadia State University",
+      "title": "M.S. Computer Science",
+      "end": "2026-12"
+    },
+    {
+      "section": "education",
+      "bullet_count": 0,
+      "employer": "Westbrook Institute",
+      "title": "B.Tech, Electrical & Electronics Engineering",
+      "end": "2022-06"
+    },
+    {
+      "section": "experience",
+      "bullet_count": 2,
+      "employer": "Cascadia State University",
+      "title": "Graduate Research Assistant",
+      "start": "2026-10",
+      "end": "present"
+    },
+    {
+      "section": "experience",
+      "bullet_count": 7,
+      "employer": "Nordvale Consulting",
+      "title": "Software Engineer",
+      "start": "2024-02",
+      "end": "2025-07"
+    },
+    {
+      "section": "experience",
+      "bullet_count": 5,
+      "employer": "Brightfold Systems",
+      "title": "Associate Software Engineer",
+      "start": "2022-07",
+      "end": "2023-12"
+    },
+    {
+      "section": "experience",
+      "bullet_count": 2,
+      "employer": "Pinecrest Labs",
+      "title": "Software Engineer Intern",
+      "start": "2021-10",
+      "end": "2022-04"
+    },
+    {
+      "section": "project",
+      "bullet_count": 4,
+      "name": "ORBIT",
+      "title": "Autonomous Job Application Agent"
+    },
+    {
+      "section": "project",
+      "bullet_count": 4,
+      "name": "DentScan",
+      "title": "Vehicle Damage Detection"
+    },
+    {
+      "section": "project",
+      "bullet_count": 3,
+      "name": "VERA-RAG",
+      "title": "Self-Verifying Adaptive RAG System"
+    }
+  ]
+}

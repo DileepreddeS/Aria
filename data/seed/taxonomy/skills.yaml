@@ -1,0 +1,1146 @@
+# ARIA skill taxonomy — public, non-personal seed data (S0).
+#
+# Shape per entry:
+#   id:       canonical id, lowercase, stable forever (it is stored on facts)
+#   display:  how ARIA spells it when a job description does not provide a spelling
+#   category: language | frontend | backend | data | ml | infra | tooling | practice | domain
+#   aliases:  surface forms seen in the wild. Case, punctuation and separators are
+#             normalised, so "Next.js", "next js" and "NextJS" all match one alias.
+#   implies:  canonical ids this skill is evidence *for*, when matching a requirement.
+#             Never used to add years or to put a skill on a resume (see
+#             aria_core.graph.derive): an implication informs matching, never a claim.
+#
+# Scope: the founder's stack, plus the skills that recur in new-grad JDs he does not
+# have, so a gap report names a canonical skill instead of an unknown term. It grows
+# as the crawler meets real postings.
+#
+# Bump `version` on every change: it is recorded in each resume's artifacts, so a
+# resume can be explained with the taxonomy that produced it.
+version: "2026.10.1"
+
+skills:
+  # ----------------------------------------------------------------- languages
+  - id: python
+    display: Python
+    category: language
+    aliases: [python3, python 3, py, cpython]
+  - id: javascript
+    display: JavaScript
+    category: language
+    aliases: [js, es6, ecmascript, vanilla js]
+  - id: typescript
+    display: TypeScript
+    category: language
+    aliases: [ts]
+    implies: [javascript]
+  - id: java
+    display: Java
+    category: language
+    aliases: [java8, java 11, java 17, core java]
+  - id: cpp
+    display: C++
+    category: language
+    aliases: ["c++", cplusplus, c plus plus, c++11, c++17, c++20]
+  - id: c
+    display: C
+    category: language
+    aliases: [ansi c, c99]
+  - id: csharp
+    display: C#
+    category: language
+    aliases: ["c#", c sharp, csharp]
+  - id: golang
+    display: Go
+    category: language
+    aliases: [go, go lang]
+  - id: rust
+    display: Rust
+    category: language
+  - id: kotlin
+    display: Kotlin
+    category: language
+    implies: [java]
+  - id: swift
+    display: Swift
+    category: language
+  - id: ruby
+    display: Ruby
+    category: language
+  - id: php
+    display: PHP
+    category: language
+  - id: scala
+    display: Scala
+    category: language
+    implies: [java]
+  - id: r_lang
+    display: R
+    category: language
+    aliases: [r]
+  - id: matlab
+    display: MATLAB
+    category: language
+  - id: bash
+    display: Bash
+    category: language
+    aliases: [shell, shell scripting, sh, zsh, bash scripting]
+  - id: powershell
+    display: PowerShell
+    category: language
+  - id: sql
+    display: SQL
+    category: language
+    aliases: [structured query language]
+  - id: html
+    display: HTML
+    category: frontend
+    aliases: [html5, semantic html]
+  - id: css
+    display: CSS
+    category: frontend
+    aliases: [css3, flexbox, css grid]
+  - id: dart
+    display: Dart
+    category: language
+  - id: lua
+    display: Lua
+    category: language
+  - id: objective_c
+    display: Objective-C
+    category: language
+  - id: solidity
+    display: Solidity
+    category: language
+
+  # ------------------------------------------------------------------ frontend
+  - id: react
+    display: React
+    category: frontend
+    aliases: [react.js, reactjs, react js, react hooks]
+    implies: [javascript, html, css]
+  - id: nextjs
+    display: Next.js
+    category: frontend
+    aliases: [next.js, next js, nextjs, next 13, next 14, app router]
+    implies: [react, server_side_rendering]
+  - id: server_side_rendering
+    display: server-side rendering
+    category: frontend
+    aliases: [ssr, static site generation, ssg, isr]
+  - id: vue
+    display: Vue
+    category: frontend
+    aliases: [vue.js, vuejs, vue 3]
+    implies: [javascript, html, css]
+  - id: nuxt
+    display: Nuxt
+    category: frontend
+    aliases: [nuxt.js, nuxtjs]
+    implies: [vue, server_side_rendering]
+  - id: angular
+    display: Angular
+    category: frontend
+    aliases: [angular 2, angular.js, angularjs]
+    implies: [typescript, html, css]
+  - id: svelte
+    display: Svelte
+    category: frontend
+    aliases: [sveltekit, svelte kit]
+    implies: [javascript, html, css]
+  - id: solid_js
+    display: SolidJS
+    category: frontend
+    aliases: [solid.js]
+    implies: [javascript]
+  - id: astro
+    display: Astro
+    category: frontend
+    implies: [javascript, server_side_rendering]
+  - id: remix
+    display: Remix
+    category: frontend
+    implies: [react, server_side_rendering]
+  - id: redux
+    display: Redux
+    category: frontend
+    aliases: [redux toolkit, rtk]
+    implies: [react, state_management]
+  - id: state_management
+    display: state management
+    category: frontend
+    aliases: [zustand, mobx, recoil, jotai, context api]
+  - id: react_query
+    display: React Query
+    category: frontend
+    aliases: [tanstack query, swr]
+    implies: [react]
+  - id: tailwind
+    display: Tailwind CSS
+    category: frontend
+    aliases: [tailwindcss, tailwind css]
+    implies: [css]
+  - id: sass
+    display: Sass
+    category: frontend
+    aliases: [scss, less]
+    implies: [css]
+  - id: css_in_js
+    display: CSS-in-JS
+    category: frontend
+    aliases: [styled components, emotion, stitches]
+    implies: [css, javascript]
+  - id: component_library
+    display: component library
+    category: frontend
+    aliases: [design system, material ui, mui, chakra ui, shadcn, ant design, radix]
+  - id: storybook
+    display: Storybook
+    category: frontend
+    implies: [component_library]
+  - id: webpack
+    display: Webpack
+    category: tooling
+    implies: [javascript]
+  - id: vite
+    display: Vite
+    category: tooling
+    implies: [javascript]
+  - id: babel
+    display: Babel
+    category: tooling
+    implies: [javascript]
+  - id: jquery
+    display: jQuery
+    category: frontend
+    implies: [javascript]
+  - id: bootstrap
+    display: Bootstrap
+    category: frontend
+    implies: [css]
+  - id: d3
+    display: D3.js
+    category: frontend
+    aliases: [d3.js, d3js]
+    implies: [javascript, data_visualization]
+  - id: data_visualization
+    display: data visualization
+    category: frontend
+    aliases: [charting, chart.js, recharts, plotly, dataviz]
+  - id: three_js
+    display: Three.js
+    category: frontend
+    aliases: [three.js, threejs, webgl]
+    implies: [javascript]
+  - id: web_components
+    display: Web Components
+    category: frontend
+    aliases: [custom elements, shadow dom, lit]
+    implies: [javascript, html]
+  - id: pwa
+    display: progressive web apps
+    category: frontend
+    aliases: [progressive web app, service worker, service workers]
+    implies: [javascript]
+  - id: responsive_design
+    display: responsive design
+    category: frontend
+    aliases: [mobile first, mobile-first, cross browser, cross-browser]
+    implies: [css]
+  - id: react_native
+    display: React Native
+    category: frontend
+    aliases: [react-native, expo]
+    implies: [react, mobile_development]
+  - id: flutter
+    display: Flutter
+    category: frontend
+    implies: [dart, mobile_development]
+  - id: mobile_development
+    display: mobile development
+    category: frontend
+    aliases: [ios development, android development, mobile app development]
+  - id: electron
+    display: Electron
+    category: frontend
+    implies: [javascript, desktop_development]
+  - id: desktop_development
+    display: desktop application development
+    category: frontend
+    aliases: [desktop apps]
+
+  # ------------------------------------------------------------------- backend
+  - id: nodejs
+    display: Node.js
+    category: backend
+    aliases: [node, node.js, nodejs, node js]
+    implies: [javascript]
+  - id: express
+    display: Express
+    category: backend
+    aliases: [express.js, expressjs]
+    implies: [nodejs, rest_api]
+  - id: nestjs
+    display: NestJS
+    category: backend
+    aliases: [nest.js]
+    implies: [nodejs, typescript]
+  - id: fastapi
+    display: FastAPI
+    category: backend
+    implies: [python, rest_api, pydantic]
+  - id: pydantic
+    display: Pydantic
+    category: backend
+    implies: [python]
+  - id: flask
+    display: Flask
+    category: backend
+    implies: [python, rest_api]
+  - id: django
+    display: Django
+    category: backend
+    aliases: [django rest framework, drf]
+    implies: [python, rest_api]
+  - id: spring_boot
+    display: Spring Boot
+    category: backend
+    aliases: [springboot, spring framework, spring]
+    implies: [java, rest_api]
+  - id: dotnet
+    display: .NET
+    category: backend
+    aliases: [.net, dotnet core, asp.net, asp.net core, net core]
+    implies: [csharp]
+  - id: rails
+    display: Ruby on Rails
+    category: backend
+    aliases: [ruby on rails, rails]
+    implies: [ruby, rest_api]
+  - id: laravel
+    display: Laravel
+    category: backend
+    implies: [php, rest_api]
+  - id: rest_api
+    display: REST APIs
+    category: backend
+    aliases: [rest, restful, restful api, rest apis, web api, web services]
+    implies: [api_design]
+  - id: graphql
+    display: GraphQL
+    category: backend
+    aliases: [apollo, relay]
+    implies: [api_design]
+  - id: grpc
+    display: gRPC
+    category: backend
+    aliases: [protocol buffers, protobuf]
+    implies: [api_design]
+  - id: websockets
+    display: WebSockets
+    category: backend
+    aliases: [websocket, socket.io, server sent events, sse]
+    implies: [real_time_systems]
+  - id: openapi
+    display: OpenAPI
+    category: backend
+    aliases: [swagger, openapi spec]
+    implies: [api_design]
+  - id: authentication
+    display: authentication
+    category: backend
+    aliases: [oauth, oauth2, oidc, openid connect, sso, jwt, auth, authz, authorization, saml]
+    implies: [security_practices]
+  - id: message_queue
+    display: message queues
+    category: backend
+    aliases: [rabbitmq, sqs, amqp, pub sub, pubsub, nats]
+    implies: [distributed_systems]
+  - id: kafka
+    display: Apache Kafka
+    category: data
+    aliases: [kafka, event streaming]
+    implies: [message_queue, distributed_systems]
+  - id: celery
+    display: Celery
+    category: backend
+    aliases: [background jobs, task queue, sidekiq, bullmq]
+    implies: [python, message_queue]
+  - id: redis
+    display: Redis
+    category: data
+    aliases: [memcached, valkey]
+    implies: [caching]
+  - id: microservices
+    display: microservices
+    category: backend
+    aliases: [service oriented architecture, soa, micro services]
+    implies: [distributed_systems, system_design]
+  - id: serverless
+    display: serverless
+    category: infra
+    aliases: [faas, functions as a service]
+    implies: [cloud_architecture]
+  - id: api_design
+    display: API design
+    category: practice
+    aliases: [api versioning, contract design]
+
+  # ---------------------------------------------------------------------- data
+  - id: postgresql
+    display: PostgreSQL
+    category: data
+    aliases: [postgres, psql, pg, postgresql 16]
+    implies: [sql, relational_databases]
+  - id: mysql
+    display: MySQL
+    category: data
+    aliases: [mariadb]
+    implies: [sql, relational_databases]
+  - id: sqlite
+    display: SQLite
+    category: data
+    implies: [sql, relational_databases]
+  - id: sqlserver
+    display: SQL Server
+    category: data
+    aliases: [mssql, microsoft sql server, t sql, tsql]
+    implies: [sql, relational_databases]
+  - id: oracle_db
+    display: Oracle Database
+    category: data
+    aliases: [oracle, pl sql, plsql]
+    implies: [sql, relational_databases]
+  - id: relational_databases
+    display: relational databases
+    category: data
+    aliases: [rdbms, relational database design]
+    implies: [data_modeling]
+  - id: mongodb
+    display: MongoDB
+    category: data
+    aliases: [mongo, mongoose]
+    implies: [nosql]
+  - id: nosql
+    display: NoSQL
+    category: data
+    aliases: [document database, key value store]
+  - id: dynamodb
+    display: DynamoDB
+    category: data
+    implies: [nosql, aws]
+  - id: cassandra
+    display: Cassandra
+    category: data
+    aliases: [scylladb]
+    implies: [nosql, distributed_systems]
+  - id: neo4j
+    display: Neo4j
+    category: data
+    aliases: [graph database, cypher]
+    implies: [nosql]
+  - id: elasticsearch
+    display: Elasticsearch
+    category: data
+    aliases: [opensearch, elastic]
+    implies: [search]
+  - id: snowflake
+    display: Snowflake
+    category: data
+    implies: [data_warehousing, sql]
+  - id: bigquery
+    display: BigQuery
+    category: data
+    implies: [data_warehousing, sql, gcp]
+  - id: redshift
+    display: Redshift
+    category: data
+    implies: [data_warehousing, sql, aws]
+  - id: data_warehousing
+    display: data warehousing
+    category: data
+    aliases: [data warehouse, data lake, lakehouse, olap]
+    implies: [data_modeling]
+  - id: databricks
+    display: Databricks
+    category: data
+    implies: [spark, data_warehousing]
+  - id: spark
+    display: Apache Spark
+    category: data
+    aliases: [spark, pyspark]
+    implies: [distributed_systems, big_data]
+  - id: hadoop
+    display: Hadoop
+    category: data
+    aliases: [hdfs, mapreduce, hive]
+    implies: [big_data, distributed_systems]
+  - id: flink
+    display: Apache Flink
+    category: data
+    aliases: [flink]
+    implies: [stream_processing, distributed_systems]
+  - id: stream_processing
+    display: stream processing
+    category: data
+    aliases: [streaming data, real time data, kinesis]
+    implies: [real_time_systems]
+  - id: big_data
+    display: big data
+    category: data
+  - id: airflow
+    display: Apache Airflow
+    category: data
+    aliases: [airflow, dagster, prefect, luigi]
+    implies: [etl, python]
+  - id: dbt
+    display: dbt
+    category: data
+    aliases: [data build tool]
+    implies: [sql, etl]
+  - id: etl
+    display: ETL pipelines
+    category: data
+    aliases: [etl, elt, data pipelines, data pipeline, ingestion pipeline]
+    implies: [data_engineering]
+  - id: data_engineering
+    display: data engineering
+    category: data
+  - id: pandas
+    display: pandas
+    category: data
+    implies: [python, data_analysis]
+  - id: numpy
+    display: NumPy
+    category: data
+    aliases: [numpy, scipy]
+    implies: [python]
+  - id: data_analysis
+    display: data analysis
+    category: data
+    aliases: [analytics, exploratory data analysis, eda, data analytics]
+    implies: [statistics]
+  - id: data_modeling
+    display: data modeling
+    category: data
+    aliases: [schema design, normalization, er modeling, database design]
+  - id: query_optimization
+    display: query optimization
+    category: data
+    aliases: [query tuning, indexing, database indexing, explain analyze]
+    implies: [sql, performance_optimization]
+  - id: sqlalchemy
+    display: SQLAlchemy
+    category: data
+    aliases: [sqlalchemy 2, alembic]
+    implies: [python, orm]
+  - id: prisma
+    display: Prisma
+    category: data
+    implies: [typescript, orm]
+  - id: orm
+    display: ORMs
+    category: data
+    aliases: [orm, object relational mapping, hibernate, entity framework, typeorm]
+    implies: [relational_databases]
+  - id: tableau
+    display: Tableau
+    category: data
+    aliases: [power bi, powerbi, looker, superset]
+    implies: [data_visualization, data_analysis]
+
+  # ------------------------------------------------------------------------ ml
+  - id: machine_learning
+    display: machine learning
+    category: ml
+    aliases: [ml, applied ml, classical ml, supervised learning, unsupervised learning]
+    implies: [statistics]
+  - id: deep_learning
+    display: deep learning
+    category: ml
+    aliases: [dl, neural networks, neural network]
+    implies: [machine_learning]
+  - id: pytorch
+    display: PyTorch
+    category: ml
+    aliases: [torch, pytorch lightning]
+    implies: [deep_learning, python]
+  - id: tensorflow
+    display: TensorFlow
+    category: ml
+    aliases: [tf, tensorflow 2]
+    implies: [deep_learning, python]
+  - id: keras
+    display: Keras
+    category: ml
+    implies: [tensorflow]
+  - id: scikit_learn
+    display: scikit-learn
+    category: ml
+    aliases: [sklearn, scikit learn]
+    implies: [machine_learning, python]
+  - id: xgboost
+    display: XGBoost
+    category: ml
+    aliases: [lightgbm, catboost, gradient boosting]
+    implies: [machine_learning]
+  - id: transformers
+    display: transformers
+    category: ml
+    aliases: [transformer, attention, self attention, encoder decoder]
+    implies: [deep_learning]
+  - id: huggingface
+    display: Hugging Face
+    category: ml
+    aliases: [hugging face, hf transformers]
+    implies: [transformers, python]
+  - id: llm
+    display: large language models
+    category: ml
+    aliases: [llms, large language model, gpt, llama, claude, mistral, foundation models]
+    implies: [transformers, nlp]
+  - id: rag
+    display: retrieval-augmented generation
+    category: ml
+    aliases: [rag, retrieval augmented generation, retrieval augmentation]
+    implies: [llm, embeddings, semantic_search]
+  - id: prompt_engineering
+    display: prompt engineering
+    category: ml
+    aliases: [prompting, few shot prompting, chain of thought]
+    implies: [llm]
+  - id: fine_tuning
+    display: fine-tuning
+    category: ml
+    aliases: [finetuning, lora, qlora, peft, instruction tuning, rlhf]
+    implies: [llm, model_training]
+  - id: model_training
+    display: model training
+    category: ml
+    aliases: [training pipeline, hyperparameter tuning, transfer learning]
+    implies: [machine_learning]
+  - id: embeddings
+    display: embeddings
+    category: ml
+    aliases: [sentence transformers, word2vec, vector embeddings, sentence embeddings]
+    implies: [nlp, deep_learning]
+  - id: vector_database
+    display: vector databases
+    category: ml
+    aliases: [vector db, pinecone, weaviate, qdrant, chroma, faiss, pgvector, milvus]
+    implies: [embeddings, semantic_search]
+  - id: semantic_search
+    display: semantic search
+    category: ml
+    aliases: [similarity search, nearest neighbour search, knn search, hybrid search]
+    implies: [search]
+  - id: nlp
+    display: natural language processing
+    category: ml
+    aliases: [nlp, text classification, named entity recognition, ner, sentiment analysis, spacy, nltk]
+    implies: [machine_learning]
+  - id: nli
+    display: natural language inference
+    category: ml
+    aliases: [nli, entailment, textual entailment, deberta]
+    implies: [nlp]
+  - id: computer_vision
+    display: computer vision
+    category: ml
+    aliases: [cv, image processing, vision]
+    implies: [deep_learning]
+  - id: opencv
+    display: OpenCV
+    category: ml
+    aliases: [cv2]
+    implies: [computer_vision, python]
+  - id: object_detection
+    display: object detection
+    category: ml
+    aliases: [bounding box detection, detection model]
+    implies: [computer_vision]
+  - id: yolo
+    display: YOLO
+    category: ml
+    aliases: [yolov5, yolov8, yolo11, ultralytics]
+    implies: [object_detection]
+  - id: image_segmentation
+    display: image segmentation
+    category: ml
+    aliases: [semantic segmentation, instance segmentation, unet, sam]
+    implies: [computer_vision]
+  - id: cnn
+    display: convolutional neural networks
+    category: ml
+    aliases: [cnn, convnet, resnet, efficientnet, vgg]
+    implies: [deep_learning]
+  - id: rnn
+    display: recurrent neural networks
+    category: ml
+    aliases: [rnn, lstm, gru, sequence models]
+    implies: [deep_learning]
+  - id: generative_models
+    display: generative models
+    category: ml
+    aliases: [gan, gans, diffusion, diffusion models, stable diffusion, vae]
+    implies: [deep_learning]
+  - id: reinforcement_learning
+    display: reinforcement learning
+    category: ml
+    aliases: [rl, q learning, policy gradient, ppo]
+    implies: [machine_learning]
+  - id: recommendation_systems
+    display: recommendation systems
+    category: ml
+    aliases: [recsys, recommender systems, collaborative filtering, ranking models]
+    implies: [machine_learning]
+  - id: time_series
+    display: time series modeling
+    category: ml
+    aliases: [forecasting, time series analysis, arima, prophet]
+    implies: [statistics, machine_learning]
+  - id: mlops
+    display: MLOps
+    category: ml
+    aliases: [ml ops, model monitoring, model registry, feature store, mlflow, weights and biases, wandb]
+    implies: [machine_learning, ci_cd]
+  - id: model_deployment
+    display: model deployment
+    category: ml
+    aliases: [model serving, inference api, onnx, triton, tensorrt, quantization]
+    implies: [mlops]
+  - id: feature_engineering
+    display: feature engineering
+    category: ml
+    implies: [machine_learning, data_analysis]
+  - id: statistics
+    display: statistics
+    category: ml
+    aliases: [statistical analysis, probability, hypothesis testing, a b testing, ab testing]
+  - id: jupyter
+    display: Jupyter
+    category: tooling
+    aliases: [jupyter notebook, notebooks, colab, google colab]
+    implies: [python]
+
+  # ------------------------------------------------------------------- infra
+  - id: docker
+    display: Docker
+    category: infra
+    aliases: [containers, containerization, dockerfile, docker compose, podman]
+  - id: kubernetes
+    display: Kubernetes
+    category: infra
+    aliases: [k8s, kubectl, eks, gke, aks, openshift]
+    implies: [docker, container_orchestration]
+  - id: container_orchestration
+    display: container orchestration
+    category: infra
+    aliases: [ecs, nomad, docker swarm]
+    implies: [docker]
+  - id: helm
+    display: Helm
+    category: infra
+    implies: [kubernetes]
+  - id: aws
+    display: AWS
+    category: infra
+    aliases: [amazon web services, ec2, s3, rds, cloudwatch, iam, vpc, cloudfront, route53, sns]
+    implies: [cloud_architecture]
+  - id: lambda_functions
+    display: AWS Lambda
+    category: infra
+    aliases: [lambda, aws lambda, cloud functions, azure functions]
+    implies: [aws, serverless]
+  - id: gcp
+    display: Google Cloud
+    category: infra
+    aliases: [google cloud platform, gcp, cloud run, gke autopilot]
+    implies: [cloud_architecture]
+  - id: azure
+    display: Azure
+    category: infra
+    aliases: [microsoft azure, azure devops]
+    implies: [cloud_architecture]
+  - id: cloud_architecture
+    display: cloud architecture
+    category: infra
+    aliases: [cloud native, cloud computing, multi cloud]
+    implies: [system_design]
+  - id: terraform
+    display: Terraform
+    category: infra
+    aliases: [infrastructure as code, iac, opentofu, pulumi, cloudformation]
+  - id: ansible
+    display: Ansible
+    category: infra
+    aliases: [chef, puppet, saltstack, configuration management]
+  - id: ci_cd
+    display: CI/CD
+    category: infra
+    aliases: [ci cd, continuous integration, continuous delivery, continuous deployment, build pipeline]
+  - id: github_actions
+    display: GitHub Actions
+    category: infra
+    aliases: [gh actions, github workflow]
+    implies: [ci_cd, github]
+  - id: jenkins
+    display: Jenkins
+    category: infra
+    implies: [ci_cd]
+  - id: gitlab_ci
+    display: GitLab CI
+    category: infra
+    aliases: [gitlab ci cd, circleci, travis ci, teamcity, argo cd, argocd]
+    implies: [ci_cd]
+  - id: nginx
+    display: nginx
+    category: infra
+    aliases: [apache httpd, haproxy, envoy, reverse proxy]
+    implies: [load_balancing]
+  - id: linux
+    display: Linux
+    category: infra
+    aliases: [unix, ubuntu, debian, centos, rhel, linux administration]
+  - id: observability
+    display: observability
+    category: infra
+    aliases: [monitoring, telemetry, opentelemetry, otel, tracing, distributed tracing, logging, metrics]
+  - id: prometheus
+    display: Prometheus
+    category: infra
+    aliases: [grafana, promql]
+    implies: [observability]
+  - id: datadog
+    display: Datadog
+    category: infra
+    aliases: [new relic, splunk, sentry, elk stack, elk]
+    implies: [observability]
+  - id: load_balancing
+    display: load balancing
+    category: infra
+    aliases: [horizontal scaling, autoscaling, auto scaling]
+    implies: [scalability]
+  - id: caching
+    display: caching
+    category: infra
+    aliases: [cache invalidation, cdn, content delivery network, edge caching]
+    implies: [performance_optimization]
+  - id: sre
+    display: site reliability engineering
+    category: infra
+    aliases: [sre, on call, oncall, incident response, postmortem, slo, sli]
+    implies: [reliability, observability]
+  - id: secrets_management
+    display: secrets management
+    category: infra
+    aliases: [vault, hashicorp vault, kms, key management, secret manager]
+    implies: [security_practices]
+  - id: networking
+    display: networking
+    category: infra
+    aliases: [tcp ip, dns, http, https, tls, ssl, firewall, load balancer configuration]
+
+  # ----------------------------------------------------------------- tooling
+  - id: git
+    display: Git
+    category: tooling
+    aliases: [version control, source control, git flow, rebase]
+  - id: github
+    display: GitHub
+    category: tooling
+    aliases: [pull requests, pull request]
+    implies: [git]
+  - id: gitlab
+    display: GitLab
+    category: tooling
+    aliases: [bitbucket]
+    implies: [git]
+  - id: jira
+    display: Jira
+    category: tooling
+    aliases: [confluence, linear, asana, trello, azure boards]
+  - id: figma
+    display: Figma
+    category: tooling
+    aliases: [sketch, adobe xd, design handoff]
+  - id: postman
+    display: Postman
+    category: tooling
+    aliases: [insomnia, curl, http client]
+    implies: [rest_api]
+  - id: package_management
+    display: package management
+    category: tooling
+    aliases: [npm, yarn, pnpm, pip, poetry, uv, conda, maven, gradle, nuget]
+  - id: build_tools
+    display: build tooling
+    category: tooling
+    aliases: [make, makefile, bazel, cmake, turborepo, nx, monorepo]
+  - id: pytest
+    display: pytest
+    category: tooling
+    implies: [python, unit_testing]
+  - id: junit
+    display: JUnit
+    category: tooling
+    aliases: [testng, mockito]
+    implies: [java, unit_testing]
+  - id: jest
+    display: Jest
+    category: tooling
+    aliases: [vitest, mocha, chai, react testing library, rtl]
+    implies: [javascript, unit_testing]
+  - id: playwright
+    display: Playwright
+    category: tooling
+    aliases: [puppeteer]
+    implies: [e2e_testing, browser_automation]
+  - id: selenium
+    display: Selenium
+    category: tooling
+    aliases: [webdriver, cypress]
+    implies: [e2e_testing, browser_automation]
+  - id: browser_automation
+    display: browser automation
+    category: tooling
+    aliases: [headless browser, chrome devtools protocol, cdp]
+  - id: static_analysis
+    display: static analysis
+    category: tooling
+    aliases: [linting, eslint, prettier, ruff, mypy, pylint, sonarqube, semgrep, type checking]
+    implies: [code_quality]
+
+  # ---------------------------------------------------------------- practice
+  - id: unit_testing
+    display: unit testing
+    category: practice
+    aliases: [unit tests, test coverage]
+    implies: [testing]
+  - id: integration_testing
+    display: integration testing
+    category: practice
+    aliases: [integration tests, contract testing]
+    implies: [testing]
+  - id: e2e_testing
+    display: end-to-end testing
+    category: practice
+    aliases: [e2e tests, end to end testing, ui testing, regression testing]
+    implies: [testing]
+  - id: testing
+    display: testing
+    category: practice
+    aliases: [automated testing, qa, quality assurance, test automation]
+    implies: [code_quality]
+  - id: tdd
+    display: test-driven development
+    category: practice
+    aliases: [tdd, test driven development, bdd]
+    implies: [testing]
+  - id: code_review
+    display: code review
+    category: practice
+    aliases: [peer review, reviewing pull requests]
+    implies: [code_quality, collaboration]
+  - id: code_quality
+    display: code quality
+    category: practice
+    aliases: [clean code, maintainability, technical debt]
+  - id: refactoring
+    display: refactoring
+    category: practice
+    aliases: [legacy code, migration, modernization]
+    implies: [code_quality]
+  - id: debugging
+    display: debugging
+    category: practice
+    aliases: [troubleshooting, root cause analysis, profiling]
+  - id: performance_optimization
+    display: performance optimization
+    category: practice
+    aliases: [performance tuning, latency reduction, optimization, benchmarking]
+  - id: agile
+    display: Agile
+    category: practice
+    aliases: [scrum, kanban, sprint planning, standup, retrospective, agile methodologies]
+    implies: [collaboration]
+  - id: collaboration
+    display: cross-functional collaboration
+    category: practice
+    aliases: [teamwork, stakeholder management, cross functional]
+  - id: mentoring
+    display: mentoring
+    category: practice
+    aliases: [onboarding engineers, coaching, knowledge sharing]
+    implies: [leadership]
+  - id: leadership
+    display: technical leadership
+    category: practice
+    aliases: [tech lead, leading a team, project ownership]
+  - id: technical_writing
+    display: technical writing
+    category: practice
+    aliases: [documentation, writing docs, runbook, design doc, adr]
+  - id: system_design
+    display: system design
+    category: practice
+    aliases: [architecture, software architecture, designing systems, high level design]
+  - id: design_patterns
+    display: design patterns
+    category: practice
+    aliases: [solid principles, solid, dependency injection, gang of four]
+    implies: [oop]
+  - id: oop
+    display: object-oriented programming
+    category: practice
+    aliases: [oop, object oriented design, ood]
+  - id: functional_programming
+    display: functional programming
+    category: practice
+    aliases: [fp, immutability, pure functions]
+  - id: concurrency
+    display: concurrency
+    category: practice
+    aliases: [multithreading, threading, async, asyncio, parallelism, async await, goroutines]
+  - id: algorithms
+    display: algorithms
+    category: practice
+    aliases: [algorithm design, complexity analysis, big o, dynamic programming]
+  - id: data_structures
+    display: data structures
+    category: practice
+    aliases: [dsa, data structures and algorithms]
+    implies: [algorithms]
+  - id: accessibility
+    display: accessibility
+    category: practice
+    aliases: [a11y, wcag, aria, screen reader, section 508, keyboard navigation]
+    implies: [frontend_quality]
+  - id: frontend_quality
+    display: frontend quality
+    category: practice
+    aliases: [core web vitals, lighthouse, web performance]
+    implies: [code_quality]
+  - id: security_practices
+    display: secure development
+    category: practice
+    aliases: [security, application security, appsec, owasp, secure coding, penetration testing, pentest]
+  - id: threat_modeling
+    display: threat modeling
+    category: practice
+    aliases: [stride, risk assessment, security review]
+    implies: [security_practices]
+  - id: internationalization
+    display: internationalization
+    category: practice
+    aliases: [i18n, l10n, localization]
+  - id: product_thinking
+    display: product thinking
+    category: practice
+    aliases: [user research, customer focus, product sense, requirements gathering]
+
+  # ------------------------------------------------------------------ domain
+  - id: distributed_systems
+    display: distributed systems
+    category: domain
+    aliases: [consensus, eventual consistency, cap theorem, sharding, replication]
+    implies: [system_design]
+  - id: scalability
+    display: scalability
+    category: domain
+    aliases: [high availability, high throughput, scaling]
+    implies: [system_design]
+  - id: reliability
+    display: reliability
+    category: domain
+    aliases: [fault tolerance, resilience, disaster recovery, uptime]
+    implies: [system_design]
+  - id: real_time_systems
+    display: real-time systems
+    category: domain
+    aliases: [low latency, real time, realtime]
+  - id: search
+    display: search
+    category: domain
+    aliases: [information retrieval, ranking, indexing pipeline, relevance]
+  - id: payments
+    display: payments
+    category: domain
+    aliases: [stripe, billing, pci dss, checkout, transactions]
+  - id: fintech
+    display: fintech
+    category: domain
+    aliases: [financial services, trading systems, banking]
+  - id: ecommerce
+    display: e-commerce
+    category: domain
+    aliases: [ecommerce, retail, marketplace, marketplaces]
+  - id: healthcare_it
+    display: healthcare technology
+    category: domain
+    aliases: [hipaa, ehr, health tech, healthtech, fhir]
+  - id: advertising
+    display: advertising technology
+    category: domain
+    aliases: [adtech, ad serving, programmatic advertising]
+  - id: gaming
+    display: game development
+    category: domain
+    aliases: [unity, unreal engine, game engine, gamedev]
+  - id: robotics
+    display: robotics
+    category: domain
+    aliases: [ros, robot operating system, motion planning, slam]
+  - id: autonomous_vehicles
+    display: autonomous vehicles
+    category: domain
+    aliases: [self driving, adas, perception stack]
+    implies: [computer_vision, robotics]
+  - id: embedded_systems
+    display: embedded systems
+    category: domain
+    aliases: [firmware, rtos, microcontroller, arduino, raspberry pi, iot, internet of things]
+  - id: blockchain
+    display: blockchain
+    category: domain
+    aliases: [web3, smart contracts, ethereum, defi]
+  - id: ar_vr
+    display: AR/VR
+    category: domain
+    aliases: [augmented reality, virtual reality, xr, spatial computing]
+  - id: bioinformatics
+    display: bioinformatics
+    category: domain
+    aliases: [computational biology, genomics]
+  - id: geospatial
+    display: geospatial
+    category: domain
+    aliases: [gis, mapping, postgis, geolocation]
+  - id: compilers
+    display: compilers
+    category: domain
+    aliases: [parsing, interpreters, llvm, language design, abstract syntax tree]
+  - id: operating_systems
+    display: operating systems
+    category: domain
+    aliases: [os internals, kernel, memory management, process scheduling]
+  - id: computer_graphics
+    display: computer graphics
+    category: domain
+    aliases: [rendering, shaders, opengl, vulkan, ray tracing]
+  - id: databases_internals
+    display: database internals
+    category: domain
+    aliases: [storage engine, query planner, b tree, write ahead log]
+    implies: [relational_databases]
+  - id: compliance
+    display: regulatory compliance
+    category: domain
+    aliases: [gdpr, ccpa, soc 2, soc2, iso 27001, audit trail]
+  - id: supply_chain
+    display: supply chain
+    category: domain
+    aliases: [logistics, inventory management, fulfilment, fulfillment]
+  - id: education_tech
+    display: education technology
+    category: domain
+    aliases: [edtech, lms, learning management]

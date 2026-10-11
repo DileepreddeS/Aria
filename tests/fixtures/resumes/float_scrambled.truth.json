@@ -1,0 +1,76 @@
+{
+  "fixture": "float_scrambled.pdf",
+  "generator": "Chromium headless print-to-PDF",
+  "identity": "synthetic",
+  "pathology": "CSS float date columns; 8 of the 9 entry headers precede the body in content-stream order (VERA-RAG's follows the PROJECTS heading)",
+  "must_fail": false,
+  "fail_reason": null,
+  "notes": "Geometric reconstruction (RESUME_ENGINE 5.2) must recover the same entries as the baseline. A parser reading extract_text() order must trip the 5.5 gate '>=2 consecutive entry headers with zero bullets between them' and refuse. Also the 5.6 cross-extractor DISAGREEMENT fixture: on the pinned pypdf (6.19.0) extract_text() emits eight entry headers before the name and section headings, while pdfminer.six (20260107) reads the page in visual order, verified 2026-10-11. The run must flag the disagreement, still produce the baseline entries, and never prefer pypdf's reading.",
+  "contact_line": "(555) 014-2288 | jordan.rivera@example.com | linkedin.com/in/jordan-rivera-example | github.com/jordan-rivera-example | Portland, OR",
+  "entries": [
+    {
+      "section": "education",
+      "bullet_count": 0,
+      "employer": "Cascadia State University",
+      "title": "M.S. Computer Science",
+      "end": "2026-12"
+    },
+    {
+      "section": "education",
+      "bullet_count": 0,
+      "employer": "Westbrook Institute",
+      "title": "B.Tech, Electrical & Electronics Engineering",
+      "end": "2022-06"
+    },
+    {
+      "section": "experience",
+      "bullet_count": 2,
+      "employer": "Cascadia State University",
+      "title": "Graduate Research Assistant",
+      "start": "2026-10",
+      "end": "present"
+    },
+    {
+      "section": "experience",
+      "bullet_count": 7,
+      "employer": "Nordvale Consulting",
+      "title": "Software Engineer",
+      "start": "2024-02",
+      "end": "2025-07"
+    },
+    {
+      "section": "experience",
+      "bullet_count": 5,
+      "employer": "Brightfold Systems",
+      "title": "Associate Software Engineer",
+      "start": "2022-07",
+      "end": "2023-12"
+    },
+    {
+      "section": "experience",
+      "bullet_count": 2,
+      "employer": "Pinecrest Labs",
+      "title": "Software Engineer Intern",
+      "start": "2021-10",
+      "end": "2022-04"
+    },
+    {
+      "section": "project",
+      "bullet_count": 4,
+      "name": "ORBIT",
+      "title": "Autonomous Job Application Agent"
+    },
+    {
+      "section": "project",
+      "bullet_count": 4,
+      "name": "DentScan",
+      "title": "Vehicle Damage Detection"
+    },
+    {
+      "section": "project",
+      "bullet_count": 3,
+      "name": "VERA-RAG",
+      "title": "Self-Verifying Adaptive RAG System"
+    }
+  ]
+}

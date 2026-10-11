@@ -1,0 +1,76 @@
+{
+  "fixture": "clean_inline_block.pdf",
+  "generator": "Chromium headless print-to-PDF",
+  "identity": "synthetic",
+  "pathology": "none \u2014 reference rendering",
+  "must_fail": false,
+  "fail_reason": null,
+  "notes": "Baseline. Any fixture result that differs from this one is attributable to its pathology alone.",
+  "contact_line": "(555) 014-2288 | jordan.rivera@example.com | linkedin.com/in/jordan-rivera-example | github.com/jordan-rivera-example | Portland, OR",
+  "entries": [
+    {
+      "section": "education",
+      "bullet_count": 0,
+      "employer": "Cascadia State University",
+      "title": "M.S. Computer Science",
+      "end": "2026-12"
+    },
+    {
+      "section": "education",
+      "bullet_count": 0,
+      "employer": "Westbrook Institute",
+      "title": "B.Tech, Electrical & Electronics Engineering",
+      "end": "2022-06"
+    },
+    {
+      "section": "experience",
+      "bullet_count": 2,
+      "employer": "Cascadia State University",
+      "title": "Graduate Research Assistant",
+      "start": "2026-10",
+      "end": "present"
+    },
+    {
+      "section": "experience",
+      "bullet_count": 7,
+      "employer": "Nordvale Consulting",
+      "title": "Software Engineer",
+      "start": "2024-02",
+      "end": "2025-07"
+    },
+    {
+      "section": "experience",
+      "bullet_count": 5,
+      "employer": "Brightfold Systems",
+      "title": "Associate Software Engineer",
+      "start": "2022-07",
+      "end": "2023-12"
+    },
+    {
+      "section": "experience",
+      "bullet_count": 2,
+      "employer": "Pinecrest Labs",
+      "title": "Software Engineer Intern",
+      "start": "2021-10",
+      "end": "2022-04"
+    },
+    {
+      "section": "project",
+      "bullet_count": 4,
+      "name": "ORBIT",
+      "title": "Autonomous Job Application Agent"
+    },
+    {
+      "section": "project",
+      "bullet_count": 4,
+      "name": "DentScan",
+      "title": "Vehicle Damage Detection"
+    },
+    {
+      "section": "project",
+      "bullet_count": 3,
+      "name": "VERA-RAG",
+      "title": "Self-Verifying Adaptive RAG System"
+    }
+  ]
+}

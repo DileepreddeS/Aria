@@ -7,6 +7,11 @@ private/
 *.pem
 *.key
 secrets/
+# Imported candidate data. data/ itself is tracked: data/seed/ holds the skill
+# taxonomy, which the loader reads at import time and ~12 test files depend on, so
+# ignoring the whole directory would break a fresh clone.
+data/candidates/
+data/private/
 
 # ---- python ----
 .venv/

@@ -4,7 +4,7 @@ A standalone engine. Input: one job description + one candidate. Output: a one-p
 PDF where **every claim is traceable to a verified fact**, plus an evidence map and a gap report.
 
 It is a separate package (`engines/resume/`) with no knowledge of crawling, browsers or applying.
-Other parts of ARIA call it only through its public API (section 9).
+Other parts of ARIA call it only through its public API (section 10).
 
 ---
 
@@ -37,8 +37,10 @@ Other parts of ARIA call it only through its public API (section 9).
 ## 2. Pipeline
 
 ```
-JD text (untrusted) ──► 1 JD Parser ──► 2 Requirement Normalizer ──┐
-                                                                   ▼
+Resume / text (untrusted) ──► 0 Resume Intake ──► draft facts ──► user approval ──┐
+                                                                                  │
+JD text (untrusted) ──► 1 JD Parser ──► 2 Requirement Normalizer ──┐              │
+                                                                   ▼              ▼
 Candidate (verified facts) ──► 3 Candidate Graph ──────────► 4 Evidence Matcher
                                                                    │
                                                                    ▼
@@ -56,6 +58,7 @@ Candidate (verified facts) ──► 3 Candidate Graph ────────�
 
 Each stage is a pure function with typed (Pydantic) input and output, so it can be unit-tested and replayed.
 LLM calls happen only in stages 1, 5b and 6c, and go through the LLM gateway (see SECURITY.md).
+**Stage 0 uses no LLM at all** — it is geometry and rules, so its failures are inspectable and reproducible.
 
 ---
 
@@ -107,7 +110,180 @@ Components:
 - **Dedupe and merge** repeated requirements; keep the strongest weight.
 - **Implicit requirements:** "build REST APIs in Node" → node.js, rest_api, backend.
 
-## 5. Stage 3 — Candidate Graph
+## 5. Stage 0 — Resume Intake (uploaded document → draft facts)
+
+An uploaded resume is **untrusted third-party output** in an unknown layout: Word, Google Docs, LaTeX,
+Canva, novoresume, Overleaf, a browser print, or a scan. Intake must work on all of them, and must fail
+loudly on the ones it cannot read. It never improves its odds by asking the user to reformat.
+
+> **Why this section exists.** On 2026-10-11 an import of a Chromium-rendered PDF produced 0 facts and
+> **9 fabricated roles** — an employer called `"mobile"` and a job title that was the text of a bullet —
+> then reported `agreement 100%`. Two generator-side defects (CSS `float`, which makes Chromium write
+> floated date boxes into the text layer ahead of the body, and CSS list markers, which never reach the
+> text layer at all) produced a scrambled, marker-less text stream. The parser invented structure to fit
+> it. **The defect is the parser's**, not the document's: it read flat text in content-stream order,
+> had no shape checks, and reported an agreement metric as confidence.
+
+### 5.1 Extract — geometry, never flat text
+
+- **Primary:** `pdfplumber` (MIT) — `page.chars` gives every character with `x0`, `x1`, `top`, `bottom`,
+  `fontname`, `size` and `upright`. Characters are merged into spans and lines by §5.2.
+- **Cross-check:** `pypdf` (BSD-3) for the independent read in §5.6.
+- **Never** parse the output of `extract_text()`. Content-stream order is whatever the generator happened
+  to emit and carries no meaning. `pypdf.extract_text()` is used only as a cross-check signal (§5.6).
+
+**Licensing constraint (binding).** PyMuPDF is AGPL-3.0 or paid-commercial. For a hosted product,
+AGPL §13 would oblige offering source to every user over the network, so **PyMuPDF must not be used**
+anywhere in ARIA. `pdfplumber` (MIT), `pdfminer.six` (MIT), `pypdf` (BSD-3) and `pypdfium2`
+(Apache-2.0/BSD-3) are all acceptable and expose the same character-level geometry. Any new PDF
+dependency is license-checked before it is added.
+
+**Weight detection.** `pdfplumber` reports `fontname`, not a bold flag, so bold is inferred from the
+PostScript name (`...-Bold`, `...-Black`, `...,Bold`, `...Semibold`). Subset fonts carry a six-letter
+prefix (`ABCDEF+Carlito-Bold`) — strip it before matching. When a document's names carry no weight
+information, fall back to comparing stroke width or glyph-area density against the modal body font, and
+lower the confidence of every heading decision that depended on weight alone.
+
+Record per page: char count, modal font size, font names, and whether each font carries a `ToUnicode` map.
+
+**Triage before parsing.** Any row here ends the import with a reason; none of them are guessed through:
+
+| Signal | Meaning | Result |
+|---|---|---|
+| 0 characters and ≥1 full-page image | scanned / image-only resume | `needs_user_fix`: no text layer; offer OCR path or another intake route (§5.8) |
+| < 200 chars per page | mostly image | same |
+| > 25% of chars are `(cid:N)` or U+FFFD | font has no usable `ToUnicode` map | `needs_user_fix`: font encoding unreadable |
+| extraction blocked by permissions / encryption | protected PDF | `needs_user_fix`: locked document |
+
+### 5.2 Reconstruct reading order (the core fix)
+
+1. **Lines.** Merge spans sharing a baseline (y within ±0.3 × font size) into `Line` objects; line bbox is
+   the union, line font attributes come from the dominant span.
+2. **Columns.** Project line bboxes onto the x-axis and build a coverage histogram. A **gutter** is a
+   contiguous x-range of zero coverage, at least ~4% of page width, spanning ≥60% of the page height.
+   0 gutters → single column; 1 → two columns; ≥2 → multi-column. Guard: a gap present only in the top
+   ~20% of the page is a header layout, not a column.
+3. **Order.** Assign each line to a column, sort within a column by y then x, then concatenate columns
+   left-to-right. This is the reading order; nothing downstream may consult the content stream.
+4. **Running heads.** Lines in the top or bottom 6% of the page whose text repeats across ≥2 pages
+   (page numbers, a repeated name banner) leave the body stream and are kept separately.
+
+Output: an ordered `Line[]` carrying bbox, font, size, bold, column index and page.
+
+This step alone removes the entire float-reordering class of bug and is what makes two-column templates —
+where a flat extractor interleaves the skills sidebar into the experience bullets line by line — parse
+correctly. Two-column layouts are a large share of resumes in the wild and are the single highest-value
+case here.
+
+### 5.3 Classify lines from visual signals
+
+`body_size` = modal line font size. Classification uses geometry first; word lists only ever *raise*
+confidence and are never the sole test, so that "WORK HISTORY", "Professional Experience" and
+non-English headings all resolve.
+
+- **SECTION_HEADER** — size > `body_size` × 1.08 **or** bold; under ~40 chars; and at least one of:
+  all-caps, followed by a horizontal rule, matches the heading lexicon.
+- **BULLET** — starts with a marker glyph (`• ◦ ▪ ‣ · - – *` or a lone `o`), **or** sits in a
+  hanging-indent run.
+- **Hanging-indent rule — how a wrapped line is told from a new bullet.** Within a run, line-start x
+  values cluster on two points: `x_marker` and `x_text` (`x_text > x_marker`). A line starting at
+  `x_marker` opens a new bullet; a line starting at `x_text` continues the previous one. This is purely
+  geometric and works when the document contains **no marker glyphs at all** — which is exactly the case
+  CSS `list-style` produces. It is what prevents a wrapped tail like `"mobile"` from becoming an entry.
+- **ENTRY_HEADER** — bold, and either contains a separator (`—` `–` `|` `,`) or carries a date in the
+  right-hand x-band.
+- **DATE** — matched only within the right-hand x-band (`x0 > 0.55 ×` content width) of an entry header,
+  or as its trailing token. Dates are never pattern-matched out of the middle of a line.
+- **CONTACT** — in the first few lines, matching email / phone / URL patterns.
+- **Word boundaries are rebuilt from character gaps, always.** Never use an extractor's word grouping.
+  Within a line, insert a space where the gap between consecutive characters exceeds ~0.25 × font size.
+  The reason is that extractor word grouping varies by version, not that any one extractor is
+  broken. Chromium emits a positioning operator per character for the whole document, and any
+  generator may do the same; how an extractor groups those characters into words is an implementation
+  detail that changes between releases. On `per_glyph_contact.pdf`, `pypdf` 3.x splits the contact
+  line into single characters while the pinned `pypdf` 6.19.0 reads it intact. A parser that leans on
+  that grouping inherits whichever behaviour the installed version has. Rebuilding words from
+  character gaps makes Stage 0 independent of it, and `per_glyph_contact.pdf` checks that
+  inline-element boundaries do not perturb the rebuild.
+
+### 5.4 Assemble entries
+
+A section header opens a section. Entry headers inside EXPERIENCE / PROJECTS / EDUCATION open candidate
+`Experience` / `Project` / `Education` entries. Bullets attach to the nearest preceding entry header
+**in the reconstructed stream** — never in content-stream order. Employer and title come from splitting
+the entry header on its separator and resolving by position plus the following line (usually a location).
+Dates come only from the DATE token.
+
+### 5.5 Shape rules and refusal gates (hard)
+
+Per-entry rules. Any violation drops that entry and flags the import; a dropped entry is never silently
+replaced by a guess.
+
+- `employer` — ≤60 chars, ≤8 words, no terminal period, contains no metric (`\d+%`, `\d+\+`, `\d+K`),
+  does not begin with an allowed resume verb.
+- `title` — ≤60 chars, contains no metric, no terminal period.
+- `dates` — parse to a real range; `end ≥ start`; `start ≥ 1950`; a start more than 12 months in the
+  future is a flag, not a silent acceptance.
+- each experience entry has ≥1 bullet, each bullet ≥20 chars.
+
+Document gates. Any one failing returns `status = needs_user_fix` and **writes nothing**:
+
+- ≥2 consecutive entry headers with zero bullets between them → reading order is suspect;
+- entries ≥3 and facts == 0;
+- >25% of entries failed a shape rule;
+- >3 overlapping date ranges → likely cross-column bleed.
+
+A failed import returns the reason, the reconstructed line stream, and a rendered page image, so the user
+can see what ARIA saw rather than a bare error.
+
+### 5.6 Cross-extractor check, reported honestly
+
+Run `pypdf.extract_text()` and compare normalised token multisets against the geometric reconstruction.
+Disagreement lowers confidence and raises a flag.
+
+**Agreement is not evidence of correctness and is never surfaced as a score.** Two extractors reading the
+same wrong content stream agree perfectly — that is precisely what reported `agreement 100%` over nine
+fabricated roles. The field is `cross_extractor: agree | disagree`, a diagnostic. It is never a
+percentage, never a quality metric, and never shown to the user as confidence.
+
+### 5.7 The user confirms, always
+
+Even at maximum confidence, intake produces **drafts only** and never writes verified facts (§6). It
+shows the parsed structure back — entries with dates, bullets grouped under their entry, and everything
+dropped with the reason — for approve / edit / reject per item. On a clean document this is a few
+seconds' confirmation. On a mangled one it is the difference between a usable product and a wrong fact
+graph the user never sees. This is "ask, don't guess" applied to intake, and it is the backstop behind
+every rule above.
+
+### 5.8 PDF is not the only door
+
+All of these converge on the same draft-fact review step:
+
+- paste plain text;
+- `.docx` via `python-docx` — real structure, no geometry guessing; **preferred when available**;
+- manual entry, or interview-only with no document at all;
+- a user-supplied LinkedIn data export.
+
+### 5.9 Test corpus (gates Phase 1)
+
+`tests/fixtures/resumes/` — ≥50 real-world PDFs spanning Word, Google Docs, LaTeX (moderncv, Awesome-CV,
+deedy), Canva, novoresume, Enhancv, Overleaf and Chromium-rendered HTML, plus one fixture for each known
+pathology:
+
+- float-scrambled reading order;
+- marker-less bullets (CSS `list-style`);
+- per-glyph-positioned contact line;
+- two-column with a skills sidebar;
+- scanned / image-only;
+- ligature- and `(cid:N)`-corrupted.
+
+Each carries hand-labelled ground truth (entries, employers, titles, date ranges, bullet counts).
+Metrics per run: entry precision and recall, bullet-attachment accuracy, and **false-entry rate, which
+must be 0** — inventing an entry is worse than missing one. The scanned and cid-corrupted fixtures must
+**fail cleanly with a reason**, not parse. The original 2026-10-11 PDF pair (broken and corrected) is
+kept as the first two fixtures.
+
+## 6. Stage 3 — Candidate Graph
 
 The candidate's career as a graph of **verified facts**. Stored in Postgres tables (nodes + edges). A graph
 database isn't needed at this size.
@@ -135,13 +311,14 @@ Derived values (computed, never typed in by the LLM):
 - total professional years; recency of each skill (last used).
 
 Building the graph (onboarding):
-1. Import an existing resume (PDF/DOCX, through the secure upload pipeline) → draft Facts and Metrics.
+1. Import an existing resume through **Stage 0 (§5)**, or use any of the other intake paths in §5.8 →
+   draft Facts and Metrics. A failed import returns `needs_user_fix` and writes nothing.
 2. Show each draft Fact to the candidate: approve / edit / reject. Nothing is verified automatically.
 3. Enrichment interview: ARIA asks targeted questions to add missing metrics and context
    ("You built 20+ components. Do you know how many teams used them?"). Answers become new draft Facts.
 4. Motivations interview: what problems you like, what you want next, team/company preferences.
 
-## 6. Stage 4 — Evidence Matcher
+## 7. Stage 4 — Evidence Matcher
 
 For every Requirement, rank the Facts that prove it.
 
@@ -171,9 +348,9 @@ class EvidenceMap(BaseModel):
 The gap report and the fit decision come straight from this. The screener (outside the engine) uses
 `fit_decision`. The engine doesn't decide whether to apply.
 
-## 7. Stage 5 — Resume Composer
+## 8. Stage 5 — Resume Composer
 
-### 5a. Planner (deterministic, no LLM)
+### Stage 5a — Planner (deterministic, no LLM)
 - Choose a **role template** (`templates/roles/*.yaml`): section order, lead experience rule, featured project
   rule, skills line order, summary pattern.
 - Choose facts per section by Evidence Matcher score, with coverage constraints: each must-have with
@@ -184,7 +361,7 @@ The gap report and the fit decision come straight from this. The screener (outsi
 - Output `ResumePlan`: ordered sections, chosen fact ids per bullet slot, target requirement per bullet,
   the JD surface form to use for each skill.
 
-### 5b. Writer (LLM, strict)
+### Stage 5b — Writer (LLM, strict)
 For each bullet slot, the model receives **only**: the chosen Fact texts + their metrics + allowed tech
 terms (fact tech + taxonomy aliases) + the target requirement + style rules. It returns:
 ```python
@@ -199,13 +376,20 @@ Summary: 2 lines built from the top evidence (identity + years + strongest proof
 that have evidence). Skills section: candidate's verified skills only, reordered so JD must-haves come first,
 using the JD's surface forms (e.g. "PostgreSQL" rather than "Postgres" if the JD says so).
 
-## 8. Stage 6 — Validators
+## 9. Stage 6 — Validators
 
 All validators are code first, LLM only where noted. Each returns pass/fail plus actionable findings.
 
 **6a ATS check**
 - Parseability: render the PDF, extract text with two different extractors, and confirm reading order,
   headings, contact info and bullets survive. No text in images, headers or footers.
+- **Round-trip through our own Stage 0.** Parse the generated PDF with the intake parser and require that
+  entries, employers, titles, date ranges and bullet counts match the composer's plan exactly. Eating our
+  own output is the strongest ATS test available, and it keeps generator and parser honest about each other.
+- **Reading-order assertion:** every entry header is immediately followed by its own bullets in the
+  extracted stream (the 2026-10-11 float defect, §5).
+- **Glyph integrity:** no U+FB00–FB06 ligature characters and no `(cid:` in extracted text.
+- **Contact line:** extracts as contiguous tokens, not per-glyph (`d i l e e p …` → fail).
 - Standard headings: Summary, Education, Experience, Projects, Skills (configurable).
 - Keyword coverage: share of must-have **evidenced** requirements whose JD surface form appears in the text.
   Also the acronym + long form where useful ("CI/CD", "Continuous Integration").
@@ -235,10 +419,22 @@ feedback, swap a fact, drop the lowest-value bullet for length). Max 2 rounds. I
 the verified Fact text itself, lightly formatted. The engine never ships a failing resume. It returns
 `status=needs_review` with findings instead.
 
-## 9. Stage 7 — Renderer and output
+## 10. Stage 7 — Renderer and output
 
 - HTML + CSS templates (Jinja2) → PDF through headless Chromium's print-to-PDF. Cross-platform, no MS Word
   dependency, real selectable text, embedded fonts. Optional DOCX export via python-docx from the same plan.
+
+**Text-layer constraints for our templates** (verified against Chromium, 2026-10-11). The PDF text layer
+is the product; what it looks like on screen is secondary. Each of these is enforced by a template lint
+and by the §9 6a assertions:
+
+| Rule | Why |
+|---|---|
+| No `float` for date columns — use `display: inline-block` | Chromium writes floated boxes into the text layer *ahead of* the body text, so every entry header is separated from its bullets. Verified: `inline-block`, table-cell and plain-line all preserve order; `float` alone breaks it. |
+| No CSS list markers — emit a literal `•` with `list-style: none`, plus a hanging indent | CSS-generated markers never reach the text layer, leaving no way to tell a new bullet from a wrapped line. The hanging indent gives geometric parsers (§5.3) the second signal. |
+| No styled `<span>` or `<a>` in the contact line — keep it unstyled and add links afterwards as PDF annotations from character coordinates | Any styled inline element makes Chromium position each glyph individually; `pypdf` then extracts `d i l e e p k u m a r …`. |
+| `font-feature-settings: "liga" 0, "clig" 0, "dlig" 0` | Carlito/Calibri otherwise emit U+FB00-range ligatures, some with no Unicode mapping, which extract as `(cid:NN)`. |
+| Right-hand date band at `x0 > 0.55 ×` content width | Matches the band §5.3 reads dates from, so our own output parses by the same rule everyone else's does. |
 - File name: `First_Last_Resume.pdf` (no company names in the file name).
 - Artifacts saved with every resume (`ResumeArtifact`):
   `pdf`, `plan.json`, `bullets.json` (with fact ids), `evidence_map.json`, `validation_report.json`,
@@ -252,14 +448,14 @@ def gap_report(resume_id: str) -> GapReport
 ```
 `ResumeResult.status` ∈ {`ok`, `needs_review`, `no_fit`}.
 
-## 10. Evaluation (required before the engine is used for real applications)
+## 11. Evaluation (required before the engine is used for real applications)
 
 `evals/resume/`: 30 real JDs (6 per role type) with the expected must-haves labelled by hand.
 Metrics per run: truth violations (must be 0), must-have coverage, 6-second pass rate, one-page rate,
 banned-word count (must be 0), human rating 1–5 on 10 sampled resumes. Any change to prompts, taxonomy,
 weights or templates must not lower these numbers. CI runs the deterministic parts. The LLM parts run on demand.
 
-## 11. Same graph, other outputs
+## 12. Same graph, other outputs
 
 The Answer Engine (open-ended application questions, cover letters) reuses stages 1–4 and the Truth check,
 plus the `Motivation` nodes. One source of truth for everything ARIA says about the candidate.
