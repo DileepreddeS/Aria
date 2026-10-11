@@ -92,6 +92,7 @@ class TestProductionRefusesDevelopmentShortcuts:
             _settings(
                 env="prod",
                 llm_gateway_service_token=SecretStr("x"),
+                api_service_token=SecretStr("x"),
                 apply_task_signing_kid="k1",
             )
 
@@ -100,6 +101,7 @@ class TestProductionRefusesDevelopmentShortcuts:
             _settings(
                 env="prod",
                 llm_gateway_service_token=SecretStr("x"),
+                api_service_token=SecretStr("x"),
                 dev_kms_key_path=Path("/keys/managed.key"),
                 apply_task_signing_kid="dev-1",
             )
@@ -108,6 +110,7 @@ class TestProductionRefusesDevelopmentShortcuts:
         settings = _settings(
             env="prod",
             llm_gateway_service_token=SecretStr("x"),
+            api_service_token=SecretStr("x"),
             dev_kms_key_path=Path("/keys/managed.key"),
             apply_task_signing_kid="prod-2026-10",
         )
@@ -129,3 +132,33 @@ class TestPathsAndTtl:
 
 def test_the_migration_env_file_is_named_separately() -> None:
     assert MIGRATION_ENV_FILE == ".env.migrate"
+
+
+class TestTheApiBindIsNotAChoice:
+    """The API holds S1 data and can approve facts, so loopback is enforced."""
+
+    @pytest.mark.parametrize(
+        "host",
+        # The whole point of the test is that these are refused.
+        ["0.0.0.0", "192.168.1.10", "::"],  # noqa: S104
+    )
+    def test_a_non_loopback_bind_is_refused(self, host: str) -> None:
+        with pytest.raises(ValidationError, match="loopback"):
+            Settings(database_url=SecretStr(APP_DSN), api_bind_host=host)
+
+    @pytest.mark.parametrize("host", ["127.0.0.1", "::1"])
+    def test_loopback_is_allowed(self, host: str) -> None:
+        assert Settings(database_url=SecretStr(APP_DSN), api_bind_host=host).api_bind_host == host
+
+    def test_production_requires_an_api_token(self) -> None:
+        # An unauthenticated API is not a degraded mode: anything that can reach it
+        # could approve facts and read this person's data.
+        with pytest.raises(ValidationError, match="api_service_token is required"):
+            Settings(
+                env="prod",
+                database_url=SecretStr(APP_DSN),
+                dev_kms_key_path=Path("/nonexistent"),
+                clamav_host="clamav",
+                llm_gateway_service_token=SecretStr("x"),
+                apply_task_signing_kid="prod-1",
+            )

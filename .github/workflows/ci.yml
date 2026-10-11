@@ -36,6 +36,9 @@ jobs:
           enable-cache: true
       - run: uv sync --all-packages --frozen
       - run: make lint
+      # A literal control byte is invisible in a diff and in review, so it is caught
+      # here rather than by someone noticing a path behaving oddly.
+      - run: make control-chars
 
   typecheck:
     runs-on: ubuntu-24.04

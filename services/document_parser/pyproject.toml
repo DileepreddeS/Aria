@@ -1,0 +1,23 @@
+[project]
+name = "aria-document-parser"
+version = "0.0.0"
+description = "Isolated worker that extracts text from uploaded resumes. Hostile input, no network, hard limits."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "aria-core",
+    # Two PDF extractors on purpose: they disagree on badly built PDFs, and a
+    # disagreement is a signal worth surfacing rather than hiding (RESUME_ENGINE §8
+    # wants the same cross-check for the ATS parseability test in Phase 2).
+    "pypdf>=6.0",
+    "pdfminer.six>=20250416",
+    # DOCX is a zip of XML. Entity resolution is off by default here, which is what
+    # keeps an XXE out of a resume upload; the stdlib parser does not promise that.
+    "defusedxml>=0.7.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["aria_document_parser"]

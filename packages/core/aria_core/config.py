@@ -61,6 +61,23 @@ class Settings(BaseSettings):
     #: Alembic reads them through MigrationSettings instead, from a separate file.
     database_url: SecretStr
 
+    # ------------------------------------------------------- uploads (SECURITY.md §7)
+    #: Quarantine store for uploaded files, outside the repository and outside any
+    #: web root. Files land here before they are scanned or parsed.
+    upload_quarantine_path: Path = Field(default=Path(r"%APPDATA%\aria\quarantine"))
+    #: clamd's address. Empty means no scanner, which the API refuses to serve with
+    #: outside dev/ci (see aria_api.uploads.scanner.assert_scanner_is_allowed).
+    clamav_host: str = ""
+    clamav_port: int = Field(default=3310, ge=1, le=65535)
+    #: SECURITY.md §7. Enforced while streaming, not after the file is in memory.
+    max_upload_bytes: int = Field(default=10 * 1024 * 1024, ge=1024, le=50 * 1024 * 1024)
+    #: Whether .docx uploads are accepted. Off by default: a .docx is a zip of XML,
+    #: which brings XXE, zip bombs and external relationships, and every tool that
+    #: writes one also writes a PDF. The reader and its tests are kept — turning this
+    #: on is a configuration change, not a code change — so the decision can be
+    #: revisited at beta without rebuilding anything.
+    allow_docx_uploads: bool = False
+
     # ------------------------------------------------- envelope encryption (S2)
     #: Dev-only KMS root key. Refused outside dev/ci by the validator below.
     dev_kms_key_path: Path = Field(default=Path(r"%APPDATA%\aria\dev-kms-root.key"))
@@ -73,6 +90,22 @@ class Settings(BaseSettings):
     llm_gateway_bind_host: str = "127.0.0.1"
     llm_gateway_bind_port: int = Field(default=8081, ge=1024, le=65535)
 
+    # ---------------------------------------------------------------------- api
+    #: The API serves one person on their own machine in Phase 1, so a single bearer
+    #: token is the proportionate answer. It resolves to a user id, which is what the
+    #: audit log records: an unauthenticated API would log every approval as nobody.
+    #: Required outside dev by the validator below.
+    api_service_token: SecretStr | None = None
+    #: The API holds S1 data and can approve facts. Loopback is enforced here rather
+    #: than left to a deployment note (SECURITY.md §2.5).
+    api_bind_host: str = "127.0.0.1"
+    api_bind_port: int = Field(default=8080, ge=1024, le=65535)
+    #: Who the token acts as. Set by `tasks.ps1 seed-me`; without it the API will
+    #: start but refuse to serve, because an action with no actor cannot be audited.
+    api_user_id: str = ""
+    api_tenant_id: str = ""
+    api_candidate_id: str = ""
+
     # -------------------------------------------------------- ApplyTask signing
     apply_task_signing_key_path: Path = Field(default=Path(r"%APPDATA%\aria\apply-task-signing.key"))
     apply_task_signing_kid: str = "dev-1"
@@ -83,10 +116,26 @@ class Settings(BaseSettings):
     otel_exporter: Literal["console", "none"] = "console"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
 
-    @field_validator("dev_kms_key_path", "apply_task_signing_key_path", mode="before")
+    @field_validator(
+        "dev_kms_key_path", "apply_task_signing_key_path", "upload_quarantine_path", mode="before"
+    )
     @classmethod
     def _expand_paths(cls, value: str | Path) -> Path:
         return _expand(value)
+
+    @field_validator("api_bind_host")
+    @classmethod
+    def _api_bind_must_stay_on_loopback(cls, value: str) -> str:
+        try:
+            address = ipaddress.ip_address(value)
+        except ValueError as exc:
+            raise ValueError(f"api_bind_host must be a loopback IP address, got {value!r}") from exc
+        if not address.is_loopback:
+            raise ValueError(
+                f"the API may only bind loopback addresses, got {value!r}. It holds S1 data and "
+                "can approve facts; exposing it to the network is not a configuration choice."
+            )
+        return value
 
     @field_validator("llm_gateway_bind_host")
     @classmethod
@@ -109,6 +158,8 @@ class Settings(BaseSettings):
         problems: list[str] = []
         if self.llm_gateway_service_token is None:
             problems.append("llm_gateway_service_token is required outside dev")
+        if self.api_service_token is None:
+            problems.append("api_service_token is required outside dev")
         if "dev-kms" in str(self.dev_kms_key_path):
             problems.append("the file-backed dev KMS must not be used outside dev/ci; use a managed KMS")
         if self.apply_task_signing_kid.startswith("dev-"):

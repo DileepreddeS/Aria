@@ -3,7 +3,7 @@
 
     Usage:  ./tasks.ps1 <task>
     Tasks:  setup, up, down, kms-init, keys-init, migrate, anchor, test, test-db, lint,
-            fmt, typecheck, secrets, audit, check, gateway, api
+            fmt, typecheck, control-chars, secrets, audit, check, gateway, api, seed-me
 
     CI uses the Makefile. This file is for local development on Windows.
 #>
@@ -78,6 +78,10 @@ switch ($Task) {
         Invoke-Step "mypy (core)" { uv run mypy packages/core }
         Invoke-Step "mypy (llm_gateway)" { uv run mypy services/llm_gateway }
         Invoke-Step "mypy (api)" { uv run mypy apps/api }
+        Invoke-Step "mypy (cli)" { uv run mypy apps/cli }
+    }
+    "control-chars" {
+        Invoke-Step "no stray control characters" { uv run python infra/checks/no_control_characters.py }
     }
     "secrets" {
         Invoke-Step "gitleaks" { gitleaks dir . --redact --verbose }
@@ -88,6 +92,7 @@ switch ($Task) {
     "check" {
         & $PSCommandPath lint
         & $PSCommandPath typecheck
+        & $PSCommandPath control-chars
         & $PSCommandPath test-db
         & $PSCommandPath secrets
     }
@@ -95,7 +100,14 @@ switch ($Task) {
         Invoke-Step "llm_gateway (loopback only)" { uv run python -m aria_llm_gateway.main }
     }
     "api" {
-        Invoke-Step "api" { uv run uvicorn aria_api.main:app --host 127.0.0.1 --port 8080 --reload }
+        # Through the module, so the loopback bind and the start-up checks come from
+        # configuration rather than from flags typed here.
+        Invoke-Step "api (loopback only)" { uv run python -m aria_api.main }
+    }
+    "seed-me" {
+        Invoke-Step "create the tenant, user and candidate the API acts as" {
+            uv run python -m aria_api.seed @Rest
+        }
     }
     default {
         Get-Help $PSCommandPath -Detailed

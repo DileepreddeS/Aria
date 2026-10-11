@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from pydantic import SecretStr
 
@@ -52,6 +54,40 @@ class TestPreflight:
         monkeypatch.delenv(MIGRATION_ENV_VAR, raising=False)
         with pytest.raises(RuntimeError, match="names a privileged role"):
             run_preflight_checks(_settings(f"postgresql+asyncpg://{role}:x@127.0.0.1:5433/aria"))
+
+    def test_a_scanner_that_does_not_scan_stops_start_up_outside_dev(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The whole point of the check: this configuration is fine locally and must
+        # never serve a real user (SECURITY.md §7).
+        monkeypatch.delenv(MIGRATION_ENV_VAR, raising=False)
+        from aria_api.uploads.scanner import ScannerMisconfigured
+
+        with pytest.raises(ScannerMisconfigured, match="must be scanned"):
+            run_preflight_checks(
+                Settings(
+                    database_url=SecretStr(APP_DSN),
+                    env="prod",
+                    llm_gateway_service_token=SecretStr("x"),
+                    api_service_token=SecretStr("x"),
+                    dev_kms_key_path=Path("/keys/managed.key"),
+                    apply_task_signing_kid="prod-1",
+                )
+            )
+
+    def test_a_configured_scanner_passes_in_production(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv(MIGRATION_ENV_VAR, raising=False)
+        run_preflight_checks(
+            Settings(
+                database_url=SecretStr(APP_DSN),
+                env="prod",
+                clamav_host="127.0.0.1",
+                llm_gateway_service_token=SecretStr("x"),
+                api_service_token=SecretStr("x"),
+                dev_kms_key_path=Path("/keys/managed.key"),
+                apply_task_signing_kid="prod-1",
+            )
+        )
 
     def test_migration_credentials_in_the_real_environment_stop_start_up(
         self, monkeypatch: pytest.MonkeyPatch

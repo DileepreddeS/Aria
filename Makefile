@@ -1,5 +1,5 @@
 # CI task definitions. Local development on Windows uses ./tasks.ps1.
-.PHONY: install lint typecheck test secrets sast audit ci
+.PHONY: install lint typecheck test secrets sast audit control-chars ci
 
 install:
 	uv sync --all-packages --frozen
@@ -14,9 +14,13 @@ typecheck:
 	uv run mypy packages/core
 	uv run mypy services/llm_gateway
 	uv run mypy apps/api
+	uv run mypy apps/cli
 
 test:
 	uv run pytest
+
+control-chars:
+	uv run python infra/checks/no_control_characters.py
 
 secrets:
 	gitleaks dir . --redact --verbose --exit-code 1
@@ -27,4 +31,4 @@ sast:
 audit:
 	uv run pip-audit
 
-ci: lint typecheck test
+ci: lint typecheck control-chars test

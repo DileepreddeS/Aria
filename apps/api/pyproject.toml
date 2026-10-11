@@ -5,7 +5,12 @@ description = "ARIA cloud API (modular monolith): users, preferences, jobs, appl
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "aria-core",
+    "aria-document-parser",
     "fastapi>=0.115",
+    # Required by FastAPI to parse multipart bodies, which is how a resume is
+    # uploaded. Maintained under the encode org alongside Starlette, no build or
+    # install scripts, and the only alternative is hand-parsing multipart.
+    "python-multipart>=0.0.20",
     "uvicorn>=0.32",
     "httpx>=0.27",
     "opentelemetry-instrumentation-fastapi>=0.50b0",

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import structlog
 
+from aria_api.uploads.scanner import assert_scanner_is_allowed, build_scanner
 from aria_core.config import Settings, assert_no_migration_credentials
 
 __all__ = ["run_preflight_checks"]
@@ -32,8 +33,20 @@ def run_preflight_checks(settings: Settings) -> None:
             "nothing and is subject to row-level security (SECURITY.md §2.4)."
         )
 
+    # A scanner that does not scan may only be used in dev/ci. Without this, a
+    # staging deployment that forgot to configure clamd would accept real files from
+    # real people and record them as unscanned — true, and unnoticed until someone
+    # read the column (SECURITY.md §7).
+    scanner = build_scanner(settings)
+    assert_scanner_is_allowed(scanner, settings)
+
     logger.info(
         "preflight_passed",
         env=settings.env,
-        checks=["no_migration_credentials", "unprivileged_database_role"],
+        malware_scanner=scanner.name,
+        checks=[
+            "no_migration_credentials",
+            "unprivileged_database_role",
+            "malware_scanner_allowed",
+        ],
     )
