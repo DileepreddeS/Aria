@@ -155,6 +155,10 @@ Record per page: char count, modal font size, font names, and whether each font 
 | > 25% of chars are `(cid:N)` or U+FFFD | font has no usable `ToUnicode` map | `needs_user_fix`: font encoding unreadable |
 | extraction blocked by permissions / encryption | protected PDF | `needs_user_fix`: locked document |
 
+A triage failure is recorded on the upload as a refusal (`uploads.parse_status = 'refused'`, with the
+reason), because nothing about the file was readable. `needs_user_fix` as a *status* belongs to the
+import, for the document gates in §5.5.
+
 ### 5.2 Reconstruct reading order (the core fix)
 
 1. **Lines.** Merge spans sharing a baseline (y within ±0.3 × font size) into `Line` objects; line bbox is
@@ -162,7 +166,9 @@ Record per page: char count, modal font size, font names, and whether each font 
 2. **Columns.** Project line bboxes onto the x-axis and build a coverage histogram. A **gutter** is a
    contiguous x-range of zero coverage, at least ~4% of page width, spanning ≥60% of the page height.
    0 gutters → single column; 1 → two columns; ≥2 → multi-column. Guard: a gap present only in the top
-   ~20% of the page is a header layout, not a column.
+   ~20% of the page is a header layout, not a column. Columns are read left to right whatever their
+   number. A line that crosses a gutter below that top band means the page's order does not follow from
+   its geometry, and the import ends with `needs_user_fix` rather than guessing which side it belongs to.
 3. **Order.** Assign each line to a column, sort within a column by y then x, then concatenate columns
    left-to-right. This is the reading order; nothing downstream may consult the content stream.
 4. **Running heads.** Lines in the top or bottom 6% of the page whose text repeats across ≥2 pages
@@ -224,7 +230,9 @@ replaced by a guess.
 - `title` — ≤60 chars, contains no metric, no terminal period.
 - `dates` — parse to a real range; `end ≥ start`; `start ≥ 1950`; a start more than 12 months in the
   future is a flag, not a silent acceptance.
-- each experience entry has ≥1 bullet, each bullet ≥20 chars.
+- each experience entry has ≥1 bullet.
+- a bullet under 20 characters is dropped and reported — **the bullet, never the entry**. One short line
+  must not erase a real job; the entry is dropped only if no bullet remains, under the rule above.
 
 Document gates. Any one failing returns `status = needs_user_fix` and **writes nothing**:
 
@@ -233,13 +241,26 @@ Document gates. Any one failing returns `status = needs_user_fix` and **writes n
 - >25% of entries failed a shape rule;
 - >3 overlapping date ranges → likely cross-column bleed.
 
-A failed import returns the reason, the reconstructed line stream, and a rendered page image, so the user
-can see what ARIA saw rather than a bare error.
+These rules and gates apply to every door that assembles entries, pasted text and `.txt` included
+(§5.8). §5.3's classification does not: pasted text has no geometry, so its lines are classified by the
+text importer, and the gates are what stand between that weaker classification and the graph. Text
+extracted from a PDF never takes the text door.
+
+A failed import returns the reason and the reconstructed line stream — every line with its page, column
+and position — so the user can see what ARIA saw rather than a bare error. A rendered page image joins
+it with the dashboard (Phase 6): the original is deleted after processing by default, so an image would
+have to be rendered and stored at parse time, and the CLI cannot show one.
 
 ### 5.6 Cross-extractor check, reported honestly
 
-Run `pypdf.extract_text()` and compare normalised token multisets against the geometric reconstruction.
-Disagreement lowers confidence and raises a flag.
+Run `pypdf.extract_text()` and compare its **line order** with the geometric reconstruction: locate each
+reconstructed line in pypdf's text, and disagree when less than ~95% of lines read in the same order,
+or when text present in one reading is missing from the other. Disagreement lowers confidence and raises
+a flag.
+
+Comparing token multisets is not enough, because a multiset cannot see order. Measured on the fixtures:
+`float_scrambled.pdf`, whose entry headers are emitted ahead of their bodies, differs from a correct
+reading by 3 tokens — exactly as much as `markerless_bullets.pdf`, whose order is fine.
 
 **Agreement is not evidence of correctness and is never surfaced as a score.** Two extractors reading the
 same wrong content stream agree perfectly — that is precisely what reported `agreement 100%` over nine
@@ -260,7 +281,10 @@ every rule above.
 All of these converge on the same draft-fact review step:
 
 - paste plain text;
-- `.docx` via `python-docx` — real structure, no geometry guessing; **preferred when available**;
+- `.docx` via ARIA's own `defusedxml` reader — real structure, no geometry guessing — behind
+  `ARIA_ALLOW_DOCX_UPLOADS`, **off by default**. Not `python-docx`, which brings `lxml` and leaves the
+  reader depending on how lxml resolves entities. Off because a .docx carries XXE, zip-bomb and
+  external-relationship risk, and every tool that writes one also writes a PDF;
 - manual entry, or interview-only with no document at all;
 - a user-supplied LinkedIn data export.
 
@@ -280,8 +304,9 @@ pathology:
 Each carries hand-labelled ground truth (entries, employers, titles, date ranges, bullet counts).
 Metrics per run: entry precision and recall, bullet-attachment accuracy, and **false-entry rate, which
 must be 0** — inventing an entry is worse than missing one. The scanned and cid-corrupted fixtures must
-**fail cleanly with a reason**, not parse. The original 2026-10-11 PDF pair (broken and corrected) is
-kept as the first two fixtures.
+**fail cleanly with a reason**, not parse. The 2026-10-11 regression is reproduced by
+`clean_inline_block.pdf` and `float_scrambled.pdf` — synthetic renderings of the same layout — rather
+than by the original pair, which was a real person's resume. Fixtures carry a synthetic identity only.
 
 ## 6. Stage 3 — Candidate Graph
 
