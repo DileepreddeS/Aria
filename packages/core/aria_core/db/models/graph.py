@@ -138,6 +138,16 @@ class Upload(Base):
     #: disagreed about. The facts from this upload still import, and the approval view
     #: tells the candidate which pages to check against the original.
     needs_review: Mapped[bool] = mapped_column(nullable=False, default=False)
+    #: Stage 0's reading of a PDF: aria_core.documents.LayoutDocument as JSON — every
+    #: line in reading order with its page, column and position. Kept so a refused
+    #: import can show the candidate what ARIA saw, and so a fact's source_line can be
+    #: quoted. The candidate's resume text: untrusted, S1.
+    layout: Mapped[dict[str, object] | None] = mapped_column(JSONB)
+    #: RESUME_ENGINE §5.6: whether an independent extractor read the same lines in the
+    #: same order. A diagnostic with two values; there is deliberately no column for a
+    #: percentage, because agreement is not evidence of correctness. NULL when there
+    #: was nothing to compare (not a PDF, or triage refused it).
+    cross_extractor: Mapped[str | None] = mapped_column(String(10))
     #: The original is deleted after processing unless the candidate opts to keep it.
     keep_original: Mapped[bool] = mapped_column(nullable=False, default=False)
     original_deleted_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
@@ -152,6 +162,7 @@ class Upload(Base):
         CheckConstraint(
             "parse_status IN ('pending', 'parsed', 'refused', 'failed')", name="parse_status_is_known"
         ),
+        CheckConstraint("cross_extractor IN ('agree', 'disagree')", name="cross_extractor_is_known"),
         UniqueConstraint("candidate_id", "sha256"),
         Index("ix_uploads_candidate_id_created_at", "candidate_id", "created_at"),
         {"comment": "Quarantined uploads. original_filename is untrusted and never used as a path."},
