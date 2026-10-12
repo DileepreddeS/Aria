@@ -14,7 +14,9 @@ is not complete, so it is usable in a script.
 from __future__ import annotations
 
 import json
+import socket
 import uuid
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -295,6 +297,29 @@ class TestErrorsAreReadable:
             client.health()
 
     def test_no_token_is_a_usage_error(self, capsys: pytest.CaptureFixture[str]) -> None:
+        assert main(["facts"]) == 2
+        assert "no API token" in capsys.readouterr().err
+
+    def test_a_token_in_the_working_directory_is_never_used_by_a_test(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        # Regression: the test above once read the developer's real .env, found their
+        # token and sent GET /facts to their running API. Here a .env with a token sits
+        # in the working directory, pointing at a port nothing listens on, so without
+        # the conftest guard this fails on any machine — and contacts nobody.
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            free_port = probe.getsockname()[1]
+        (tmp_path / ".env").write_text(
+            "ARIA_DATABASE_URL=postgresql+asyncpg://nobody:x@127.0.0.1:1/none\n"
+            "ARIA_API_SERVICE_TOKEN=a-token-no-test-may-use\n"
+            f"ARIA_API_BIND_PORT={free_port}\n",
+            encoding="utf-8",
+        )
+        monkeypatch.chdir(tmp_path)
         assert main(["facts"]) == 2
         assert "no API token" in capsys.readouterr().err
 
