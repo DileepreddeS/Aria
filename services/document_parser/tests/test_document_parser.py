@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import zipfile
 from io import BytesIO
+from pathlib import Path
 
 import pytest
 from fixtures import (  # type: ignore[import-not-found]  # sibling helper, see conftest
@@ -20,8 +21,12 @@ from fixtures import (  # type: ignore[import-not-found]  # sibling helper, see 
     make_pdf,
     make_pdf_with_links,
     multi_page_pdf,
+    two_column_pdf,
 )
+from pathology_pdfs import encrypted_pdf  # type: ignore[import-not-found]  # sibling helper
 
+from aria_core.documents import CrossExtractor, Triage
+from aria_document_parser import client
 from aria_document_parser.client import InProcessDocumentParser, SubprocessDocumentParser
 from aria_document_parser.docx import extract_docx
 from aria_document_parser.errors import ParseFailed, ParseRefused
@@ -31,40 +36,52 @@ from aria_document_parser.plain_text import extract_text_file
 from aria_document_parser.worker import parse_bytes
 
 RESUME_TEXT = "\n".join(RESUME_LINES)
+FIXTURES = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "resumes"
 
 
 # ------------------------------------------------------------------------- PDF
 
 
 class TestPdf:
-    def test_a_real_pdf_yields_its_text(self) -> None:
-        result = extract_pdf(make_pdf("Built 20+ React components used by 4 teams. " * 5))
+    def test_a_real_pdf_yields_its_text_as_lines(self) -> None:
+        result = extract_pdf(make_pdf("Built 20+ React components used by 4 teams. " * 8))
         assert "React components" in result.text
         assert result.page_count == 1
+        assert result.layout.triage is Triage.READABLE
+        assert result.layout.lines
 
-    def test_both_extractors_run_and_the_detail_names_the_one_used(self) -> None:
-        # RESUME_ENGINE §8 wants two extractors compared; the comparison is built once
-        # here and reused by the Phase 2 ATS check. Which text was used is recorded,
-        # so a surprising import can be explained months later.
+    def test_the_text_is_the_layout_s_lines_in_reading_order(self) -> None:
         result = extract_pdf(make_pdf())
-        assert result.extractor == "pypdf"
-        assert "extractor=pypdf" in result.detail
-        assert "agreement" in result.detail
+        assert result.text == "\n".join(line.text for line in result.layout.lines)
 
-    def test_pypdf_is_the_source_of_truth(self) -> None:
-        # Not "whichever came out longer": that could flip between two runs of one file.
+    def test_a_bullet_keeps_its_marker_in_the_text(self) -> None:
+        # The text importer recognises a bullet by its leading glyph; the layout keeps
+        # the marker apart from the words, and the flat text puts it back in front.
+        result = extract_pdf((FIXTURES / "markerless_bullets.pdf").read_bytes())
+        marked = [line for line in result.layout.lines if line.marker]
+        assert marked and all(f"{line.marker} {line.text}" in result.text.splitlines() for line in marked)
+
+    def test_the_detail_names_the_reader_and_never_a_percentage(self) -> None:
+        # §5.6: agreement is a diagnostic, never a score. "agreement 100%" over nine
+        # fabricated roles is what the old reader printed.
         result = extract_pdf(make_pdf())
-        assert result.extractor == "pypdf"
-        assert result.needs_review is False
-        assert result.low_agreement_pages == ()
+        assert result.extractor == "pdfplumber"
+        assert "extractor=pdfplumber" in result.detail
+        assert "cross-extractor: agree" in result.detail
+        assert "%" not in result.detail and "agreement" not in result.detail
 
     def test_a_scan_is_refused_rather_than_ocrd(self) -> None:
         # A scanned resume is not ATS-safe either, so accepting it would produce a
         # resume the systems it is sent to cannot read.
         with pytest.raises(ParseRefused, match="no_text_layer") as caught:
             extract_pdf(image_only_pdf())
-        assert "does not read scans" in caught.value.advice
-        assert "exported" in caught.value.advice
+        assert "no text layer" in caught.value.advice
+        assert "paste the text" in caught.value.advice
+
+    def test_a_locked_pdf_is_refused_with_the_reason(self) -> None:
+        with pytest.raises(ParseRefused, match="locked") as caught:
+            extract_pdf(encrypted_pdf())
+        assert "password" in caught.value.advice
 
     def test_the_page_cap_is_enforced(self) -> None:
         with pytest.raises(ParseRefused, match="too_many_pages") as caught:
@@ -271,8 +288,23 @@ class TestTheIsolatedWorker:
     async def test_a_pdf_parses_through_a_subprocess(self) -> None:
         result = await SubprocessDocumentParser().parse(make_pdf(), "pdf")
         assert "Resume text" in result.text
-        assert result.extractor == "pypdf"
-        assert "extractor=pypdf" in result.detail
+        assert result.extractor == "pdfplumber"
+        assert "extractor=pdfplumber" in result.detail
+
+    async def test_the_layout_crosses_the_boundary_intact(self) -> None:
+        content = (FIXTURES / "clean_inline_block.pdf").read_bytes()
+        crossed = await SubprocessDocumentParser().parse(content, "pdf")
+        local = await InProcessDocumentParser().parse(content, "pdf")
+        assert crossed.layout is not None
+        assert crossed.layout == local.layout
+
+    def test_a_layout_that_does_not_validate_is_a_failure_not_an_empty_value(self) -> None:
+        # What a subverted worker would send. The importer reads the document from the
+        # layout, so a malformed one stops here.
+        with pytest.raises(ParseFailed, match="does not validate"):
+            client._layout('{"triage": "readable", "lines": [{"index": 3}]}')
+        with pytest.raises(ParseFailed, match="not JSON text"):
+            client._layout({"triage": "readable"})
 
     async def test_a_docx_parses_through_a_subprocess(self) -> None:
         result = await SubprocessDocumentParser().parse(make_docx(), "docx")
@@ -454,24 +486,47 @@ class TestLinkAnnotations:
         assert result.links == ("https://evil.test/collect",)
 
 
-class TestLowAgreementPagesAreFlagged:
-    def test_a_clean_page_is_not_flagged(self) -> None:
-        result = extract_pdf(make_pdf())
-        assert result.low_agreement_pages == ()
+class TestTheCrossCheck:
+    """§5.6: whether pypdf reads the same lines in the same order. A diagnostic, never a score."""
+
+    def test_a_clean_resume_agrees_and_needs_no_review(self) -> None:
+        result = extract_pdf((FIXTURES / "clean_inline_block.pdf").read_bytes())
+        assert result.layout.cross_extractor is CrossExtractor.AGREE
         assert result.needs_review is False
 
-    def test_a_disagreeing_page_is_flagged_rather_than_guessed_at(self) -> None:
-        # Forced by setting the threshold so high that ordinary whitespace differences
-        # count as disagreement: the point is what happens when they disagree, not how
-        # often they do.
-        result = extract_pdf(make_pdf(), ParseLimits(extractor_disagreement_ratio=1.01))
-        assert result.low_agreement_pages == (1,)
+    def test_a_float_scrambled_resume_disagrees_and_is_flagged(self) -> None:
+        # pypdf reads eight entry headers ahead of the body; the geometry does not.
+        result = extract_pdf((FIXTURES / "float_scrambled.pdf").read_bytes())
+        assert result.layout.cross_extractor is CrossExtractor.DISAGREE
         assert result.needs_review is True
-        assert "reading order is uncertain" in result.detail
-        assert "check the imported facts" in result.detail
+        assert "different order" in result.detail
+        assert "%" not in result.detail
 
-    def test_the_text_is_still_returned_when_review_is_needed(self) -> None:
-        # Flagged, not withheld: the candidate reviews facts, they do not re-upload.
-        result = extract_pdf(make_pdf(), ParseLimits(extractor_disagreement_ratio=1.01))
-        assert result.text.strip()
-        assert result.extractor == "pypdf"
+    def test_flagged_is_not_withheld_and_the_geometry_s_order_stands(self) -> None:
+        clean = extract_pdf((FIXTURES / "clean_inline_block.pdf").read_bytes())
+        scrambled = extract_pdf((FIXTURES / "float_scrambled.pdf").read_bytes())
+        assert scrambled.text == clean.text
+
+    def test_an_interleaved_two_column_page_is_rebuilt_and_flagged(self) -> None:
+        left = [
+            "EXPERIENCE",
+            "Nordvale Consulting - Software Engineer",
+            "Built 20+ React components used by 4 teams",
+        ]
+        right = ["Python, TypeScript, C++", "AWS, Docker, Kubernetes", "PostgreSQL, Redis, Kafka"]
+        result = extract_pdf(two_column_pdf(left * 3, right * 3))
+        assert result.column_pages == (1,)
+        assert result.layout.cross_extractor is CrossExtractor.DISAGREE
+        assert result.needs_review is True
+        lines = result.text.splitlines()
+        assert lines.index("Built 20+ React components used by 4 teams") < lines.index(
+            "Python, TypeScript, C++"
+        )
+
+    def test_a_page_whose_column_order_does_not_follow_is_refused(self) -> None:
+        left = ["Achievement line number one for the left column"] * 9
+        right = ["Skills sidebar entry"] * 9
+        banner = "PROFESSIONAL DEVELOPMENT, AWARDS, CERTIFICATIONS AND SELECTED PUBLICATIONS 2024"
+        with pytest.raises(ParseRefused, match="ambiguous_columns") as caught:
+            extract_pdf(two_column_pdf(left, right, banner=(banner, 640)))
+        assert "wrong dates" in caught.value.advice

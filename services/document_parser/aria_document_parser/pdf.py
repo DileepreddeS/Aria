@@ -1,55 +1,64 @@
-"""PDF text extraction (SECURITY.md §7, RESUME_ENGINE §8).
+"""PDF reading for Stage 0: geometry in, a LayoutDocument out (RESUME_ENGINE §5.1-§5.6).
 
-PDF is now the main path, so three things that used to be approximations are decided
-here explicitly.
+The order, each step in its own module:
 
-**Which extractor's text is used.** ``pypdf`` is the source of truth, always. It
-preserves reading order better in practice, and "always pypdf" is a rule that can be
-stated, tested and recorded. ``pdfminer.six`` runs alongside as a *check*, not a
-candidate: its output is compared, never blended. The one exception is stated in code
-and recorded on the upload — if pypdf produced nothing usable and pdfminer did, the
-latter is used and the upload says so. Picking whichever happened to be longer, as an
-earlier version did, meant the choice could flip between two runs of the same file.
+1. **Triage** (triage.py): a locked file, no text layer, mostly image, or a font with
+   no usable Unicode map ends the read with a reason. Nothing is guessed through.
+2. **Glyphs** (glyphs.py): every character with its box, font and named weight, from
+   pdfplumber.
+3. **Lines** (lines.py): rows, runs, words rebuilt from character gaps, markers drawn
+   or typed, rules, and weight by name or by ink.
+4. **Reading order** (reading_order.py): columns from where the text is, header lines
+   first, each column top to bottom, running heads set aside.
+5. **Cross-check** (crosscheck.py): whether pypdf reads the same lines in the same
+   order. Agree or disagree, a diagnostic, never a number.
 
-**Low-agreement pages are flagged, not guessed at.** A two-column layout can come out
-interleaved, and no amount of cleverness tells us which order was intended. Each page
-is compared separately; pages where the two extractors disagree are listed, the upload
-is marked as needing review, and the candidate is asked to check those facts against
-the original. Guessing silently is how a resume ends up saying something the candidate
-never wrote.
+The reading-order text is what ``text`` carries, markers in front, so the importer
+that still reads text gets lines in the order a person reads them rather than the order
+a generator wrote them; the layout itself travels alongside for the importer that
+replaces it.
 
-**Link annotations are extracted as data.** A resume's LinkedIn and GitHub URLs live in
-link annotations, not in the text layer, so extracting the text alone loses them.
-Those URIs are read, filtered to http/https/mailto, capped, and appended as a labelled
-block. **Nothing is ever fetched**: a URI from an uploaded file is untrusted input, and
-following one would make the parser a request-forgery tool on behalf of whoever sent
-the file.
-
-Nothing in a PDF is executed — JavaScript, embedded files, launch actions and
-annotation actions other than plain URIs are never evaluated. A PDF with no text layer
-is refused rather than OCR'd, because a scan is not ATS-safe either, so accepting one
-would produce a resume the systems it is sent to cannot read.
+**Link annotations are extracted as data**, filtered to http/https/mailto, capped, and
+appended as a labelled block. **Nothing is ever fetched**: a URI from an uploaded file
+is untrusted input. Nothing in a PDF is executed. A page whose column order the
+geometry cannot settle is refused with the reason, rather than read in an order nobody
+chose.
 """
 
 from __future__ import annotations
 
 import io
 import logging
+from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit
 
-from aria_core.documents import LINKS_HEADING
-from aria_document_parser.errors import ParseFailed, ParseRefused
-from aria_document_parser.layout import ColumnVerdict, PageLayout, analyse
+import pdfplumber
+import pypdf
+
+from aria_core.documents import (
+    LINKS_HEADING,
+    CrossExtractor,
+    LayoutDocument,
+    LayoutLine,
+    LayoutPage,
+    Triage,
+)
+from aria_document_parser import crosscheck, triage
+from aria_document_parser.errors import ParseRefused
+from aria_document_parser.glyphs import Glyph, page_glyphs
+from aria_document_parser.ink import PageInk
 from aria_document_parser.limits import ParseLimits
+from aria_document_parser.lines import Row, drawn_markers, horizontal_rules, resolve_weight, rows
+from aria_document_parser.reading_order import PageReading, read_page, set_aside_running_heads
 
 # LINKS_HEADING is re-exported: this module writes the block, aria_core.importer
 # reads it, and aria_core.documents owns the one definition both sides match on.
 __all__ = ["LINKS_HEADING", "PdfExtraction", "extract_pdf"]
 
-#: pdfminer is loud about recoverable oddities in real-world PDFs. Its warnings are
-#: not ours to act on, and they would otherwise dominate the worker's stderr.
+#: pdfminer (under pdfplumber) is loud about recoverable oddities in real-world PDFs.
+#: Its warnings are not ours to act on, and they would dominate the worker's stderr.
 logging.getLogger("pdfminer").setLevel(logging.ERROR)
 
 #: Schemes worth keeping. ``mailto`` carries the candidate's email, which is a profile
@@ -59,42 +68,25 @@ _ALLOWED_LINK_SCHEMES = frozenset({"http", "https", "mailto"})
 
 @dataclass(frozen=True, slots=True)
 class PdfExtraction:
+    #: The lines in reading order, then the links block.
     text: str
     page_count: int
-    #: Notes for the upload record: which extractor was used, agreement per page.
+    #: Notes for the upload record. Never a percentage.
     detail: str
+    layout: LayoutDocument
     #: URIs from link annotations, filtered and de-duplicated. Never fetched.
     links: tuple[str, ...] = ()
-    #: 1-based page numbers where the extractors disagreed sharply.
-    low_agreement_pages: tuple[int, ...] = ()
-    #: Which extractor's text is in ``text``. Recorded so a surprising import can be
-    #: explained later.
-    extractor: str = "pypdf"
-    #: True when a person should check the imported facts against the original.
+    #: True when a person should check the imported facts against the original: the
+    #: extractors disagreed about the order, or the page was laid out in columns.
     needs_review: bool = False
-    #: 1-based pages where the geometry showed columns and the text was rebuilt in
-    #: reading order. Flagged for review: the order follows from the gutter, which is
-    #: a good reason to believe it and not a reason to skip checking it.
-    column_pages: tuple[int, ...] = ()
 
+    @property
+    def extractor(self) -> str:
+        return "pdfplumber"
 
-def _alphanumeric(value: str) -> str:
-    return "".join(character for character in value.lower() if character.isalnum())
-
-
-def _similarity(left: str, right: str) -> float:
-    """Rough agreement between two extractions, on alphanumeric content only.
-
-    Whitespace and punctuation differ constantly between extractors and say nothing
-    about whether the *words* came out the same, so they are ignored.
-    """
-    first, second = _alphanumeric(left), _alphanumeric(right)
-    if not first and not second:
-        return 1.0
-    if not first or not second:
-        return 0.0
-    shorter, longer = sorted((len(first), len(second)))
-    return shorter / longer
+    @property
+    def column_pages(self) -> tuple[int, ...]:
+        return tuple(page.number for page in self.layout.pages if page.columns > 1)
 
 
 def _links_from_page(page: Any, limits: ParseLimits) -> list[str]:
@@ -108,12 +100,10 @@ def _links_from_page(page: Any, limits: ParseLimits) -> list[str]:
     annotations = page.get("/Annots")
     if not annotations:
         return found
-
     try:
         annotations = list(annotations)
     except TypeError:
         return found
-
     for annotation in annotations[: limits.max_links_per_page]:
         try:
             resolved = annotation.get_object()
@@ -143,198 +133,6 @@ def _is_safe_link(uri: str) -> bool:
     return scheme in _ALLOWED_LINK_SCHEMES
 
 
-def _extract_with_pypdf(content: bytes, limits: ParseLimits) -> tuple[list[str], list[str], int]:
-    """``(page_texts, links, page_count)`` from pypdf."""
-    from pypdf import PdfReader
-    from pypdf.errors import PdfReadError
-
-    try:
-        reader = PdfReader(io.BytesIO(content))
-    except PdfReadError as error:
-        raise ParseRefused(
-            "unreadable_pdf",
-            "This PDF could not be opened — it may be corrupt or password-protected. Try "
-            "re-exporting it from Word or Google Docs, or upload a plain-text version.",
-        ) from error
-
-    if reader.is_encrypted:
-        # An empty-password PDF can sometimes be opened, but a resume should not be
-        # encrypted at all, and guessing at passwords is not something to automate.
-        raise ParseRefused(
-            "encrypted_pdf",
-            "This PDF is password-protected. Please upload an unprotected copy.",
-        )
-
-    pages = reader.pages
-    if len(pages) > limits.max_pages:
-        raise ParseRefused(
-            "too_many_pages",
-            f"This PDF has {len(pages)} pages and the limit is {limits.max_pages}. A resume is "
-            "one or two pages; please upload the resume rather than a portfolio.",
-        )
-
-    page_texts: list[str] = []
-    links: list[str] = []
-    total = 0
-    for page in pages:
-        try:
-            text = page.extract_text() or ""
-        except Exception as error:  # a single bad page should not lose the document
-            logging.getLogger(__name__).warning("pdf_page_failed: %s", type(error).__name__)
-            page_texts.append("")
-            continue
-        total += len(text)
-        if total > limits.max_characters:
-            raise ParseRefused(
-                "too_much_text",
-                f"This PDF holds more than {limits.max_characters:,} characters of text, which "
-                "is far more than a resume. Please upload the resume itself.",
-            )
-        page_texts.append(text)
-        links.extend(_links_from_page(page, limits))
-
-    return page_texts, links, len(pages)
-
-
-def _pdfminer_page_texts(content: bytes, page_count: int, limits: ParseLimits) -> list[str]:
-    """pdfminer's text, page by page, so agreement can be judged per page."""
-    from pdfminer.high_level import extract_text
-
-    texts: list[str] = []
-    for index in range(min(page_count, limits.max_pages)):
-        try:
-            texts.append(extract_text(io.BytesIO(content), page_numbers=[index]))
-        except Exception as error:
-            raise ParseFailed(f"pdfminer failed on page {index + 1}: {type(error).__name__}") from error
-    return texts
-
-
-def extract_pdf(content: bytes, limits: ParseLimits | None = None) -> PdfExtraction:
-    """Text, links and a review verdict from a PDF."""
-    resolved = limits or ParseLimits()
-    pypdf_pages, raw_links, page_count = _extract_with_pypdf(content, resolved)
-    pypdf_text = "\n".join(pypdf_pages)
-
-    notes: list[str] = []
-    low_agreement: list[int] = []
-    extractor = "pypdf"
-    text = pypdf_text
-
-    # ---- geometry first, because it can settle what the cross-check cannot see.
-    layouts: dict[int, PageLayout] = {}
-    try:
-        layouts = analyse(content, page_count=page_count, limits=resolved)
-    except ParseFailed as error:
-        notes.append(f"layout analysis unavailable ({error.detail})")
-
-    ambiguous = [layout for layout in layouts.values() if layout.verdict == ColumnVerdict.AMBIGUOUS]
-    if ambiguous:
-        first = ambiguous[0]
-        raise ParseRefused(
-            "ambiguous_columns",
-            f"Page {first.page_number} of this PDF has {first.column_count} columns and "
-            f"{first.reason}. ARIA will not guess the order, because reading the columns "
-            "the wrong way round attaches the wrong dates and the wrong employer to the "
-            "wrong work. Please re-export the resume in a single column.",
-        )
-
-    column_pages = sorted(
-        number for number, layout in layouts.items() if layout.verdict == ColumnVerdict.RESOLVED
-    )
-    if column_pages:
-        # The page was laid out in columns, so pypdf's reading order for it is known
-        # to be wrong: it follows the content stream, which runs across the gutter a
-        # visual row at a time. The geometric order replaces it for those pages only.
-        rebuilt = list(pypdf_pages)
-        for number in column_pages:
-            if number - 1 < len(rebuilt):
-                rebuilt[number - 1] = layouts[number].text
-        pypdf_pages = rebuilt
-        text = "\n".join(rebuilt)
-        extractor = "pypdf+layout"
-        notes.append(
-            "columns found by geometry on "
-            + ", ".join(f"page {number}" for number in column_pages)
-            + "; text rebuilt in reading order ("
-            + "; ".join(layouts[number].describe() for number in column_pages)
-            + ")"
-        )
-
-    try:
-        pdfminer_pages = _pdfminer_page_texts(content, page_count, resolved)
-    except ParseFailed as error:
-        # The cross-check is a check, not a dependency: without it the text still
-        # stands, and the upload records that nobody verified the reading order.
-        notes.append(f"cross-check unavailable ({error.detail})")
-        pdfminer_pages = []
-    else:
-        for number, (left, right) in enumerate(zip(pypdf_pages, pdfminer_pages, strict=False), start=1):
-            if number in column_pages:
-                # Already explained, and already fixed. Reporting it again would send
-                # the candidate to check a page whose order the geometry settled.
-                continue
-            agreement = _similarity(left, right)
-            if agreement < resolved.extractor_disagreement_ratio:
-                low_agreement.append(number)
-        overall = _similarity(pypdf_text, "\n".join(pdfminer_pages))
-        notes.append(f"agreement {overall:.0%}")
-
-        # The one documented exception to "always pypdf": it found nothing usable and
-        # pdfminer did. Stated here, recorded on the upload, and testable.
-        pdfminer_text = "\n".join(pdfminer_pages)
-        if not column_pages and len(pypdf_text.strip()) < resolved.min_pdf_characters <= len(
-            pdfminer_text.strip()
-        ):
-            text = pdfminer_text
-            extractor = "pdfminer"
-            notes.append("pypdf found no usable text layer, so pdfminer's text was used")
-
-    if len(text.strip()) < resolved.min_pdf_characters:
-        raise ParseRefused(
-            "no_text_layer",
-            "This PDF has no text layer — it is an image or a scan. ARIA does not read scans, "
-            "because a scanned resume cannot be parsed by the systems it would be sent to "
-            "either. Please upload the file you exported from Word or Google Docs.",
-        )
-
-    links = _dedupe(raw_links)[: resolved.max_links_total]
-    if links:
-        text = f"{text}\n\n{LINKS_HEADING}\n" + "\n".join(links)
-
-    detail = "; ".join(
-        [
-            f"extractor={extractor}",
-            f"{page_count} page(s)",
-            f"{len(text)} characters",
-            f"{len(links)} link(s)",
-            *notes,
-            *(
-                [
-                    "pages where the extractors disagreed and the reading order is "
-                    f"uncertain: {', '.join(str(number) for number in low_agreement)} — "
-                    "check the imported facts from those pages against the original"
-                ]
-                if low_agreement
-                else []
-            ),
-        ]
-    )
-
-    return PdfExtraction(
-        text=text,
-        page_count=page_count,
-        detail=detail,
-        links=tuple(links),
-        low_agreement_pages=tuple(low_agreement),
-        extractor=extractor,
-        # A rebuilt page is worth a look even though the order follows from the
-        # gutter: the gutter says which column comes first, not that a sidebar of
-        # skills belongs where it landed.
-        needs_review=bool(low_agreement) or bool(column_pages),
-        column_pages=tuple(column_pages),
-    )
-
-
 def _dedupe(values: list[str]) -> list[str]:
     """Order-preserving de-duplication: a header link repeats on every page."""
     seen: set[str] = set()
@@ -344,3 +142,173 @@ def _dedupe(values: list[str]) -> list[str]:
             seen.add(value)
             unique.append(value)
     return unique
+
+
+def _open(content: bytes, limits: ParseLimits) -> pypdf.PdfReader:
+    try:
+        reader = pypdf.PdfReader(io.BytesIO(content))
+        # The lock first: an encrypted file's pages cannot be counted until it is
+        # decrypted, and a password-protected resume is "locked", not "corrupt".
+        locked = triage.lock_reason(reader)
+        if locked is not None:
+            verdict, why = triage.decide([], locked)
+            raise ParseRefused(verdict.value, why)
+        count = len(reader.pages)
+    except ParseRefused:
+        raise
+    except Exception as error:
+        raise ParseRefused(
+            "unreadable_pdf",
+            "This PDF could not be opened \u2014 it may be corrupt. Try re-exporting it from the "
+            "document you edit, or paste the text instead.",
+        ) from error
+    if count > limits.max_pages:
+        raise ParseRefused(
+            "too_many_pages",
+            f"This PDF has {count} pages and the limit is {limits.max_pages}. A resume is one or "
+            "two pages; please upload the resume rather than a portfolio.",
+        )
+    return reader
+
+
+def _flat(line: LayoutLine) -> str:
+    """A line as the text importer reads it: the marker kept in front of the words.
+
+    The layout records the marker separately; the flat text is for the importer that
+    still reads text, which recognises a bullet by its leading glyph. A drawn marker is
+    written as a bullet glyph here, which gives that importer the bullets of a
+    list-style resume for the first time.
+    """
+    return f"{line.marker} {line.text}" if line.marker else line.text
+
+
+def _body_size(lines: list[LayoutLine]) -> float:
+    sizes = Counter(round(line.font_size, 1) for line in lines)
+    return max(sizes, key=lambda size: (sizes[size], size)) if sizes else 0.0
+
+
+def extract_pdf(content: bytes, limits: ParseLimits | None = None) -> PdfExtraction:
+    """Read a PDF into lines in reading order, or refuse it with the reason."""
+    resolved = limits or ParseLimits()
+    reader = _open(content, resolved)
+
+    links = _dedupe([link for page in reader.pages for link in _links_from_page(page, resolved)])
+    links = links[: resolved.max_links_total]
+
+    with pdfplumber.open(io.BytesIO(content)) as pdf, PageInk(content) as ink:
+        glyphs: list[list[Glyph]] = [page_glyphs(page) for page in pdf.pages]
+        total = sum(len(page) for page in glyphs)
+        if total > resolved.max_characters:
+            raise ParseRefused(
+                "too_much_text",
+                f"This PDF holds more than {resolved.max_characters:,} characters of text, which is "
+                "far more than a resume. Please upload the resume itself.",
+            )
+        census = triage.census(content, pdf.pages, glyphs)
+        verdict, why = triage.decide(census)
+        if verdict is not Triage.READABLE:
+            raise ParseRefused(verdict.value, why)
+
+        page_rows: list[list[Row]] = []
+        rotated: list[int] = []
+        for number, page_glyph_list in enumerate(glyphs, start=1):
+            found, turned = rows(page_glyph_list, number)
+            page_rows.append(found)
+            rotated.append(turned)
+        flat, weight_source = resolve_weight([row for found in page_rows for row in found], ink.share)
+        by_page: dict[int, list[Row]] = {}
+        for row in flat:
+            by_page.setdefault(row.page, []).append(row)
+
+        readings: list[PageReading] = [
+            read_page(
+                by_page.get(number, []),
+                page=number,
+                width=float(page.width),
+                weight_source=weight_source,
+                markers=drawn_markers(page),
+                rules=horizontal_rules(page),
+            )
+            for number, page in enumerate(pdf.pages, start=1)
+        ]
+        readings = set_aside_running_heads(readings, [float(page.height) for page in pdf.pages])
+        sizes = [(float(page.width), float(page.height)) for page in pdf.pages]
+
+    ambiguous = [reading for reading in readings if reading.ambiguous]
+    if ambiguous:
+        first = ambiguous[0]
+        raise ParseRefused(
+            "ambiguous_columns",
+            f"Page {first.page} of this PDF is laid out in {first.columns} columns with text running "
+            "across the gap between them, so the order it is meant to be read in does not follow "
+            "from the page. ARIA will not guess, because reading columns the wrong way round "
+            "attaches the wrong dates and the wrong employer to the wrong work. Please re-export "
+            "the resume in a single column, or paste the text instead.",
+        )
+
+    lines: list[LayoutLine] = []
+    pages: list[LayoutPage] = []
+    for reading, page_census, (width, height), turned in zip(readings, census, sizes, rotated, strict=True):
+        for line in reading.lines:
+            lines.append(line.model_copy(update={"index": len(lines)}))
+        pages.append(
+            LayoutPage(
+                number=reading.page,
+                width=width,
+                height=height,
+                character_count=page_census.characters,
+                rotated_characters=turned,
+                unreadable_share=page_census.unreadable_share,
+                body_size=_body_size(reading.lines),
+                fonts=page_census.fonts,
+                columns=reading.columns,
+                gutters=reading.gutters,
+                ambiguous_columns=reading.ambiguous,
+                running_heads=tuple(reading.running_heads),
+            )
+        )
+
+    pypdf_reading = "\n".join(page.extract_text() or "" for page in reader.pages)
+    verdict_order = crosscheck.compare([line.text for line in lines], pypdf_reading)
+    layout = LayoutDocument(
+        triage=Triage.READABLE,
+        pages=tuple(pages),
+        lines=tuple(lines),
+        links=tuple(links),
+        cross_extractor=verdict_order,
+    )
+
+    text = "\n".join(_flat(line) for line in lines)
+    if links:
+        text = f"{text}\n\n{LINKS_HEADING}\n" + "\n".join(links)
+
+    column_pages = [page.number for page in pages if page.columns > 1]
+    notes = [
+        "extractor=pdfplumber",
+        f"{len(pages)} page(s)",
+        f"{len(lines)} line(s)",
+        f"{len(links)} link(s)",
+        f"weight from {weight_source.value.replace('_', ' ')}",
+        f"cross-extractor: {verdict_order.value}",
+    ]
+    if column_pages:
+        notes.append(
+            "columns found by geometry on "
+            + ", ".join(f"page {number}" for number in column_pages)
+            + "; read left to right"
+        )
+    if sum(rotated):
+        notes.append(f"{sum(rotated)} rotated character(s) set aside, not read")
+    if verdict_order is CrossExtractor.DISAGREE:
+        notes.append(
+            "an independent reading put the lines in a different order or found different text; "
+            "check the imported entries against the original"
+        )
+    return PdfExtraction(
+        text=text,
+        page_count=len(pages),
+        detail="; ".join(notes),
+        layout=layout,
+        links=tuple(links),
+        needs_review=verdict_order is CrossExtractor.DISAGREE or bool(column_pages),
+    )

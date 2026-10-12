@@ -23,6 +23,7 @@ from aria_api.uploads.scanner import DevScanner, ScanStatus
 from aria_core.audit.log import read_chain
 from aria_core.db.models import Candidate, Upload
 from aria_core.db.session import tenant_transaction
+from aria_core.documents import LayoutDocument
 from aria_core.schemas.identity import TenantId, UserId, new_id
 from aria_document_parser.client import InProcessDocumentParser
 
@@ -361,7 +362,25 @@ class TestLinksAndReview:
 
         async with tenant_transaction(engine, tenant_a) as session:
             row = (await session.execute(select(Upload))).scalars().one()
-        assert "extractor=pypdf" in row.parse_detail
+        assert "extractor=pdfplumber" in row.parse_detail
+
+    async def test_the_upload_keeps_the_layout_and_the_diagnostic(
+        self,
+        engine: AsyncEngine,
+        tenant_a: TenantId,
+        candidate_id: uuid.UUID,
+        store: QuarantineStore,
+    ) -> None:
+        # So a refused import can show what ARIA saw, and a fact's line can be quoted
+        # after the original is deleted (RESUME_ENGINE §5.5).
+        await _ingest(engine, tenant_a, candidate_id, store, _pdf(" ".join(RESUME_LINES * 4)))
+
+        async with tenant_transaction(engine, tenant_a) as session:
+            row = (await session.execute(select(Upload))).scalars().one()
+        assert row.layout is not None
+        layout = LayoutDocument.model_validate(row.layout, strict=False)
+        assert layout.lines
+        assert row.cross_extractor == "agree"
 
     async def test_a_clean_pdf_does_not_need_review(
         self,
@@ -432,7 +451,8 @@ class TestRefusals:
         assert result.refusal is not None
         assert result.refusal.reason == "no_text_layer"
         assert result.refusal.stage == "parse"
-        assert "does not read scans" in result.refusal.advice
+        assert "no text layer" in result.refusal.advice
+        assert "paste the text" in result.refusal.advice
 
         async with tenant_transaction(engine, tenant_a) as session:
             row = (await session.execute(select(Upload))).scalars().one()
@@ -441,7 +461,7 @@ class TestRefusals:
         # the file, not an error on our side.
         assert row.parse_status == "refused"
         assert "no_text_layer" in row.parse_detail
-        assert "does not read scans" in row.parse_detail
+        assert "no text layer" in row.parse_detail
 
     async def test_the_http_layer_can_still_raise_after_committing(
         self,
@@ -653,7 +673,7 @@ class TestATwoColumnPdfIsRecoveredNotMisread:
         assert result.parsed is not None
         assert result.parsed.column_pages == (1,)
         assert result.parsed.needs_review is True
-        assert result.parsed.extractor == "pypdf+layout"
+        assert result.parsed.extractor == "pdfplumber"
 
         async with tenant_transaction(engine, tenant_a) as session:
             row = (

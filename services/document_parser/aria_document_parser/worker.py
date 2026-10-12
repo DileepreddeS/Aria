@@ -50,9 +50,11 @@ def parse_bytes(content: bytes, detected_type: str, limits: ParseLimits | None =
             "page_count": extraction.page_count,
             "links": list(extraction.links),
             "extractor": extraction.extractor,
-            "low_agreement_pages": list(extraction.low_agreement_pages),
             "column_pages": list(extraction.column_pages),
             "needs_review": extraction.needs_review,
+            # As a JSON string, so the client validates it in JSON mode: strict types,
+            # arrays read as tuples, nothing coerced.
+            "layout": extraction.layout.model_dump_json(),
         }
     if detected_type == "docx":
         docx = extract_docx(content, resolved)

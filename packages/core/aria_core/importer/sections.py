@@ -112,13 +112,10 @@ def merged_headings(line: SourceLine) -> tuple[str, ...]:
     """Known section headings printed side by side on one line.
 
     **The fallback, not the detector.** Columns are found properly in
-    :mod:`aria_document_parser.layout`, from the gutter in the page's geometry, and a
-    PDF whose columns were detected arrives here already rebuilt in reading order.
-    This text check exists for the cases with no geometry to read:
-
-    * a ``.txt`` upload whose columns were flattened before ARIA ever saw the file;
-    * a PDF where pdfminer's layout analysis failed, which the parser records and
-      carries on from rather than refusing.
+    :mod:`aria_document_parser.reading_order`, from the gutter in the page's geometry,
+    and a PDF arrives here already in reading order. This text check exists for the
+    case with no geometry to read: a ``.txt`` upload or pasted text whose columns were
+    flattened before ARIA ever saw it.
 
     It catches only the obvious shape -- two known headings on one line -- and misses
     the common one, a sidebar of skills beside a column of bullets where every merged

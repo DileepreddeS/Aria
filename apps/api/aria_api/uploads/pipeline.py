@@ -356,6 +356,12 @@ async def ingest_upload(
             parse_detail=parsed.detail[:2000],
             extracted_text=parsed.text,
             needs_review=parsed.needs_review,
+            layout=parsed.layout.model_dump(mode="json") if parsed.layout is not None else None,
+            cross_extractor=(
+                parsed.layout.cross_extractor.value
+                if parsed.layout is not None and parsed.layout.cross_extractor is not None
+                else None
+            ),
         )
     )
     await _audit(
@@ -370,6 +376,13 @@ async def ingest_upload(
             "extractor": parsed.extractor,
             "needs_review": parsed.needs_review,
             "column_pages": len(parsed.column_pages),
+            # The diagnostic's word, never a score; counts, never document text.
+            "cross_extractor": (
+                parsed.layout.cross_extractor.value
+                if parsed.layout is not None and parsed.layout.cross_extractor is not None
+                else None
+            ),
+            "lines": len(parsed.layout.lines) if parsed.layout is not None else None,
             "detail": parsed.detail[:200],
         },
     )

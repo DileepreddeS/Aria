@@ -45,7 +45,9 @@ import uuid
 from dataclasses import dataclass
 
 import structlog
+from pydantic import ValidationError
 
+from aria_core.documents import LayoutDocument
 from aria_document_parser.errors import ParseFailed, ParseRefused
 from aria_document_parser.limits import ParseLimits
 from aria_document_parser.worker import parse_bytes
@@ -68,13 +70,11 @@ WORKER_MODULE = "aria_document_parser.worker"
 class ParsedDocument:
     """What crossed back from the worker: text, notes, and what to do about them.
 
-    ``needs_review`` is the parser saying a person should look. Two things set it: a
-    page the two extractors disagreed about, and a page whose columns were found by
-    geometry and whose text was rebuilt in reading order. The second is not a
-    disagreement — the gutter settles which column comes first — but the gutter does
-    not settle whether a sidebar of skills belongs where it landed, so it is still
-    worth a look. The importer imports either way and names the pages to check;
-    guessing silently is how a resume ends up saying something nobody wrote.
+    ``needs_review`` is the parser saying a person should look. Two things set it: an
+    independent extractor reading the lines in a different order (RESUME_ENGINE §5.6),
+    and a page laid out in columns. The gutter settles which column comes first, but
+    not whether a sidebar of skills belongs where it landed, so that is worth a look
+    too. Guessing silently is how a resume ends up saying something nobody wrote.
     """
 
     text: str
@@ -83,11 +83,11 @@ class ParsedDocument:
     links: tuple[str, ...] = ()
     #: Which extractor's text this is, recorded so a surprising import can be explained.
     extractor: str = ""
-    #: 1-based pages where the extractors disagreed about reading order.
-    low_agreement_pages: tuple[int, ...] = ()
     #: 1-based pages where the geometry found columns and the text was rebuilt.
     column_pages: tuple[int, ...] = ()
     needs_review: bool = False
+    #: Stage 0's reading of a PDF, validated on arrival; None for other types.
+    layout: LayoutDocument | None = None
 
 
 def _string_tuple(value: object) -> tuple[str, ...]:
@@ -136,10 +136,29 @@ def _result_to_document(result: dict[str, object], *, stderr: str = "") -> Parse
         detail=detail,
         links=_string_tuple(result.get("links")),
         extractor=str(result.get("extractor", "")),
-        low_agreement_pages=_int_tuple(result.get("low_agreement_pages")),
         column_pages=_int_tuple(result.get("column_pages")),
         needs_review=bool(result.get("needs_review", False)),
+        layout=_layout(result.get("layout")),
     )
+
+
+def _layout(value: object) -> LayoutDocument | None:
+    """The worker's layout, validated as untrusted input from another process.
+
+    Unlike the optional fields above, a layout that does not validate is a failure,
+    not an empty value: the importer would read the document from it, and a malformed
+    one is what a subverted worker would send.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ParseFailed("the parser sent a layout that is not JSON text")
+    try:
+        return LayoutDocument.model_validate_json(value)
+    except ValidationError as error:
+        raise ParseFailed(
+            f"the parser sent a layout that does not validate ({error.error_count()} errors)"
+        ) from None
 
 
 #: Environment variables a worker process is given. Everything else the API holds —
