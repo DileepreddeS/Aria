@@ -89,6 +89,7 @@ switch ($Task) {
     }
     "audit" {
         Invoke-Step "pip-audit" { uv run pip-audit }
+        Invoke-Step "dependency age (14 days, CVE fixes exempt)" { uv run python infra/checks/dependency_age.py }
     }
     "check" {
         & $PSCommandPath lint

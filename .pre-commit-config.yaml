@@ -27,6 +27,15 @@ repos:
         language: system
         types: [text]
 
+      # A changed lock is a changed dependency: refuse files younger than 14 days
+      # unless they fix a CVE (DECISIONS 2026-10-12).
+      - id: dependency-age
+        name: dependency versions at least 14 days old
+        entry: uv run python infra/checks/dependency_age.py
+        language: system
+        files: ^uv\.lock$
+        pass_filenames: false
+
       - id: gitleaks-system
         name: gitleaks (system binary)
         entry: gitleaks

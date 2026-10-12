@@ -33,7 +33,10 @@ secrets:
 sast:
 	semgrep --config p/python --config p/security-audit --config .semgrep/aria.yml --error --metrics off
 
+# Known vulnerabilities, then the 14-day rule for every pinned file (DECISIONS
+# 2026-10-12): a release younger than that is refused unless it fixes a CVE.
 audit:
 	uv run pip-audit
+	uv run python infra/checks/dependency_age.py
 
 ci: lint typecheck control-chars test
