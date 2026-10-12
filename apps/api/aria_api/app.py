@@ -27,7 +27,7 @@ from aria_api.uploads.scanner import MalwareScanner, assert_scanner_is_allowed, 
 from aria_core.config import Settings, get_settings
 from aria_core.db.session import create_engine
 from aria_core.taxonomy.loader import load_default_taxonomy
-from aria_document_parser.client import SubprocessDocumentParser
+from aria_document_parser.client import DockerDocumentParser, SubprocessDocumentParser
 
 __all__ = ["create_app"]
 
@@ -68,13 +68,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             resolved.upload_quarantine_path, max_bytes=resolved.max_upload_bytes
         )
         app.state.scanner = _scanner_for(resolved)
-        app.state.parser = SubprocessDocumentParser()
+        app.state.parser = (
+            DockerDocumentParser(resolved.parser_image)
+            if resolved.parser_isolation == "docker"
+            else SubprocessDocumentParser()
+        )
         app.state.taxonomy = load_default_taxonomy()
         logger.info(
             "api_started",
             bind=f"{resolved.api_bind_host}:{resolved.api_bind_port}",
             env=resolved.env,
             scanner=app.state.scanner.name,
+            parser_isolation=resolved.parser_isolation,
             taxonomy=app.state.taxonomy.version,
         )
         try:

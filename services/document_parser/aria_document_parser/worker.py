@@ -5,11 +5,12 @@ writes one JSON object on stdout, and ends. One file per process, so a parser th
 corrupts its own memory, leaks, or loops takes nothing with it: the client kills it on
 timeout and the operating system reclaims everything.
 
-It imports no network library, and an architecture test enforces that, so "the parse
-worker has no network access" is checked rather than asserted. Within one process that
-is the honest limit of what can be promised in pure Python — a real sandbox is a
-container with no egress, which arrives when the API is deployed rather than run from
-a laptop.
+Before it reads a byte it bounds itself — memory, CPU time, no new processes (see
+sandbox.py) — and if that fails it refuses to parse. In normal operation it also runs
+inside a container with no network, a read-only filesystem and no capabilities
+(client.py, DockerDocumentParser), because some extractors are native code and an
+import check cannot stop native code opening a socket. The import check remains, as
+the part that is checkable from source.
 
 Failures leave on stdout as JSON too, because a worker that dies silently and one that
 refuses a file for a good reason must be distinguishable by the client.
@@ -26,6 +27,7 @@ from aria_document_parser.errors import ParseFailed, ParseRefused
 from aria_document_parser.limits import ParseLimits
 from aria_document_parser.pdf import extract_pdf
 from aria_document_parser.plain_text import extract_text_file
+from aria_document_parser.sandbox import SandboxUnavailable, apply_worker_limits
 
 __all__ = ["main", "parse_bytes"]
 
@@ -85,6 +87,13 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     detected_type = arguments[0]
+    try:
+        apply_worker_limits(ParseLimits())
+    except SandboxUnavailable as error:
+        # Refuse rather than parse unbounded: everything downstream assumes the
+        # limits held.
+        print(json.dumps({"status": "failed", "detail": f"sandbox unavailable: {error}"}), flush=True)
+        return 3
     content = sys.stdin.buffer.read()
 
     try:

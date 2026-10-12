@@ -3,7 +3,8 @@
 
     Usage:  ./tasks.ps1 <task>
     Tasks:  setup, up, down, kms-init, keys-init, migrate, anchor, test, test-db, lint,
-            fmt, typecheck, control-chars, secrets, audit, check, gateway, api, seed-me
+            fmt, typecheck, control-chars, secrets, audit, check, gateway, api, seed-me,
+            parser-image
 
     CI uses the Makefile. This file is for local development on Windows.
 #>
@@ -108,6 +109,12 @@ switch ($Task) {
         Invoke-Step "create the tenant, user and candidate the API acts as" {
             uv run python -m aria_api.seed @Rest
         }
+    }
+    "parser-image" {
+        # Uploads are parsed in this container. Rebuild after any change to the parser
+        # or to aria_core: the API compares the image's fingerprint with the checkout
+        # and will not start on a stale one.
+        Invoke-Step "build the document parser image" { uv run python -m aria_document_parser.image build }
     }
     default {
         Get-Help $PSCommandPath -Detailed

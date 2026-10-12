@@ -162,3 +162,22 @@ class TestTheApiBindIsNotAChoice:
                 llm_gateway_service_token=SecretStr("x"),
                 apply_task_signing_kid="prod-1",
             )
+
+
+class TestParserIsolation:
+    def test_a_plain_process_parser_is_refused_outside_dev(self) -> None:
+        with pytest.raises(ValidationError, match="parsed in a container"):
+            Settings(
+                database_url=SecretStr(APP_DSN),
+                env="staging",
+                llm_gateway_service_token=SecretStr("x"),
+                api_service_token=SecretStr("x"),
+                dev_kms_key_path=Path("/keys/managed.key"),
+                apply_task_signing_kid="prod-1",
+                parser_isolation="process",
+            )
+
+    def test_a_plain_process_parser_is_allowed_in_dev_and_ci(self) -> None:
+        for env in ("dev", "ci"):
+            settings = Settings(database_url=SecretStr(APP_DSN), env=env, parser_isolation="process")
+            assert settings.parser_isolation == "process"

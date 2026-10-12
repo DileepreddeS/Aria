@@ -9,12 +9,19 @@ from pydantic import SecretStr
 
 from aria_api.startup import run_preflight_checks
 from aria_core.config import MIGRATION_ENV_VAR, Settings, assert_no_migration_credentials
+from aria_document_parser.image import ImageStatus
 
 APP_DSN = "postgresql+asyncpg://aria_app:x@127.0.0.1:5433/aria"
 
 
 def _settings(dsn: str = APP_DSN) -> Settings:
-    return Settings(database_url=SecretStr(dsn))
+    return Settings(database_url=SecretStr(dsn), parser_isolation="process")
+
+
+@pytest.fixture
+def current_parser_image(monkeypatch: pytest.MonkeyPatch) -> None:
+    """For tests about other checks: the parser image is present and current."""
+    monkeypatch.setattr("aria_api.startup.image_status", lambda image: ImageStatus(True))
 
 
 class TestMigrationCredentialsAreRefused:
@@ -75,6 +82,7 @@ class TestPreflight:
                 )
             )
 
+    @pytest.mark.usefixtures("current_parser_image")
     def test_a_configured_scanner_passes_in_production(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(MIGRATION_ENV_VAR, raising=False)
         run_preflight_checks(
@@ -95,3 +103,53 @@ class TestPreflight:
         monkeypatch.setenv(MIGRATION_ENV_VAR, "postgresql+asyncpg://aria_migrate:x@127.0.0.1:5433/aria")
         with pytest.raises(RuntimeError):
             run_preflight_checks(_settings())
+
+
+class TestUploadsAreParsedInIsolation:
+    """SECURITY.md §7: the parse runs in a container, and the container is current."""
+
+    def test_a_missing_or_stale_image_stops_start_up(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from aria_api.startup import ParserIsolationUnavailable, assert_parser_isolation
+
+        reason = "the parser image aria-document-parser:local was built from different sources"
+        monkeypatch.setattr("aria_api.startup.image_status", lambda image: ImageStatus(False, reason))
+        with pytest.raises(ParserIsolationUnavailable, match="different sources"):
+            assert_parser_isolation(Settings(database_url=SecretStr(APP_DSN)))
+
+    def test_a_current_image_passes(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from aria_api.startup import assert_parser_isolation
+
+        asked: list[str] = []
+
+        def status(image: str) -> ImageStatus:
+            asked.append(image)
+            return ImageStatus(True)
+
+        monkeypatch.setattr("aria_api.startup.image_status", status)
+        assert_parser_isolation(Settings(database_url=SecretStr(APP_DSN), parser_image="aria-parser:test"))
+        assert asked == ["aria-parser:test"]
+
+    def test_docker_is_the_default(self) -> None:
+        assert Settings(database_url=SecretStr(APP_DSN)).parser_isolation == "docker"
+
+    def test_a_plain_process_is_accepted_in_dev_without_asking_docker(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from aria_api.startup import assert_parser_isolation
+
+        def must_not_be_called(image: str) -> ImageStatus:
+            raise AssertionError("process isolation must not depend on Docker")
+
+        monkeypatch.setattr("aria_api.startup.image_status", must_not_be_called)
+        assert_parser_isolation(Settings(database_url=SecretStr(APP_DSN), parser_isolation="process"))
+
+    def test_a_plain_process_outside_dev_is_refused_even_past_the_validator(self) -> None:
+        # Settings refuses this combination; the preflight repeats the rule so it does
+        # not rest on one validator. model_copy skips validation, which is the point.
+        from aria_api.startup import ParserIsolationUnavailable, assert_parser_isolation
+
+        settings = Settings(database_url=SecretStr(APP_DSN)).model_copy(
+            update={"env": "prod", "parser_isolation": "process"}
+        )
+        with pytest.raises(ParserIsolationUnavailable, match="parsed in a container"):
+            assert_parser_isolation(settings)

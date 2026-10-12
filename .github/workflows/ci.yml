@@ -110,6 +110,11 @@ jobs:
       - name: Migrate
         run: uv run alembic -c infra/alembic.ini upgrade head
 
+      # The parse sandbox is tested from inside the container, so the image is built
+      # from this commit's sources first.
+      - name: Build the document parser image
+        run: make parser-image
+
       - name: Test
         run: make test
 

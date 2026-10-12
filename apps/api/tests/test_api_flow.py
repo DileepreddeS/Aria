@@ -86,6 +86,9 @@ def api_settings(
             "api_tenant_id": str(tenant_a),
             "api_candidate_id": str(candidate_id),
             "upload_quarantine_path": tmp_path_factory.mktemp("quarantine"),
+            # These tests are about the API, not the container; the container has its
+            # own tests in services/document_parser/tests/test_isolation.py.
+            "parser_isolation": "process",
         }
     )
 

@@ -77,6 +77,15 @@ class Settings(BaseSettings):
     #: on is a configuration change, not a code change — so the decision can be
     #: revisited at beta without rebuilding anything.
     allow_docx_uploads: bool = False
+    #: Where the parse worker runs. "docker" is a container with no network, a
+    #: read-only filesystem, no capabilities and a memory ceiling, because some
+    #: extractors are native code reading hostile files. "process" is a plain local
+    #: process, bounded but able to read this machine's files and reach its network,
+    #: so it is refused outside dev/ci and is never the default.
+    parser_isolation: Literal["docker", "process"] = "docker"
+    #: The parser image. Built locally (./tasks.ps1 parser-image); the API checks at
+    #: start-up that it was built from the sources in this checkout.
+    parser_image: str = "aria-document-parser:local"
 
     # ------------------------------------------------- envelope encryption (S2)
     #: Dev-only KMS root key. Refused outside dev/ci by the validator below.
@@ -160,6 +169,8 @@ class Settings(BaseSettings):
             problems.append("llm_gateway_service_token is required outside dev")
         if self.api_service_token is None:
             problems.append("api_service_token is required outside dev")
+        if self.parser_isolation != "docker":
+            problems.append("uploads must be parsed in a container outside dev/ci (parser_isolation=docker)")
         if "dev-kms" in str(self.dev_kms_key_path):
             problems.append("the file-backed dev KMS must not be used outside dev/ci; use a managed KMS")
         if self.apply_task_signing_kid.startswith("dev-"):

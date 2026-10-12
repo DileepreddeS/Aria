@@ -129,6 +129,24 @@ text + our own regenerated PDF) → application storage`. The original is delete
 user opts to keep it. Never trust filename, extension or client-supplied MIME type. Macros and embedded
 objects are never executed. Images used for OCR are re-encoded.
 
+**The sandbox, concretely.** Some PDF extractors are native code, so the parse is assumed exploitable
+and contained accordingly:
+
+- Each file is parsed in its own container (`DockerDocumentParser`): `--network none`, `--read-only`
+  with a small `noexec` tmpfs, `--cap-drop ALL`, `no-new-privileges`, user `nobody`, a memory ceiling with
+  no swap, a process limit, `--pull never`, and no environment variables, volumes or devices from the host.
+  The file arrives on stdin and one JSON result leaves on stdout.
+- Inside it, the worker bounds itself before reading input — memory, CPU time, no new processes, no file
+  writes, no core dumps (`setrlimit`; a Job Object on Windows) — and refuses to parse if it cannot.
+- The client kills the container on timeout (`docker kill`, not just the client process) and caps the
+  output it reads back.
+- The image is built from an assembled context (never the repository, so `.env` cannot reach it), installs
+  locked versions by hash from wheels only, and carries a fingerprint of its sources. The API refuses to
+  start if the image is missing or stale.
+- A plain local process (`ARIA_PARSER_ISOLATION=process`) is accepted only in dev and CI, and only when
+  chosen explicitly. It keeps the worker's own limits, an empty working directory and none of the API's
+  environment, but cannot be denied this machine's files or network.
+
 ## 8. Browser Runner (user device)
 
 - Dedicated Chrome profile for ARIA, separate from the user's personal browsing.

@@ -114,4 +114,5 @@ addopts = "-q --strict-markers --import-mode=importlib"
 consider_namespace_packages = true
 markers = [
     "db: needs the local Postgres from infra/docker-compose.yml",
+    "docker: needs Docker and the parser image (./tasks.ps1 parser-image)",
 ]

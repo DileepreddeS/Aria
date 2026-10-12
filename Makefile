@@ -1,5 +1,5 @@
 # CI task definitions. Local development on Windows uses ./tasks.ps1.
-.PHONY: install lint typecheck test secrets sast audit control-chars ci
+.PHONY: install lint typecheck test secrets sast audit control-chars parser-image ci
 
 install:
 	uv sync --all-packages --frozen
@@ -18,6 +18,11 @@ typecheck:
 
 test:
 	uv run pytest
+
+# The container uploads are parsed in. The docker-marked tests need it, and in CI a
+# missing image fails them rather than skipping them.
+parser-image:
+	uv run python -m aria_document_parser.image build
 
 control-chars:
 	uv run python infra/checks/no_control_characters.py

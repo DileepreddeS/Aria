@@ -317,9 +317,9 @@ class TestTheWorkerHasNoNetwork:
     def test_no_module_in_the_parser_imports_a_network_library(self) -> None:
         """SECURITY.md §7 wants the parse sandboxed. This is the checkable part.
 
-        A pure-Python process cannot truly drop network access, so the promise made is
-        the narrow one: nothing the parser imports can open a socket. The real sandbox
-        is a container with no egress, which arrives with deployment.
+        The narrow promise, checkable from source: nothing the parser imports can open
+        a socket. Native code is not bound by imports, which is why the parse also runs
+        in a container with no network; test_isolation.py checks that one.
         """
         import ast
         from pathlib import Path

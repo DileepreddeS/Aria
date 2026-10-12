@@ -24,6 +24,32 @@ class ParseLimits:
     #: an extractor loop; a timeout is the only reliable answer to that.
     timeout_seconds: float = 20.0
 
+    # ----------------------------------------------------------- the sandbox
+    # These bound the worker process itself rather than the document, because a
+    # hostile file attacks the extractor, not the parse logic, and some extractors are
+    # native code. The container enforces them from outside; the worker also imposes
+    # them on itself before reading any input, so a parse that runs without the
+    # container is still bounded.
+
+    #: Memory the worker may commit. Parsing a resume needs well under 200 MB; a
+    #: decompression bomb inside a PDF stream asks for gigabytes, and this is where it
+    #: stops instead of taking the machine with it.
+    max_memory_bytes: int = 512 * 1024 * 1024
+    #: Virtual address space on Linux, where RLIMIT_AS counts reservations as well as
+    #: use: an interpreter and its shared libraries reserve far more than they touch,
+    #: so this sits above max_memory_bytes rather than at it.
+    max_address_space_bytes: int = 2 * 1024 * 1024 * 1024
+    #: CPU seconds. The wall-clock timeout is the main defence against a loop; this is
+    #: the one that still holds if the process outlives the parent that was timing it.
+    max_cpu_seconds: int = 30
+    #: Processes and threads in the container. A parser has no reason to start a
+    #: process at all, so a fork bomb fails at once instead of exhausting the host.
+    max_processes: int = 32
+    #: Bytes read back from the worker on each of stdout and stderr. A real result is
+    #: a few hundred kilobytes of JSON; a worker that has been subverted into writing
+    #: without end must not be able to fill the API's memory instead.
+    max_output_bytes: int = 8 * 1024 * 1024
+
     #: A one-page resume is the goal and two is common. Fifty is not a resume, and a
     #: PDF claiming 20,000 pages is a decompression attack with a cover story.
     max_pages: int = 50
