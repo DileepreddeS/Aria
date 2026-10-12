@@ -10,6 +10,12 @@ dependencies = [
     # wants the same cross-check for the ATS parseability test in Phase 2).
     "pypdf>=6.0",
     "pdfminer.six>=20250416",
+    # Stage 0's primary extractor (RESUME_ENGINE §5.1): every character with its box,
+    # font name and size, which reading order, columns and word boundaries are rebuilt
+    # from. MIT. Brings pypdfium2 (PDFium, native; BSD-3/Apache-2.0) and Pillow
+    # (MIT-CMU), wheels only. Native code over hostile files is why the parse runs in a
+    # container (SECURITY.md §7). Chosen over PyMuPDF, which is AGPL-3.0.
+    "pdfplumber>=0.11.10",
     # DOCX is a zip of XML. Entity resolution is off by default here, which is what
     # keeps an XXE out of a resume upload; the stdlib parser does not promise that.
     "defusedxml>=0.7.1",

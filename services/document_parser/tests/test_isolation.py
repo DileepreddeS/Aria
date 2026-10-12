@@ -83,6 +83,25 @@ sys.stdout.flush()
 
 SLEEP_PROBE = "import time\ntime.sleep(60)\n"
 
+#: The native extractor inside the limits: pdfplumber (pdfminer underneath) and
+#: PDFium itself, loaded after the worker has bounded itself, reading the PDF on stdin.
+NATIVE_EXTRACTOR_PROBE = f"""
+import io, json, sys
+from aria_document_parser.limits import ParseLimits
+from aria_document_parser.sandbox import apply_worker_limits
+apply_worker_limits(ParseLimits())
+data = sys.stdin.buffer.read()
+import pdfplumber
+import pypdfium2
+with pdfplumber.open(io.BytesIO(data)) as pdf:
+    seen = {{"pages": len(pdf.pages), "characters": len(pdf.pages[0].chars)}}
+document = pypdfium2.PdfDocument(data)
+seen["pdfium_pages"] = len(document)
+seen["pdfium_text"] = document[0].get_textpage().get_text_range()[:20]
+document.close()
+{_REPORT}
+"""
+
 CONTAINER_PROBE = f"""
 import json, os, socket
 seen = {{"aria": sorted(k for k in os.environ if k.upper().startswith("ARIA_"))}}
@@ -212,6 +231,13 @@ class TestAPlainProcessInheritsNothing:
         with pytest.raises(ParseFailed, match="wrote more than"):
             await ProbeProcess(OUTPUT_FLOOD_PROBE).parse(b"", "txt")
 
+    async def test_the_native_extractor_loads_and_reads_within_the_limits(self) -> None:
+        result = await ProbeProcess(NATIVE_EXTRACTOR_PROBE).parse(make_pdf("Built the thing. " * 20), "pdf")
+        seen = json.loads(result.text)
+        assert seen["pages"] == seen["pdfium_pages"] == 1
+        assert seen["characters"] > 100
+        assert seen["pdfium_text"].startswith("Built the thing.")
+
     async def test_a_parse_that_never_ends_is_stopped(self) -> None:
         started = time.monotonic()
         with pytest.raises(ParseFailed, match="did not finish"):
@@ -293,6 +319,14 @@ class TestInsideTheContainer:
     async def test_a_flood_of_output_is_cut_off(self, parser_image: str) -> None:
         with pytest.raises(ParseFailed, match="wrote more than"):
             await ProbeContainer(parser_image, OUTPUT_FLOOD_PROBE).parse(b"", "txt")
+
+    async def test_the_native_extractor_loads_and_reads_inside_it(self, parser_image: str) -> None:
+        content = make_pdf("Built the thing. " * 20)
+        result = await ProbeContainer(parser_image, NATIVE_EXTRACTOR_PROBE).parse(content, "pdf")
+        seen = json.loads(result.text)
+        assert seen["pages"] == seen["pdfium_pages"] == 1
+        assert seen["characters"] > 100
+        assert seen["pdfium_text"].startswith("Built the thing.")
 
     async def test_a_timeout_kills_the_container_not_just_the_client(self, parser_image: str) -> None:
         parser = ProbeContainer(parser_image, SLEEP_PROBE, ParseLimits(timeout_seconds=3.0))
