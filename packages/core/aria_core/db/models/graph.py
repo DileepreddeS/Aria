@@ -30,7 +30,7 @@ import datetime as dt
 import uuid
 from enum import StrEnum
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -154,6 +154,7 @@ class Upload(Base):
         ),
         UniqueConstraint("candidate_id", "sha256"),
         Index("ix_uploads_candidate_id_created_at", "candidate_id", "created_at"),
+        {"comment": "Quarantined uploads. original_filename is untrusted and never used as a path."},
     )
 
 
@@ -429,6 +430,7 @@ class FactRevision(Base):
         _enum_check("source", GraphSource, "source_is_known"),
         CheckConstraint("version >= 1", name="version_starts_at_one"),
         CheckConstraint("length(btrim(text)) > 0", name="text_is_not_blank"),
+        {"comment": "Immutable fact text, one row per version. aria_app may insert but not update."},
     )
 
 
@@ -666,7 +668,9 @@ class UserQuestion(Base):
     answered_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
     )
-    dedupe_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    dedupe_key: Mapped[str] = mapped_column(
+        String(200), nullable=False, comment="Identity of the question, so a re-import does not ask it twice."
+    )
     created_at: Mapped[dt.datetime] = created_at_column()
 
     __table_args__ = (
@@ -679,9 +683,14 @@ class UserQuestion(Base):
             "(answer IS NOT NULL AND answered_at IS NOT NULL AND answered_by IS NOT NULL)",
             name="answer_has_an_author",
         ),
-        UniqueConstraint("candidate_id", "dedupe_key", name="candidate_id_dedupe_key"),
+        # Named by the convention, as migration 0003 created it.
+        UniqueConstraint("candidate_id", "dedupe_key"),
         Index("ix_user_questions_candidate_id", "candidate_id"),
+        # The open queue is read on every page load; migration 0003 gives it a partial
+        # index rather than scanning answered history.
+        Index("ix_user_questions_open", "candidate_id", postgresql_where=text("status = 'open'")),
         Index("ix_user_questions_tenant_id", "tenant_id"),
+        {"comment": "Things ARIA will not guess. payload carries what answering would create."},
     )
 
 
