@@ -26,13 +26,11 @@ from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, Request, status
 
+from aria_core.api_contract import API_TOKEN_HEADER
 from aria_core.config import Settings
 from aria_core.schemas.identity import TenantId, UserId
 
-__all__ = ["Caller", "require_caller"]
-
-#: The header name, not a secret. (S105 flags the assignment; it is a header.)
-API_TOKEN_HEADER = "x-aria-token"  # noqa: S105
+__all__ = ["API_TOKEN_HEADER", "Caller", "require_caller"]
 
 
 @dataclass(frozen=True, slots=True)

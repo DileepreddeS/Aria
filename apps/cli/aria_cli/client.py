@@ -18,7 +18,7 @@ from typing import Any
 
 import httpx
 
-from aria_api.auth import API_TOKEN_HEADER
+from aria_core.api_contract import API_TOKEN_HEADER
 
 __all__ = ["ApiError", "AriaClient"]
 
