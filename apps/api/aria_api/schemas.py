@@ -22,6 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field
 __all__ = [
     "AnswerRequest",
     "AnswerResponse",
+    "ClassifiedLineBody",
     "CompletenessResponse",
     "DraftFact",
     "DraftList",
@@ -32,6 +33,7 @@ __all__ = [
     "GapOut",
     "ImportResponse",
     "InterviewResponse",
+    "LinesResponse",
     "QuestionList",
     "QuestionOut",
     "RejectRequest",
@@ -83,11 +85,41 @@ class UploadResponse(Body):
 
 class ImportResponse(Body):
     upload_id: uuid.UUID | None
+    #: "imported", or "needs_user_fix" when a §5.5 gate refused the document and
+    #: nothing was written.
+    status: str = "imported"
     counts: dict[str, int]
     #: What the import proposed and wrote, in the words the CLI prints.
     summary: list[str]
     questions_queued: int = 0
     held_back: list[str] = Field(default_factory=list)
+    #: Why the document was refused, for the candidate. Empty when imported.
+    reasons: list[str] = Field(default_factory=list)
+    #: Entries and bullets left out because they did not have the shape of one, with
+    #: the line each came from. Quotes the resume: S1, the candidate's own text.
+    dropped: list[str] = Field(default_factory=list)
+    #: Imported, but worth a look: a start date more than a year ahead, say.
+    flags: list[str] = Field(default_factory=list)
+
+
+class ClassifiedLineBody(Body):
+    #: 1-based, the same numbering as a fact's source_line.
+    number: int
+    page: int
+    column: int
+    kind: str
+    text: str
+    #: For an entry header, the date read from its right-hand band.
+    date_text: str = ""
+
+
+class LinesResponse(Body):
+    """How ARIA read a PDF, line by line: what the import was built from."""
+
+    upload_id: uuid.UUID
+    lines: list[ClassifiedLineBody]
+    #: Pages whose column order the geometry could not settle.
+    ambiguous_pages: list[int] = Field(default_factory=list)
 
 
 # ------------------------------------------------------------------------- drafts

@@ -523,10 +523,13 @@ class TestTheCrossCheck:
             "Python, TypeScript, C++"
         )
 
-    def test_a_page_whose_column_order_does_not_follow_is_refused(self) -> None:
+    def test_a_page_whose_column_order_does_not_follow_is_kept_marked_and_flagged(self) -> None:
+        # Not refused at parse: the import's gate refuses it, and the layout is kept so
+        # the candidate can see what ARIA read.
         left = ["Achievement line number one for the left column"] * 9
         right = ["Skills sidebar entry"] * 9
         banner = "PROFESSIONAL DEVELOPMENT, AWARDS, CERTIFICATIONS AND SELECTED PUBLICATIONS 2024"
-        with pytest.raises(ParseRefused, match="ambiguous_columns") as caught:
-            extract_pdf(two_column_pdf(left, right, banner=(banner, 640)))
-        assert "wrong dates" in caught.value.advice
+        result = extract_pdf(two_column_pdf(left, right, banner=(banner, 640)))
+        assert [page.ambiguous_columns for page in result.layout.pages] == [True]
+        assert result.needs_review is True
+        assert "column order not settled by geometry on page 1" in result.detail

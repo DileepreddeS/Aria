@@ -14,11 +14,15 @@ place to prove the properties that must not depend on which client is asking:
 
 from __future__ import annotations
 
+import io
+import json
 import uuid
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Any
 
 import httpx
+import pypdf
 import pytest
 import pytest_asyncio
 from asgi_lifespan import LifespanManager
@@ -28,8 +32,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from aria_api.app import create_app
 from aria_api.auth import API_TOKEN_HEADER
+from aria_core.audit.log import read_chain
 from aria_core.config import Settings
-from aria_core.db.models import Candidate, Fact
+from aria_core.db.models import Candidate, Education, Experience, Fact, ProfileField, Project
 from aria_core.db.session import tenant_transaction
 from aria_core.schemas.identity import TenantId, UserId, new_id
 
@@ -654,3 +659,219 @@ class TestTheGateCanActuallyBePassed:
         body = (await client.get("/report/completeness")).json()
         unmet = [check["name"] + ": " + check["detail"] for check in body["checks"] if not check["met"]]
         assert body["complete"] is True, f"still unmet: {unmet}"
+
+
+# ----------------------------------------------------------------- Stage 0 gates
+
+FIXTURES = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "resumes"
+GATE = [
+    "clean_inline_block",
+    "float_scrambled",
+    "markerless_bullets",
+    "no_marker_bullets",
+    "per_glyph_contact",
+]
+
+
+def _truth(name: str) -> dict[str, Any]:
+    truth: dict[str, Any] = json.loads((FIXTURES / f"{name}.truth.json").read_text(encoding="utf-8"))
+    return truth
+
+
+def _month(value: Any) -> str | None:
+    return None if value is None else value.isoformat()[:7]
+
+
+def _flat_text(name: str) -> bytes:
+    reader = pypdf.PdfReader(io.BytesIO((FIXTURES / f"{name}.pdf").read_bytes()))
+    return "\n".join(page.extract_text() for page in reader.pages).encode("utf-8")
+
+
+def _ambiguous_pdf() -> bytes:
+    """Two columns with a banner across the gutter mid-page: an order nothing settles."""
+    left = ["Achievement line number one for the left column"] * 9
+    right = ["Skills sidebar entry"] * 9
+    parts = [b"BT /F1 11 Tf 1 0 0 1 50 640 Tm (PROFESSIONAL DEVELOPMENT, AWARDS, CERTIFICATIONS AND 2024) Tj"]
+    for index in range(9):
+        for x, column in ((50, left), (330, right)):
+            parts.append(f" 1 0 0 1 {x} {720 - index * 18} Tm ({column[index]}) Tj".encode())
+    parts.append(b" ET")
+    stream = b"".join(parts)
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        f"<< /Length {len(stream)} >>\nstream\n".encode() + stream + b"\nendstream",
+    ]
+    out = bytearray(b"%PDF-1.4\n")
+    offsets = []
+    for index, body in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out += f"{index} 0 obj\n".encode() + body + b"\nendobj\n"
+    xref = len(out)
+    out += f"xref\n0 {len(objects) + 1}\n".encode() + b"0000000000 65535 f \n"
+    out += b"".join(f"{offset:010d} 00000 n \n".encode() for offset in offsets)
+    out += f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    return bytes(out)
+
+
+async def _upload(client: httpx.AsyncClient, name: str, content: bytes, media: str) -> dict[str, Any]:
+    response = await client.post("/uploads", files={"file": (name, content, media)})
+    assert response.status_code == 201, response.text
+    body: dict[str, Any] = response.json()
+    assert body["refusal_reason"] is None, body
+    return body
+
+
+async def _graph_rows(engine: AsyncEngine, tenant: TenantId) -> int:
+    async with tenant_transaction(engine, tenant) as session:
+        counts = [
+            len((await session.execute(select(model.id))).all())
+            for model in (Experience, Education, Project, Fact, ProfileField)
+        ]
+    return sum(counts)
+
+
+class TestTheFixtureGate:
+    """RESUME_ENGINE §5.9 end to end: upload each gate fixture, import it, read the graph."""
+
+    @pytest.mark.parametrize("name", GATE)
+    async def test_the_graph_holds_exactly_what_the_truth_file_does(
+        self, client: httpx.AsyncClient, engine: AsyncEngine, tenant_a: TenantId, name: str
+    ) -> None:
+        upload = await _upload(
+            client, f"{name}.pdf", (FIXTURES / f"{name}.pdf").read_bytes(), "application/pdf"
+        )
+        imported = (await client.post(f"/uploads/{upload['upload_id']}/import")).json()
+        assert imported["status"] == "imported", imported["reasons"]
+        assert imported["dropped"] == [] and imported["flags"] == []
+
+        truth = [entry for entry in _truth(name)["entries"]]
+        async with tenant_transaction(engine, tenant_a) as session:
+            roles = (
+                await session.execute(
+                    select(
+                        Experience.id,
+                        Experience.employer,
+                        Experience.title,
+                        Experience.start_month,
+                        Experience.end_month,
+                    ).order_by(Experience.source_line)
+                )
+            ).all()
+            degrees = (
+                await session.execute(
+                    select(Education.school, Education.degree).order_by(Education.source_line)
+                )
+            ).all()
+            projects = (
+                await session.execute(select(Project.id, Project.name).order_by(Project.source_line))
+            ).all()
+            facts = (await session.execute(select(Fact.experience_id, Fact.project_id))).all()
+
+        want_roles = [entry for entry in truth if entry["section"] == "experience"]
+        assert [(row[1], row[2], _month(row[3]), _month(row[4]) or "present") for row in roles] == [
+            (entry["employer"], entry["title"], entry["start"], entry["end"]) for entry in want_roles
+        ]
+        for row, entry in zip(roles, want_roles, strict=True):
+            assert sum(1 for fact in facts if fact[0] == row[0]) == entry["bullet_count"], row[1]
+        assert [tuple(row) for row in degrees] == [
+            (entry["employer"], entry["title"]) for entry in truth if entry["section"] == "education"
+        ]
+        want_projects = [entry for entry in truth if entry["section"] == "project"]
+        assert [row[1] for row in projects] == [entry["name"] for entry in want_projects]
+        for project, entry in zip(projects, want_projects, strict=True):
+            # The header's description is a fact of its own beside the bullets.
+            assert sum(1 for fact in facts if fact[1] == project[0]) == entry["bullet_count"] + 1, project[1]
+
+
+class TestTheImportGates:
+    async def test_a_scrambled_reading_is_refused_and_nothing_is_written(
+        self, client: httpx.AsyncClient, engine: AsyncEngine, tenant_a: TenantId
+    ) -> None:
+        # The old importer's door: float_scrambled's flat text, pasted as a text file.
+        upload = await _upload(client, "resume.txt", _flat_text("float_scrambled"), "text/plain")
+        response = await client.post(f"/uploads/{upload['upload_id']}/import")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "needs_user_fix"
+        assert any("do not have the shape of an entry" in reason for reason in body["reasons"])
+        assert body["counts"] == {} and body["summary"] == []
+        assert await _graph_rows(engine, tenant_a) == 0
+
+    async def test_the_refusal_is_audited_by_gate_without_resume_text(
+        self, client: httpx.AsyncClient, engine: AsyncEngine, tenant_a: TenantId
+    ) -> None:
+        upload = await _upload(client, "resume.txt", _flat_text("float_scrambled"), "text/plain")
+        body = (await client.post(f"/uploads/{upload['upload_id']}/import")).json()
+        async with tenant_transaction(engine, tenant_a) as session:
+            events = await read_chain(session, tenant_a)
+        (event,) = [event for event in events if event.action == "graph.import_refused"]
+        assert event.outcome == "denied"
+        assert event.payload["gates"] == "shape_failures"
+        assert event.payload["entries_dropped"] == len(
+            [line for line in body["dropped"] if not line.startswith("bullet")]
+        )
+        recorded = json.dumps(event.payload) + event.reason
+        for words in ("Nordvale", "Brightfold", "Pinecrest", "Cascadia", "jordan.rivera"):
+            assert words not in recorded
+        # Nor any dropped entry's own words, whatever they are: "(label): reason".
+        labels = [line.split(" (", 1)[1].rsplit("): ", 1)[0] for line in body["dropped"] if " (" in line]
+        labels = [label for label in labels if label]  # an entry with no employer has no words
+        assert labels
+        for label in labels:
+            assert label not in recorded
+        assert not [event for event in events if event.action == "graph.imported"]
+
+    async def test_columns_the_geometry_cannot_order_are_parsed_then_refused_at_import(
+        self, client: httpx.AsyncClient, engine: AsyncEngine, tenant_a: TenantId
+    ) -> None:
+        upload = await _upload(client, "resume.pdf", _ambiguous_pdf(), "application/pdf")
+        assert upload["parse_status"] == "parsed" and upload["needs_review"] is True
+        body = (await client.post(f"/uploads/{upload['upload_id']}/import")).json()
+        assert body["status"] == "needs_user_fix"
+        assert body["reasons"][0].startswith("page 1 is laid out in columns")
+        assert await _graph_rows(engine, tenant_a) == 0
+
+    async def test_a_text_resume_that_has_the_shape_of_one_still_imports(
+        self, client: httpx.AsyncClient
+    ) -> None:
+        body = (await _upload_and_import(client))["import"]
+        assert body["status"] == "imported" and body["reasons"] == []
+
+
+class TestTheLines:
+    async def test_every_line_comes_back_classified_and_numbered_like_a_source_line(
+        self, client: httpx.AsyncClient
+    ) -> None:
+        name = "no_marker_bullets"
+        upload = await _upload(
+            client, f"{name}.pdf", (FIXTURES / f"{name}.pdf").read_bytes(), "application/pdf"
+        )
+        response = await client.get(f"/uploads/{upload['upload_id']}/lines")
+        assert response.status_code == 200
+        lines = response.json()["lines"]
+        assert [line["number"] for line in lines] == list(range(1, len(lines) + 1))
+        kinds = [line["kind"] for line in lines]
+        truth = _truth(name)["entries"]
+        assert kinds.count("entry_header") == len(truth)
+        assert kinds.count("bullet") == sum(entry["bullet_count"] for entry in truth)
+        nordvale = next(line for line in lines if line["text"].startswith("Nordvale Consulting"))
+        assert nordvale["kind"] == "entry_header" and nordvale["date_text"].startswith("Feb 2024")
+        assert response.json()["ambiguous_pages"] == []
+
+    async def test_an_unsettled_page_is_named(self, client: httpx.AsyncClient) -> None:
+        upload = await _upload(client, "resume.pdf", _ambiguous_pdf(), "application/pdf")
+        body = (await client.get(f"/uploads/{upload['upload_id']}/lines")).json()
+        assert body["ambiguous_pages"] == [1]
+
+    async def test_a_text_upload_has_no_lines_to_show(self, client: httpx.AsyncClient) -> None:
+        upload = await _upload(client, "resume.txt", RESUME, "text/plain")
+        response = await client.get(f"/uploads/{upload['upload_id']}/lines")
+        assert response.status_code == 409
+        assert "PDF" in response.json()["detail"]
+
+    async def test_an_unknown_upload_is_a_404(self, client: httpx.AsyncClient) -> None:
+        assert (await client.get(f"/uploads/{new_id()}/lines")).status_code == 404

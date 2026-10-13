@@ -110,7 +110,20 @@ def _cmd_upload(client: AriaClient, args: argparse.Namespace) -> int:
 
 def _import(client: AriaClient, upload_id: str, *, as_notes: bool) -> int:
     payload = client.import_upload(upload_id, as_notes=as_notes)
+    if payload.get("status") == "needs_user_fix":
+        # Refused as a whole: nothing was written, and the reasons say what to fix.
+        print("NOT IMPORTED: nothing was written to your graph.")
+        for reason in payload.get("reasons", []):
+            print(f"  - {reason}")
+        for dropped in payload.get("dropped", []):
+            print(f"  dropped    {dropped}")
+        print(f"\nsee how ARIA read it: aria lines {upload_id}")
+        return 1
     _print_lines(payload)
+    for dropped in payload.get("dropped", []):
+        print(f"  dropped    {dropped}")
+    for flag in payload.get("flags", []):
+        print(f"  CHECK      {flag}")
     queued = payload.get("questions_queued", 0)
     if queued:
         print(f"\n{queued} question(s) waiting: aria questions")
@@ -119,6 +132,21 @@ def _import(client: AriaClient, upload_id: str, *, as_notes: bool) -> int:
 
 def _cmd_import(client: AriaClient, args: argparse.Namespace) -> int:
     return _import(client, args.upload_id, as_notes=args.as_notes)
+
+
+def _cmd_lines(client: AriaClient, args: argparse.Namespace) -> int:
+    payload = client.lines(args.upload_id)
+    for line in payload.get("lines", []):
+        dates = f"  [{line['date_text']}]" if line.get("date_text") else ""
+        print(
+            f"{line['number']:4}  p{line['page']} c{line['column']}  {line['kind']:<14} "
+            f"{_truncate(line['text'], 72)}{dates}"
+        )
+    ambiguous = payload.get("ambiguous_pages") or []
+    if ambiguous:
+        pages = ", ".join(str(number) for number in ambiguous)
+        print(f"\ncolumn order not settled on page {pages}: this is why the import was refused")
+    return 0
 
 
 def _cmd_facts(client: AriaClient, args: argparse.Namespace) -> int:
@@ -323,6 +351,10 @@ def build_parser() -> argparse.ArgumentParser:
     importer.add_argument("upload_id")
     importer.add_argument("--as-notes", action="store_true", help="read it as a skills list")
     importer.set_defaults(handler=_cmd_import)
+
+    lines = subparsers.add_parser("lines", help="show how ARIA read a PDF upload, line by line")
+    lines.add_argument("upload_id")
+    lines.set_defaults(handler=_cmd_lines)
 
     facts = subparsers.add_parser("facts", help="list facts (default: the review queue)")
     facts.add_argument("--status", default="draft", choices=["draft", "approved", "rejected"])

@@ -22,7 +22,14 @@ written at all (Q7):
   suspect; this is what a flat-text reading of a float-scrambled page looks like;
 - three or more entries and no facts at all;
 - more than a quarter of entries failing a shape rule;
-- more than three overlapping pairs of role dates — likely bleed across columns.
+- more than three overlapping pairs of role dates — likely bleed across columns;
+- a PDF page whose column order the geometry could not settle (§5.2). The parser keeps
+  such a page, marked, so the candidate can be shown what ARIA read; this is where it
+  stops.
+
+Each refusal carries a :class:`Gate` code beside its sentence: the code is what the
+audit log records, because the sentences are for the candidate and the dropped labels
+quote their resume.
 """
 
 from __future__ import annotations
@@ -33,12 +40,14 @@ from dataclasses import dataclass, replace
 from enum import StrEnum
 from itertools import combinations
 
+from aria_core.documents import LayoutDocument
 from aria_core.importer.plan import ImportPlan, ProposedExperience, ProposedFact, ProposedProject
 
 __all__ = [
     "MIN_BULLET_CHARACTERS",
     "DroppedBullet",
     "DroppedEntry",
+    "Gate",
     "IntakeStatus",
     "IntakeVerdict",
     "assess",
@@ -67,6 +76,16 @@ class IntakeStatus(StrEnum):
     NEEDS_USER_FIX = "needs_user_fix"
 
 
+class Gate(StrEnum):
+    """Which §5.5 document gate refused a plan. S0: safe for the audit log."""
+
+    READING_ORDER = "reading_order"
+    NO_FACTS = "no_facts"
+    SHAPE_FAILURES = "shape_failures"
+    OVERLAPPING_DATES = "overlapping_dates"
+    AMBIGUOUS_COLUMNS = "ambiguous_columns"
+
+
 @dataclass(frozen=True, slots=True)
 class DroppedEntry:
     kind: str
@@ -87,8 +106,10 @@ class IntakeVerdict:
     status: IntakeStatus
     #: With dropped entries and bullets removed when READY; as assembled otherwise.
     plan: ImportPlan
-    #: Why the document was refused. Empty when READY.
+    #: Why the document was refused, for the candidate. Empty when READY.
     reasons: tuple[str, ...] = ()
+    #: The same refusals as codes, one per reason, in the same order.
+    gates: tuple[Gate, ...] = ()
     dropped_entries: tuple[DroppedEntry, ...] = ()
     dropped_bullets: tuple[DroppedBullet, ...] = ()
     #: Accepted, but worth the candidate's attention: a start date far ahead, say.
@@ -176,8 +197,8 @@ def _overlapping_pairs(roles: tuple[ProposedExperience, ...], today: dt.date) ->
     return count
 
 
-def assess(plan: ImportPlan, *, today: dt.date) -> IntakeVerdict:
-    """Apply §5.5 to an assembled plan."""
+def assess(plan: ImportPlan, *, today: dt.date, layout: LayoutDocument | None = None) -> IntakeVerdict:
+    """Apply §5.5 to an assembled plan, and to the layout it was read from when there is one."""
     entries = len(plan.experiences) + len(plan.projects) + len(plan.educations)
     facts = (
         sum(len(role.facts) for role in plan.experiences)
@@ -186,18 +207,38 @@ def assess(plan: ImportPlan, *, today: dt.date) -> IntakeVerdict:
         + len(plan.loose_facts)
     )
 
-    reasons: list[str] = []
+    refusals: list[tuple[Gate, str]] = []
+    ambiguous = [page.number for page in layout.pages if page.ambiguous_columns] if layout else []
+    if ambiguous:
+        refusals.append(
+            (
+                Gate.AMBIGUOUS_COLUMNS,
+                f"page {ambiguous[0]} is laid out in columns with text running across the gap between "
+                "them, so the order it is meant to be read in does not follow from the page. ARIA will "
+                "not guess, because reading columns the wrong way round attaches the wrong dates and the "
+                "wrong employer to the wrong work. Please re-export the resume in a single column, or "
+                "paste the text instead",
+            )
+        )
     if _consecutive_empty_roles(plan.experiences):
-        reasons.append(
-            "two or more roles in a row have no bullets under them, which is how a page read in the "
-            "wrong order looks"
+        refusals.append(
+            (
+                Gate.READING_ORDER,
+                "two or more roles in a row have no bullets under them, which is how a page read in the "
+                "wrong order looks",
+            )
         )
     if entries >= 3 and facts == 0:
-        reasons.append(f"{entries} entries were found and not one achievement under any of them")
+        refusals.append(
+            (Gate.NO_FACTS, f"{entries} entries were found and not one achievement under any of them")
+        )
     overlaps = _overlapping_pairs(plan.experiences, today)
     if overlaps > _MAX_OVERLAPPING_PAIRS:
-        reasons.append(
-            f"{overlaps} pairs of roles overlap in time, which suggests columns read across each other"
+        refusals.append(
+            (
+                Gate.OVERLAPPING_DATES,
+                f"{overlaps} pairs of roles overlap in time, which suggests columns read across each other",
+            )
         )
 
     dropped_entries: list[DroppedEntry] = []
@@ -228,16 +269,20 @@ def assess(plan: ImportPlan, *, today: dt.date) -> IntakeVerdict:
 
     checked = len(plan.experiences) + len(plan.projects)
     if checked and len(dropped_entries) / checked > _MAX_FAILED_SHARE:
-        reasons.append(
-            f"{len(dropped_entries)} of {checked} entries do not have the shape of an entry, too many to "
-            "trust the rest"
+        refusals.append(
+            (
+                Gate.SHAPE_FAILURES,
+                f"{len(dropped_entries)} of {checked} entries do not have the shape of an entry, too many "
+                "to trust the rest",
+            )
         )
 
-    if reasons:
+    if refusals:
         return IntakeVerdict(
             status=IntakeStatus.NEEDS_USER_FIX,
             plan=plan,
-            reasons=tuple(reasons),
+            reasons=tuple(reason for _, reason in refusals),
+            gates=tuple(gate for gate, _ in refusals),
             dropped_entries=tuple(dropped_entries),
             dropped_bullets=tuple(dropped_bullets),
             flags=tuple(flags),

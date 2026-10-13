@@ -22,12 +22,17 @@ from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import select
 
 from aria_api.deps import CallerDep, ParserDep, ScannerDep, SessionDep, SettingsDep, StoreDep, TaxonomyDep
-from aria_api.schemas import ImportResponse, UploadResponse
+from aria_api.schemas import ClassifiedLineBody, ImportResponse, LinesResponse, UploadResponse
 from aria_api.uploads.pipeline import find_duplicate_upload, ingest_upload
 from aria_core.db.models import Upload
-from aria_core.importer.apply import apply_import_plan
+from aria_core.documents import LayoutDocument
+from aria_core.importer.apply import apply_import_plan, record_refused_import
+from aria_core.importer.assemble import parse_resume_layout
+from aria_core.importer.classify import classify
 from aria_core.importer.notes import parse_skills_notes
 from aria_core.importer.resume import parse_resume
+from aria_core.importer.shape import IntakeStatus, IntakeVerdict, assess
+from aria_core.schemas.base import utc_now
 from aria_core.schemas.untrusted import UntrustedContent, UntrustedSourceKind
 
 __all__ = ["router"]
@@ -128,14 +133,16 @@ async def import_upload(
         Query(description="Read the file as a plain skills list rather than as a resume."),
     ] = False,
 ) -> ImportResponse:
-    """Read an upload's extracted text into the graph as drafts.
+    """Read an upload into the graph as drafts, or refuse it with the reason.
 
-    Everything written is a draft, every draft carries its upload and line, and
-    anything the importer could not read comes back as a question.
+    A PDF is read from the layout Stage 0 kept (RESUME_ENGINE §5.3, §5.4); anything else
+    from its extracted text. Both readings pass the same §5.5 gates: a refused document
+    writes nothing at all. Everything written is a draft, every draft carries its upload
+    and line, and anything the importer could not read comes back as a question.
     """
     row = (
         await session.execute(
-            select(Upload.extracted_text, Upload.parse_status, Upload.candidate_id).where(
+            select(Upload.extracted_text, Upload.parse_status, Upload.candidate_id, Upload.layout).where(
                 Upload.id == upload_id
             )
         )
@@ -157,20 +164,99 @@ async def import_upload(
         source_ref=f"upload:{upload_id}",
         text=row[0],
     )
-    plan = parse_skills_notes(content, taxonomy) if as_notes else parse_resume(content, taxonomy)
+    today = utc_now().date()
+    # Stored as JSON, so enums and tuples arrive as strings and lists: validated loosely.
+    layout = (
+        LayoutDocument.model_validate(row[3], strict=False) if row[3] is not None and not as_notes else None
+    )
+    if as_notes:
+        plan = parse_skills_notes(content, taxonomy)
+    elif layout is not None:
+        plan = parse_resume_layout(layout, taxonomy, today=today)
+    else:
+        plan = parse_resume(content, taxonomy, today=today)
+    verdict = assess(plan, today=today, layout=layout)
+
+    if verdict.status is IntakeStatus.NEEDS_USER_FIX:
+        await record_refused_import(
+            session,
+            verdict,
+            tenant_id=caller.tenant_id,
+            candidate_id=caller.candidate_id,
+            upload_id=upload_id,
+            actor_id=caller.actor_id,
+        )
+        return ImportResponse(
+            upload_id=upload_id,
+            status=verdict.status.value,
+            counts={},
+            summary=[],
+            reasons=list(verdict.reasons),
+            dropped=_dropped(verdict),
+            flags=list(verdict.flags),
+        )
+
     outcome = await apply_import_plan(
         session,
-        plan,
+        verdict.plan,
         tenant_id=caller.tenant_id,
         candidate_id=caller.candidate_id,
         upload_id=upload_id,
         actor_id=caller.actor_id,
     )
-
     return ImportResponse(
         upload_id=upload_id,
-        counts={**plan.counts(), **outcome.counts()},
-        summary=plan.summary_lines() + outcome.summary_lines(),
+        counts={**verdict.plan.counts(), **outcome.counts()},
+        summary=verdict.plan.summary_lines() + outcome.summary_lines(),
         questions_queued=len(outcome.question_ids),
         held_back=[f"{label}: {question.prompt}" for label, question in outcome.held_back],
+        dropped=_dropped(verdict),
+        flags=list(verdict.flags),
+    )
+
+
+def _dropped(verdict: IntakeVerdict) -> list[str]:
+    entries = [
+        f"{entry.kind} at line {entry.source_line} ({entry.label}): {entry.reason}"
+        for entry in verdict.dropped_entries
+    ]
+    bullets = [
+        f"bullet at line {bullet.source_line} under {bullet.entry}: {bullet.reason}"
+        for bullet in verdict.dropped_bullets
+    ]
+    return entries + bullets
+
+
+@router.get("/{upload_id}/lines", response_model=LinesResponse)
+async def upload_lines(upload_id: uuid.UUID, caller: CallerDep, session: SessionDep) -> LinesResponse:
+    """Every line of a PDF upload as the importer classified it (RESUME_ENGINE §5.3).
+
+    What to look at when an import is refused or a fact came out wrong: the line
+    numbers are the ones facts and refusals quote.
+    """
+    row = (
+        await session.execute(select(Upload.layout, Upload.candidate_id).where(Upload.id == upload_id))
+    ).first()
+    if row is None or row[1] != caller.candidate_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no such upload")
+    if row[0] is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="this upload has no layout; lines are kept for PDFs ARIA could read",
+        )
+    layout = LayoutDocument.model_validate(row[0], strict=False)
+    return LinesResponse(
+        upload_id=upload_id,
+        lines=[
+            ClassifiedLineBody(
+                number=line.line.index + 1,
+                page=line.line.page,
+                column=line.line.column,
+                kind=line.kind.value,
+                text=line.line.text,
+                date_text=line.date_text,
+            )
+            for line in classify(layout)
+        ],
+        ambiguous_pages=[page.number for page in layout.pages if page.ambiguous_columns],
     )

@@ -220,6 +220,79 @@ class TestTheClientSendsTheRightRequest:
         assert "3 draft fact(s)" in out
         assert "2 question(s) waiting" in out
 
+    def test_a_refused_import_says_nothing_was_written_and_why(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        recorder = Recorder(
+            {
+                ("POST", f"/uploads/{UPLOAD_ID}/import"): {
+                    "upload_id": UPLOAD_ID,
+                    "status": "needs_user_fix",
+                    "counts": {},
+                    "summary": [],
+                    "reasons": [
+                        "6 of 20 entries do not have the shape of an entry, too many to trust the rest"
+                    ],
+                    "dropped": ["experience at line 12 (25%): the employer holds a metric"],
+                    "flags": [],
+                }
+            }
+        )
+        assert run(recorder, ["import", UPLOAD_ID], monkeypatch) == 1
+        out = capsys.readouterr().out
+        assert "NOT IMPORTED: nothing was written" in out
+        assert "6 of 20 entries" in out
+        assert "line 12 (25%)" in out
+        assert f"aria lines {UPLOAD_ID}" in out
+
+    def test_an_import_shows_what_it_dropped_and_what_to_check(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        recorder = Recorder(
+            {
+                ("POST", f"/uploads/{UPLOAD_ID}/import"): {
+                    "upload_id": UPLOAD_ID,
+                    "status": "imported",
+                    "counts": {"facts": 3},
+                    "summary": ["3 draft fact(s)"],
+                    "dropped": ["bullet at line 9 under Nordvale: shorter than 20 characters"],
+                    "flags": ["Nordvale: the start date is more than a year ahead"],
+                }
+            }
+        )
+        assert run(recorder, ["import", UPLOAD_ID], monkeypatch) == 0
+        out = capsys.readouterr().out
+        assert "bullet at line 9" in out
+        assert "CHECK      Nordvale: the start date" in out
+
+    def test_lines_prints_each_line_with_its_kind_and_dates(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        recorder = Recorder(
+            {
+                ("GET", f"/uploads/{UPLOAD_ID}/lines"): {
+                    "upload_id": UPLOAD_ID,
+                    "lines": [
+                        {"number": 1, "page": 1, "column": 0, "kind": "name", "text": "JORDAN A. RIVERA"},
+                        {
+                            "number": 12,
+                            "page": 1,
+                            "column": 0,
+                            "kind": "entry_header",
+                            "text": "Nordvale Consulting Feb 2024 - Jul 2025",
+                            "date_text": "Feb 2024 - Jul 2025",
+                        },
+                    ],
+                    "ambiguous_pages": [2],
+                }
+            }
+        )
+        assert run(recorder, ["lines", UPLOAD_ID], monkeypatch) == 0
+        out = capsys.readouterr().out.splitlines()
+        assert out[0].split() == ["1", "p1", "c0", "name", "JORDAN", "A.", "RIVERA"]
+        assert "entry_header" in out[1] and out[1].endswith("[Feb 2024 - Jul 2025]")
+        assert "not settled on page 2" in out[-1]
+
 
 class TestTheReportIsUsableInAScript:
     def test_a_complete_graph_exits_zero(

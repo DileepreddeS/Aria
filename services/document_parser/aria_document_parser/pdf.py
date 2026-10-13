@@ -21,8 +21,9 @@ replaces it.
 **Link annotations are extracted as data**, filtered to http/https/mailto, capped, and
 appended as a labelled block. **Nothing is ever fetched**: a URI from an uploaded file
 is untrusted input. Nothing in a PDF is executed. A page whose column order the
-geometry cannot settle is refused with the reason, rather than read in an order nobody
-chose.
+geometry cannot settle is marked so on the layout and the upload is flagged for review;
+the import's §5.5 gate then refuses it with the reason, rather than read it in an order
+nobody chose. Parsing still succeeds, so the candidate can be shown what ARIA saw.
 """
 
 from __future__ import annotations
@@ -234,18 +235,6 @@ def extract_pdf(content: bytes, limits: ParseLimits | None = None) -> PdfExtract
         readings = set_aside_running_heads(readings, [float(page.height) for page in pdf.pages])
         sizes = [(float(page.width), float(page.height)) for page in pdf.pages]
 
-    ambiguous = [reading for reading in readings if reading.ambiguous]
-    if ambiguous:
-        first = ambiguous[0]
-        raise ParseRefused(
-            "ambiguous_columns",
-            f"Page {first.page} of this PDF is laid out in {first.columns} columns with text running "
-            "across the gap between them, so the order it is meant to be read in does not follow "
-            "from the page. ARIA will not guess, because reading columns the wrong way round "
-            "attaches the wrong dates and the wrong employer to the wrong work. Please re-export "
-            "the resume in a single column, or paste the text instead.",
-        )
-
     lines: list[LayoutLine] = []
     pages: list[LayoutPage] = []
     for reading, page_census, (width, height), turned in zip(readings, census, sizes, rotated, strict=True):
@@ -297,6 +286,15 @@ def extract_pdf(content: bytes, limits: ParseLimits | None = None) -> PdfExtract
             + ", ".join(f"page {number}" for number in column_pages)
             + "; read left to right"
         )
+    ambiguous_pages = [page.number for page in pages if page.ambiguous_columns]
+    if ambiguous_pages:
+        # Not refused here: the layout is kept so the candidate can be shown what ARIA
+        # saw, and the import's §5.5 gate is what declines to write it.
+        notes.append(
+            "column order not settled by geometry on "
+            + ", ".join(f"page {number}" for number in ambiguous_pages)
+            + "; the import will not proceed"
+        )
     if sum(rotated):
         notes.append(f"{sum(rotated)} rotated character(s) set aside, not read")
     if verdict_order is CrossExtractor.DISAGREE:
@@ -310,5 +308,6 @@ def extract_pdf(content: bytes, limits: ParseLimits | None = None) -> PdfExtract
         detail="; ".join(notes),
         layout=layout,
         links=tuple(links),
+        # An ambiguous page always has a gutter, so it is among column_pages already.
         needs_review=verdict_order is CrossExtractor.DISAGREE or bool(column_pages),
     )

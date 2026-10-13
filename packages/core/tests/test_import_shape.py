@@ -6,6 +6,7 @@ import datetime as dt
 
 import pytest
 
+from aria_core.documents import LayoutDocument
 from aria_core.graph.months import MonthSpan
 from aria_core.importer.plan import (
     ImportPlan,
@@ -14,7 +15,7 @@ from aria_core.importer.plan import (
     ProposedFact,
     ProposedProject,
 )
-from aria_core.importer.shape import IntakeStatus, assess
+from aria_core.importer.shape import Gate, IntakeStatus, assess
 
 TODAY = dt.date(2026, 10, 12)
 LONG = "Reduced the nightly batch from six hours to forty minutes"
@@ -269,3 +270,59 @@ def test_a_current_role_overlaps_up_to_today() -> None:
         _role(40, employer="E", span=_span("2026-09", "2026-10")),
     ]
     _refused(ImportPlan(experiences=tuple(roles)), "4 pairs")
+
+
+def _layout(*ambiguous: bool) -> LayoutDocument:
+    return LayoutDocument.model_validate(
+        {
+            "triage": "readable",
+            "cross_extractor": "agree",
+            "pages": [
+                {
+                    "number": number,
+                    "width": 612.0,
+                    "height": 792.0,
+                    "character_count": 2000,
+                    "unreadable_share": 0.0,
+                    "body_size": 10.0,
+                    "columns": 2,
+                    "gutters": [[300.0, 312.0]],
+                    "ambiguous_columns": flag,
+                }
+                for number, flag in enumerate(ambiguous, start=1)
+            ],
+            "lines": [],
+        },
+        strict=False,
+    )
+
+
+def test_a_page_whose_column_order_is_unsettled_refuses_the_document() -> None:
+    plan = ImportPlan(experiences=tuple(_roles(3)))
+    verdict = assess(plan, today=TODAY, layout=_layout(False, True))
+    assert verdict.status is IntakeStatus.NEEDS_USER_FIX
+    assert verdict.gates == (Gate.AMBIGUOUS_COLUMNS,)
+    assert verdict.reasons[0].startswith("page 2 is laid out in columns")
+
+
+def test_columns_the_geometry_settled_are_no_reason_to_refuse() -> None:
+    plan = ImportPlan(experiences=tuple(_roles(3)))
+    assert assess(plan, today=TODAY, layout=_layout(False, False)).status is IntakeStatus.READY
+
+
+def test_every_reason_has_its_gate_in_the_same_order() -> None:
+    roles = [
+        _role(0, employer="A", facts=(), span=_span("2020-01", "2021-12")),
+        _role(10, employer="B", facts=(), span=_span("2020-06", "2021-06")),
+        _role(20, employer="C", facts=(), span=_span("2021-01", "2022-06")),
+        _role(30, employer="D", facts=(), span=_span("2022-03", "2023-01")),
+    ]
+    verdict = assess(ImportPlan(experiences=tuple(roles)), today=TODAY, layout=_layout(True))
+    assert verdict.gates == (
+        Gate.AMBIGUOUS_COLUMNS,
+        Gate.READING_ORDER,
+        Gate.NO_FACTS,
+        Gate.OVERLAPPING_DATES,
+        Gate.SHAPE_FAILURES,
+    )
+    assert len(verdict.reasons) == len(verdict.gates)

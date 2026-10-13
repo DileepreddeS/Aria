@@ -54,6 +54,7 @@ from aria_core.importer.plan import (
     ProposedFact,
     QuestionKind,
 )
+from aria_core.importer.shape import IntakeVerdict
 from aria_core.schemas.audit import (
     ActorKind,
     AuditAction,
@@ -63,7 +64,7 @@ from aria_core.schemas.audit import (
 )
 from aria_core.schemas.identity import TenantId, new_id
 
-__all__ = ["ImportOutcome", "MergeProposal", "apply_import_plan"]
+__all__ = ["ImportOutcome", "MergeProposal", "apply_import_plan", "record_refused_import"]
 
 logger = structlog.get_logger(__name__)
 
@@ -610,3 +611,40 @@ async def apply_import_plan(
         **{key: value for key, value in outcome.counts().items() if value},
     )
     return outcome
+
+
+async def record_refused_import(
+    session: AsyncSession,
+    verdict: IntakeVerdict,
+    *,
+    tenant_id: TenantId,
+    candidate_id: uuid.UUID,
+    upload_id: uuid.UUID | None = None,
+    actor_id: str | None = None,
+) -> None:
+    """Audit an import a §5.5 gate refused. Nothing is written to the graph.
+
+    The payload holds gate codes and counts only. The reasons are sentences for the
+    candidate and the dropped entries quote their resume, so neither goes in the log.
+    """
+    await append_event(
+        session,
+        AuditEventDraft(
+            action=AuditAction.GRAPH_IMPORT_REFUSED,
+            actor_kind=ActorKind.USER if actor_id else ActorKind.SYSTEM,
+            actor_id=actor_id or "importer",
+            subject_kind=SubjectKind.UPLOAD if upload_id else SubjectKind.CANDIDATE,
+            subject_id=str(upload_id or candidate_id),
+            outcome=AuditOutcome.DENIED,
+            reason="refused by " + ", ".join(gate.value for gate in verdict.gates),
+            payload={
+                "source": verdict.plan.source.value,
+                "gates": ",".join(gate.value for gate in verdict.gates),
+                "entries_dropped": len(verdict.dropped_entries),
+                "bullets_dropped": len(verdict.dropped_bullets),
+                **verdict.plan.counts(),
+            },
+        ),
+        tenant_id=tenant_id,
+    )
+    logger.info("graph_import_refused", gates=[gate.value for gate in verdict.gates])

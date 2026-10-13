@@ -71,6 +71,8 @@ class AuditAction(StrEnum):
     FACT_RECONSIDERED = "fact.reconsidered"
     FACT_MERGED = "fact.merged"
     GRAPH_IMPORTED = "graph.imported"
+    #: A §5.5 gate refused an assembled plan; nothing was written.
+    GRAPH_IMPORT_REFUSED = "graph.import_refused"
     GRAPH_ENTITY_APPROVED = "graph_entity.approved"
     GRAPH_ENTITY_REJECTED = "graph_entity.rejected"
     GRAPH_ENTITY_RECONSIDERED = "graph_entity.reconsidered"
