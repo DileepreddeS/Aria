@@ -148,6 +148,11 @@ class Upload(Base):
     #: percentage, because agreement is not evidence of correctness. NULL when there
     #: was nothing to compare (not a PDF, or triage refused it).
     cross_extractor: Mapped[str | None] = mapped_column(String(10))
+    #: The later reading of the same file that replaced this one (migration 0006). The
+    #: row is kept as it was, because graph rows imported from it quote its lines.
+    superseded_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("uploads.id", deferrable=True, initially="DEFERRED")
+    )
     #: The original is deleted after processing unless the candidate opts to keep it.
     keep_original: Mapped[bool] = mapped_column(nullable=False, default=False)
     original_deleted_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
@@ -163,7 +168,14 @@ class Upload(Base):
             "parse_status IN ('pending', 'parsed', 'refused', 'failed')", name="parse_status_is_known"
         ),
         CheckConstraint("cross_extractor IN ('agree', 'disagree')", name="cross_extractor_is_known"),
-        UniqueConstraint("candidate_id", "sha256"),
+        # One current reading per file; superseded readings are kept beside it.
+        Index(
+            "uq_uploads_candidate_id_sha256_current",
+            "candidate_id",
+            "sha256",
+            unique=True,
+            postgresql_where=text("superseded_by IS NULL"),
+        ),
         Index("ix_uploads_candidate_id_created_at", "candidate_id", "created_at"),
         {"comment": "Quarantined uploads. original_filename is untrusted and never used as a path."},
     )

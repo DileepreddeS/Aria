@@ -78,7 +78,7 @@ def _cmd_upload(client: AriaClient, args: argparse.Namespace) -> int:
         print(f"no such file: {path}", file=sys.stderr)
         return 2
 
-    result = client.upload(path, keep_original=args.keep_original)
+    result = client.upload(path, keep_original=args.keep_original, reprocess=args.reprocess)
     if result.get("refusal_reason"):
         # A refusal is the expected answer for a file ARIA will not take, so it is
         # reported as one rather than as a failure of the command.
@@ -88,7 +88,9 @@ def _cmd_upload(client: AriaClient, args: argparse.Namespace) -> int:
 
     print(f"upload {result['upload_id']}")
     if result.get("duplicate_of"):
-        print("  (you already uploaded this file; nothing was reprocessed)")
+        print("  (you already uploaded this file; nothing was reprocessed. --reprocess reads it again)")
+    if result.get("reprocessed_from"):
+        print(f"  read again; replaces upload {result['reprocessed_from']}, whose drafts are unchanged")
     print(f"  type       {result.get('detected_type')}")
     print(f"  extractor  {result.get('extractor')}  ({result.get('characters', 0):,} characters)")
     for link in result.get("links", []):
@@ -342,6 +344,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--keep-original",
         action="store_true",
         help="keep the original file in quarantine (it is deleted by default)",
+    )
+    upload.add_argument(
+        "--reprocess",
+        action="store_true",
+        help="read the file again even if it was uploaded before (a PDF read before Stage 0 always is)",
     )
     upload.add_argument("--and-import", action="store_true", help="import it straight away")
     upload.add_argument("--as-notes", action="store_true", help="read it as a skills list")

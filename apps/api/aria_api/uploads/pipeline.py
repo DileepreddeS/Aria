@@ -58,6 +58,7 @@ __all__ = [
     "UploadResult",
     "find_duplicate_upload",
     "ingest_upload",
+    "read_before_stage_zero",
 ]
 
 logger = structlog.get_logger(__name__)
@@ -179,12 +180,17 @@ async def ingest_upload(
     parser: DocumentParser,
     keep_original: bool = False,
     allow_docx: bool = False,
+    supersedes: uuid.UUID | None = None,
 ) -> UploadResult:
     """Run a quarantined file through the rest of the pipeline.
 
     The file is already in quarantine — the size limit has to be enforced while
     streaming, so that step belongs to the store. ``original_filename`` is recorded so
     the candidate recognises the file and is never used to decide anything.
+
+    ``supersedes`` is an earlier upload of the same bytes that this reading replaces
+    (migration 0006). That row is kept unchanged, because graph rows imported from it
+    quote its lines, and is marked superseded by this one.
 
     Returns an :class:`UploadResult`; a refusal is carried on it rather than raised,
     so the caller commits the record of what happened before reporting it.
@@ -226,6 +232,10 @@ async def ingest_upload(
         )
 
     # ---- the row exists from here on, so every later outcome has somewhere to live
+    if supersedes is not None:
+        # Before the insert: one current reading per file, and the foreign key is
+        # deferred to the end of the transaction, when the new row exists.
+        await session.execute(update(Upload).where(Upload.id == supersedes).values(superseded_by=upload_id))
     await session.execute(
         insert(Upload).values(
             id=upload_id,
@@ -254,6 +264,7 @@ async def ingest_upload(
             "sha256": stored.sha256,
             # The client's filename is S1 and goes in the row, not the audit payload.
             "filename_length": len(original_filename),
+            "supersedes": str(supersedes) if supersedes is not None else None,
         },
     )
 
@@ -421,5 +432,17 @@ async def find_duplicate_upload(
     when someone clicks upload again.
     """
     return await session.scalar(
-        select(Upload.id).where(Upload.candidate_id == candidate_id, Upload.sha256 == sha256)
+        select(Upload.id).where(
+            Upload.candidate_id == candidate_id, Upload.sha256 == sha256, Upload.superseded_by.is_(None)
+        )
     )
+
+
+def read_before_stage_zero(detected_type: str, parse_status: str, *, has_layout: bool) -> bool:
+    """A PDF the parser before Stage 0 read: parsed, and no layout kept.
+
+    Its text is a flat extraction in an order nobody checked, and its detail may claim
+    "agreement 100%". It is never imported and never handed back as a duplicate; the
+    file is read again instead.
+    """
+    return detected_type == "pdf" and parse_status == "parsed" and not has_layout

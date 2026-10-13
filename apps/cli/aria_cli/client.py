@@ -91,14 +91,14 @@ class AriaClient:
         return dict(self._request("GET", "/health"))
 
     # ----------------------------------------------------------------- uploads
-    def upload(self, path: Path, *, keep_original: bool = False) -> dict[str, Any]:
+    def upload(self, path: Path, *, keep_original: bool = False, reprocess: bool = False) -> dict[str, Any]:
         with path.open("rb") as handle:
             return dict(
                 self._request(
                     "POST",
                     "/uploads",
                     files={"file": (path.name, handle, "application/octet-stream")},
-                    params={"keep_original": keep_original},
+                    params={"keep_original": keep_original, "reprocess": reprocess},
                 )
             )
 

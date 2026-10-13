@@ -23,7 +23,7 @@ from sqlalchemy import select
 
 from aria_api.deps import CallerDep, ParserDep, ScannerDep, SessionDep, SettingsDep, StoreDep, TaxonomyDep
 from aria_api.schemas import ClassifiedLineBody, ImportResponse, LinesResponse, UploadResponse
-from aria_api.uploads.pipeline import find_duplicate_upload, ingest_upload
+from aria_api.uploads.pipeline import find_duplicate_upload, ingest_upload, read_before_stage_zero
 from aria_core.db.models import Upload
 from aria_core.documents import LayoutDocument
 from aria_core.importer.apply import apply_import_plan, record_refused_import
@@ -39,6 +39,11 @@ __all__ = ["router"]
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
 
+_READ_BEFORE_STAGE_ZERO = (
+    "this PDF was read by ARIA's earlier parser, which kept no layout and whose reading is not "
+    "trusted; upload the file again and ARIA will read it afresh"
+)
+
 
 @router.post("", response_model=UploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload(
@@ -50,8 +55,17 @@ async def upload(
     parser: ParserDep,
     file: Annotated[UploadFile, File()],
     keep_original: Annotated[bool, Query()] = False,
+    reprocess: Annotated[
+        bool,
+        Query(description="Read the file again even if these bytes were uploaded before."),
+    ] = False,
 ) -> UploadResponse:
-    """Quarantine, size-check, type-check, scan, parse. Nothing is imported yet."""
+    """Quarantine, size-check, type-check, scan, parse. Nothing is imported yet.
+
+    The same bytes uploaded again return the earlier record, unless that record is a
+    PDF read before Stage 0 or ``reprocess`` is set: then the file is read afresh into
+    a new upload that supersedes the old one.
+    """
     content = await file.read()
     stored = await store.store_bytes(content)
 
@@ -59,8 +73,8 @@ async def upload(
     # unique index on (candidate_id, sha256) for exactly this, so without the check
     # the second attempt reaches the client as an integrity error.
     existing = await find_duplicate_upload(session, candidate_id=caller.candidate_id, sha256=stored.sha256)
+    supersedes: uuid.UUID | None = None
     if existing is not None:
-        store.delete(stored.name)
         row = (
             await session.execute(
                 select(
@@ -69,10 +83,19 @@ async def upload(
                     Upload.needs_review,
                     Upload.parse_detail,
                     Upload.extracted_text,
+                    # Read, not tested in SQL: a missing layout is SQL NULL on rows from
+                    # before migration 0005 and JSON null on rows written since.
+                    Upload.layout,
                 ).where(Upload.id == existing)
             )
         ).first()
         assert row is not None  # the id came from this candidate's own rows
+        stale = read_before_stage_zero(row[0], row[1], has_layout=row[5] is not None)
+        if reprocess or stale:
+            supersedes = existing
+    if existing is not None and supersedes is None:
+        store.delete(stored.name)
+        assert row is not None
         return UploadResponse(
             upload_id=existing,
             detected_type=row[0],
@@ -96,6 +119,7 @@ async def upload(
         parser=parser,
         keep_original=keep_original,
         allow_docx=settings.allow_docx_uploads,
+        supersedes=supersedes,
     )
 
     if result.refusal is not None:
@@ -105,6 +129,7 @@ async def upload(
             parse_status="refused",
             refusal_reason=result.refusal.reason,
             refusal_advice=result.refusal.advice,
+            reprocessed_from=supersedes,
         )
 
     parsed = result.parsed
@@ -119,6 +144,7 @@ async def upload(
         characters=len(parsed.text),
         links=list(parsed.links),
         detail=parsed.detail,
+        reprocessed_from=supersedes,
     )
 
 
@@ -142,9 +168,14 @@ async def import_upload(
     """
     row = (
         await session.execute(
-            select(Upload.extracted_text, Upload.parse_status, Upload.candidate_id, Upload.layout).where(
-                Upload.id == upload_id
-            )
+            select(
+                Upload.extracted_text,
+                Upload.parse_status,
+                Upload.candidate_id,
+                Upload.layout,
+                Upload.detected_type,
+                Upload.superseded_by,
+            ).where(Upload.id == upload_id)
         )
     ).first()
     if row is None:
@@ -153,11 +184,20 @@ async def import_upload(
         # Row-level security already confines this to the tenant; this confines it to
         # the candidate, which matters the moment a tenant has more than one.
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no such upload")
+    if row[5] is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"this file was read again as upload {row[5]}; import that one",
+        )
     if row[1] != "parsed" or not row[0]:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"this upload is {row[1]}, so there is no text to import",
         )
+    if read_before_stage_zero(row[4], row[1], has_layout=row[3] is not None):
+        # Its text is the old parser's flat extraction, and a PDF's text never takes
+        # the text door (RESUME_ENGINE §5.5). Reading it again is one upload away.
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_READ_BEFORE_STAGE_ZERO)
 
     content = UntrustedContent(
         source_kind=UntrustedSourceKind.UPLOADED_DOCUMENT,
@@ -235,10 +275,16 @@ async def upload_lines(upload_id: uuid.UUID, caller: CallerDep, session: Session
     numbers are the ones facts and refusals quote.
     """
     row = (
-        await session.execute(select(Upload.layout, Upload.candidate_id).where(Upload.id == upload_id))
+        await session.execute(
+            select(Upload.layout, Upload.candidate_id, Upload.detected_type, Upload.parse_status).where(
+                Upload.id == upload_id
+            )
+        )
     ).first()
     if row is None or row[1] != caller.candidate_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no such upload")
+    if read_before_stage_zero(row[2], row[3], has_layout=row[0] is not None):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_READ_BEFORE_STAGE_ZERO)
     if row[0] is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

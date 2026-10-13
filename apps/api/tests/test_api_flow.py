@@ -27,14 +27,14 @@ import pytest
 import pytest_asyncio
 from asgi_lifespan import LifespanManager
 from pydantic import SecretStr
-from sqlalchemy import insert, select
+from sqlalchemy import insert, null, select, update
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from aria_api.app import create_app
 from aria_api.auth import API_TOKEN_HEADER
 from aria_core.audit.log import read_chain
 from aria_core.config import Settings
-from aria_core.db.models import Candidate, Education, Experience, Fact, ProfileField, Project
+from aria_core.db.models import Candidate, Education, Experience, Fact, ProfileField, Project, Upload
 from aria_core.db.session import tenant_transaction
 from aria_core.schemas.identity import TenantId, UserId, new_id
 
@@ -408,9 +408,10 @@ class TestTheCompletenessReport:
 class TestUploadingTheSameFileTwice:
     """Clicking upload again is a thing people do, not an error.
 
-    The uploads table has a unique index on (candidate_id, sha256) so a byte-identical
-    re-upload can be recognised. Before the route used it, the second attempt hit the
-    constraint and the integrity error reached the client as a 500.
+    The uploads table has a unique index on (candidate_id, sha256) over current
+    readings, so a byte-identical re-upload can be recognised. Before the route used
+    it, the second attempt hit the constraint and the integrity error reached the
+    client as a 500.
     """
 
     async def test_the_second_upload_returns_the_first(self, client: httpx.AsyncClient) -> None:
@@ -875,3 +876,133 @@ class TestTheLines:
 
     async def test_an_unknown_upload_is_a_404(self, client: httpx.AsyncClient) -> None:
         assert (await client.get(f"/uploads/{new_id()}/lines")).status_code == 404
+
+
+class TestAFileReadBeforeStageZero:
+    """An upload the old parser read: a PDF, parsed, no layout, "agreement 100%".
+
+    Re-uploading the same bytes used to hand that record back as a duplicate. It is
+    read again instead, into a new upload that supersedes the old one, which is kept
+    unchanged because drafts imported from it quote its lines.
+    """
+
+    NAME = "clean_inline_block"
+
+    async def _stale_upload(
+        self, client: httpx.AsyncClient, engine: AsyncEngine, tenant: TenantId, *, json_null: bool = False
+    ) -> str:
+        """Upload the PDF, then make its row look exactly like one from before S0-12."""
+        content = (FIXTURES / f"{self.NAME}.pdf").read_bytes()
+        upload = await _upload(client, f"{self.NAME}.pdf", content, "application/pdf")
+        async with tenant_transaction(engine, tenant) as session:
+            await session.execute(
+                update(Upload)
+                .where(Upload.id == uuid.UUID(upload["upload_id"]))
+                .values(
+                    # SQL NULL, as on a row written before migration 0005 added the column;
+                    # or JSON null, which is how the pipeline writes "no layout" since.
+                    layout=None if json_null else null(),
+                    cross_extractor=None,
+                    parse_detail="extractor=pypdf; 1 page(s); agreement 100%",
+                    extracted_text="JORDAN A. RIVERA\nflat text in an order nobody checked",
+                )
+            )
+        return str(upload["upload_id"])
+
+    async def _again(self, client: httpx.AsyncClient, *, reprocess: bool = False) -> dict[str, Any]:
+        content = (FIXTURES / f"{self.NAME}.pdf").read_bytes()
+        response = await client.post(
+            "/uploads",
+            files={"file": (f"{self.NAME}.pdf", content, "application/pdf")},
+            params={"reprocess": reprocess},
+        )
+        assert response.status_code == 201, response.text
+        body: dict[str, Any] = response.json()
+        return body
+
+    async def test_uploading_it_again_reads_it_again(
+        self, client: httpx.AsyncClient, engine: AsyncEngine, tenant_a: TenantId
+    ) -> None:
+        old = await self._stale_upload(client, engine, tenant_a)
+        body = await self._again(client)
+        assert body["upload_id"] != old
+        assert body["reprocessed_from"] == old and body["duplicate_of"] is None
+        assert "agreement" not in body["detail"] and "cross-extractor: agree" in body["detail"]
+        lines = await client.get(f"/uploads/{body['upload_id']}/lines")
+        assert lines.status_code == 200 and len(lines.json()["lines"]) > 0
+
+    async def test_a_missing_layout_stored_as_json_null_is_missing_too(
+        self, client: httpx.AsyncClient, engine: AsyncEngine, tenant_a: TenantId
+    ) -> None:
+        old = await self._stale_upload(client, engine, tenant_a, json_null=True)
+        assert (await self._again(client))["reprocessed_from"] == old
+
+    async def test_the_old_row_is_kept_as_it_was_and_points_at_the_new_one(
+        self, client: httpx.AsyncClient, engine: AsyncEngine, tenant_a: TenantId
+    ) -> None:
+        old = await self._stale_upload(client, engine, tenant_a)
+        body = await self._again(client)
+        async with tenant_transaction(engine, tenant_a) as session:
+            row = (
+                await session.execute(
+                    select(Upload.superseded_by, Upload.extracted_text, Upload.parse_detail).where(
+                        Upload.id == uuid.UUID(old)
+                    )
+                )
+            ).one()
+            events = await read_chain(session, tenant_a)
+        assert str(row[0]) == body["upload_id"]
+        # Drafts imported from it quote these lines, so they are not rewritten.
+        assert row[1] == "JORDAN A. RIVERA\nflat text in an order nobody checked"
+        received = [event for event in events if event.action == "upload.received"]
+        assert received[-1].payload["supersedes"] == old
+
+    async def test_the_third_upload_is_a_duplicate_of_the_second(
+        self, client: httpx.AsyncClient, engine: AsyncEngine, tenant_a: TenantId
+    ) -> None:
+        await self._stale_upload(client, engine, tenant_a)
+        second = await self._again(client)
+        third = await self._again(client)
+        assert third["duplicate_of"] == second["upload_id"] and third["reprocessed_from"] is None
+
+    async def test_it_is_not_imported_from_its_flat_text(
+        self, client: httpx.AsyncClient, engine: AsyncEngine, tenant_a: TenantId
+    ) -> None:
+        old = await self._stale_upload(client, engine, tenant_a)
+        response = await client.post(f"/uploads/{old}/import")
+        assert response.status_code == 409
+        assert "upload the file again" in response.json()["detail"]
+        assert await _graph_rows(engine, tenant_a) == 0
+
+    async def test_its_lines_say_how_to_get_them(
+        self, client: httpx.AsyncClient, engine: AsyncEngine, tenant_a: TenantId
+    ) -> None:
+        old = await self._stale_upload(client, engine, tenant_a)
+        response = await client.get(f"/uploads/{old}/lines")
+        assert response.status_code == 409
+        assert "upload the file again" in response.json()["detail"]
+
+    async def test_once_superseded_the_old_upload_names_its_replacement(
+        self, client: httpx.AsyncClient, engine: AsyncEngine, tenant_a: TenantId
+    ) -> None:
+        old = await self._stale_upload(client, engine, tenant_a)
+        body = await self._again(client)
+        response = await client.post(f"/uploads/{old}/import")
+        assert response.status_code == 409
+        assert body["upload_id"] in response.json()["detail"]
+
+    async def test_reprocess_reads_a_current_upload_again_on_request(self, client: httpx.AsyncClient) -> None:
+        first = await _upload(
+            client, f"{self.NAME}.pdf", (FIXTURES / f"{self.NAME}.pdf").read_bytes(), "application/pdf"
+        )
+        assert (await self._again(client))["duplicate_of"] == first["upload_id"]
+        forced = await self._again(client, reprocess=True)
+        assert forced["reprocessed_from"] == first["upload_id"] and forced["upload_id"] != first["upload_id"]
+
+    async def test_a_text_upload_has_no_layout_and_is_still_a_duplicate(
+        self, client: httpx.AsyncClient
+    ) -> None:
+        first = await client.post("/uploads", files={"file": ("resume.txt", RESUME, "text/plain")})
+        second = await client.post("/uploads", files={"file": ("resume.txt", RESUME, "text/plain")})
+        assert second.json()["duplicate_of"] == first.json()["upload_id"]
+        assert second.json()["reprocessed_from"] is None

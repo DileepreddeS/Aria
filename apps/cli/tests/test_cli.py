@@ -293,6 +293,40 @@ class TestTheClientSendsTheRightRequest:
         assert "entry_header" in out[1] and out[1].endswith("[Feb 2024 - Jul 2025]")
         assert "not settled on page 2" in out[-1]
 
+    def test_upload_asks_for_a_fresh_reading_only_when_told(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        resume = tmp_path / "resume.pdf"
+        resume.write_bytes(b"%PDF-1.4 not really")
+        answer = {"upload_id": UPLOAD_ID, "detected_type": "pdf", "detail": ""}
+        for argv, expected in (
+            (["upload", str(resume)], "false"),
+            (["upload", str(resume), "--reprocess"], "true"),
+        ):
+            recorder = Recorder({("POST", "/uploads"): answer})
+            assert run(recorder, argv, monkeypatch) == 0
+            assert recorder.seen[0].url.params["reprocess"] == expected
+
+    def test_a_fresh_reading_says_what_it_replaced(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
+    ) -> None:
+        resume = tmp_path / "resume.pdf"
+        resume.write_bytes(b"%PDF-1.4 not really")
+        earlier = str(uuid.uuid4())
+        recorder = Recorder(
+            {
+                ("POST", "/uploads"): {
+                    "upload_id": UPLOAD_ID,
+                    "detected_type": "pdf",
+                    "detail": "extractor=pdfplumber",
+                    "reprocessed_from": earlier,
+                }
+            }
+        )
+        assert run(recorder, ["upload", str(resume)], monkeypatch) == 0
+        out = capsys.readouterr().out
+        assert f"replaces upload {earlier}" in out
+
 
 class TestTheReportIsUsableInAScript:
     def test_a_complete_graph_exits_zero(

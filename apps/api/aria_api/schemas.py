@@ -74,6 +74,9 @@ class UploadResponse(Body):
     #: Set when these exact bytes were already uploaded. The id is the earlier
     #: upload's, so the client can import it without uploading again.
     duplicate_of: uuid.UUID | None = None
+    #: Set when these bytes had been uploaded before and were read again: the earlier
+    #: upload, now superseded by this one. Drafts imported from it keep pointing at it.
+    reprocessed_from: uuid.UUID | None = None
 
     @property
     def accepted(self) -> bool:
