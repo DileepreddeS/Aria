@@ -194,8 +194,12 @@ non-English headings all resolve.
 - **Hanging-indent rule — how a wrapped line is told from a new bullet.** Within a run, line-start x
   values cluster on two points: `x_marker` and `x_text` (`x_text > x_marker`). A line starting at
   `x_marker` opens a new bullet; a line starting at `x_text` continues the previous one. This is purely
-  geometric and works when the document contains **no marker glyphs at all** — which is exactly the case
-  CSS `list-style` produces. It is what prevents a wrapped tail like `"mobile"` from becoming an entry.
+  geometric and works when the document contains **no markers at all**, glyph or drawn. (CSS `list-style`
+  puts no glyph in the text layer, but Chromium draws each disc as a vector shape, which Stage 0 reads as
+  a drawn marker.) It is what prevents a wrapped tail like `"mobile"` from becoming an entry. The wraps
+  prove where `x_marker` is, and it then holds for the whole column: a one-line bullet starting there is
+  a bullet, in an entry where nothing wraps too. Only when `x_marker` sits clearly right of the entry
+  header's own edge; bullets flush with that edge are a §5.9 corpus case.
 - **ENTRY_HEADER** — bold, and either contains a separator (`—` `–` `|` `,`) or carries a date in the
   right-hand x-band.
 - **DATE** — matched only within the right-hand x-band (`x0 > 0.55 ×` content width) of an entry header,
@@ -239,7 +243,12 @@ Document gates. Any one failing returns `status = needs_user_fix` and **writes n
 - ≥2 consecutive entry headers with zero bullets between them → reading order is suspect;
 - entries ≥3 and facts == 0;
 - >25% of entries failed a shape rule;
-- >3 overlapping date ranges → likely cross-column bleed.
+- >3 overlapping date ranges → likely cross-column bleed;
+- a PDF page whose column order the geometry could not settle (§5.2). Parsing still succeeds and keeps
+  the page, marked, so the candidate can be shown what ARIA read; the import stops here.
+
+Each refusal is recorded in the audit log by gate code and counts only: the reasons are written for the
+candidate, and dropped entries quote their resume.
 
 These rules and gates apply to every door that assembles entries, pasted text and `.txt` included
 (§5.8). §5.3's classification does not: pasted text has no geometry, so its lines are classified by the
@@ -295,7 +304,8 @@ deedy), Canva, novoresume, Enhancv, Overleaf and Chromium-rendered HTML, plus on
 pathology:
 
 - float-scrambled reading order;
-- marker-less bullets (CSS `list-style`);
+- drawn markers (CSS `list-style`, whose discs Chromium draws as shapes);
+- bullets with no marker at all, glyph or drawn, told apart only by their hanging indent;
 - per-glyph-positioned contact line;
 - two-column with a skills sidebar;
 - scanned / image-only;
@@ -306,6 +316,12 @@ pathology:
   geometry (DECISIONS 2026-10-12), measured here against real PDFs rather than reasoned about: at least
   three such resumes from different generators, each with ground truth, and the false-column rate on
   them must be 0 for the Phase 1 gate.
+- **bullets with no marker and no hanging indent**, their text flush with the entry header. Geometry
+  alone cannot tell such a bullet from a location or a client line at the same x; font weight is the
+  likely signal. Until real PDFs of this shape are measured, such lines are not read as bullets, and a
+  role left without any is dropped or trips a §5.5 gate rather than being guessed at (DECISIONS
+  2026-10-12): at least three such resumes from different
+  generators, each with ground truth, and the false-entry rate on them must be 0 for the Phase 1 gate.
 
 Each carries hand-labelled ground truth (entries, employers, titles, date ranges, bullet counts).
 Metrics per run: entry precision and recall, bullet-attachment accuracy, and **false-entry rate, which
