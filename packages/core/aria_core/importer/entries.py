@@ -442,8 +442,34 @@ def parse_education(entry: Entry, taxonomy: SkillTaxonomy, *, today: dt.date) ->
             coursework = _COURSEWORK.sub("", bullet.text).strip()
         else:
             facts.append(bullet)
+    # Coursework is often a plain line under the degree rather than a bullet.
+    coursework_lines = [line for line in entry.head if _COURSEWORK.match(line.text)]
+    if coursework is None and coursework_lines:
+        coursework = _COURSEWORK.sub("", coursework_lines[0].text).strip()
 
-    location_city, location_region = _location(entry.head, used=date_text)
+    # "Westbrook Institute, Pune, India": the school is the part that names a school,
+    # and what follows it is where the school is.
+    location_city: str | None = None
+    location_region: str | None = None
+    if "," in school:
+        parts = [part.strip() for part in school.split(",")]
+        named = next((index for index, part in enumerate(parts) if _SCHOOL_WORDS.search(part)), 0)
+        remainder = ", ".join(parts[named + 1 :])
+        place = _CITY_REGION.fullmatch(remainder) if remainder else None
+        if place is not None:
+            school = parts[named]
+            location_city, location_region = place.group("city"), place.group("region")
+    if location_city is None:
+        # Never from a coursework line ("Deep Learning, Artificial Intelligence" is not a
+        # city and a region), nor from the lines the school and degree came from.
+        others = tuple(
+            line
+            for line in entry.head
+            if not _COURSEWORK.match(line.text)
+            and not _SCHOOL_WORDS.search(line.text)
+            and not _DEGREE.search(line.text)
+        )
+        location_city, location_region = _location(others, used=date_text)
 
     return ProposedEducation(
         school=school[:200],

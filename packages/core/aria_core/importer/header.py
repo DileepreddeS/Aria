@@ -222,7 +222,10 @@ def parse_header(lines: tuple[SourceLine, ...], links: tuple[str, ...] = ()) -> 
         if email:
             add(ProfileFieldKind.EMAIL, email.group(0), line.number)
 
-        for match in _URL.finditer(text):
+        # URLs are looked for with email addresses taken out first: the domain of
+        # jordan@gmail.com is not the candidate's portfolio, and reading it as one
+        # proposed https://gmail.com on every import.
+        for match in _URL.finditer(_EMAIL.sub(" ", text)):
             classified = classify_url(match.group(0))
             if classified is not None:
                 add(classified[0], classified[1], line.number)
