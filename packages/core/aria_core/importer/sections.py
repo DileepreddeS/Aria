@@ -141,6 +141,16 @@ def merged_headings(line: SourceLine) -> tuple[str, ...]:
     return tuple(found) if len(found) > 1 else ()
 
 
+def section_for_heading(text: str) -> SectionKind | None:
+    """The section a heading's words name, or None when the vocabulary does not know them.
+
+    For the geometric classifier, where layout decides that a line is a heading and
+    this only says which one: the vocabulary raises confidence, never decides alone.
+    """
+    folded = text.strip().strip(_HEADING_NOISE).strip().lower().replace("&", "and")
+    return _HEADINGS.get(" ".join(folded.strip(_HEADING_NOISE).split()))
+
+
 def _heading_key(line: SourceLine) -> str:
     """The lookup key for a line, or "" if it cannot be a heading at all."""
     text = line.text.strip().strip(_HEADING_NOISE).strip()
