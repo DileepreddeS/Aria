@@ -299,7 +299,13 @@ pathology:
 - per-glyph-positioned contact line;
 - two-column with a skills sidebar;
 - scanned / image-only;
-- ligature- and `(cid:N)`-corrupted.
+- ligature- and `(cid:N)`-corrupted;
+- **single-column with short lines and right-aligned dates.** Every line ends well short of the date
+  band, so the dates form a strip that can meet §5.2's gutter rules and be read as a second column,
+  separating every entry from its dates. This must read as one column. It is a known limitation of the
+  geometry (DECISIONS 2026-10-12), measured here against real PDFs rather than reasoned about: at least
+  three such resumes from different generators, each with ground truth, and the false-column rate on
+  them must be 0 for the Phase 1 gate.
 
 Each carries hand-labelled ground truth (entries, employers, titles, date ranges, bullet counts).
 Metrics per run: entry precision and recall, bullet-attachment accuracy, and **false-entry rate, which
