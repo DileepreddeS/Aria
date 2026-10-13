@@ -157,7 +157,7 @@ class TestNothingElseTouchesAnEncryptedColumn:
         # everything about a candidate is how S2 data reaches a prompt by accident.
         for path in _python_files():
             assert f"def {name}" not in path.read_text(encoding="utf-8"), (
-                f"{path} defines {name}; tools are narrow getters (SECURITY.md §4)"
+                f"{path} defines {name}; tools are narrow getters (SECURITY.md \u00a74)"
             )
 
 

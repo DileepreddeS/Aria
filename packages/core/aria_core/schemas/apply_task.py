@@ -67,7 +67,7 @@ class ApplyTask(AriaMessage):
         if (self.expires_at - self.issued_at) > dt.timedelta(minutes=30):
             raise ValueError(
                 "an ApplyTask is valid for minutes, not hours: a long-lived task is a long-lived "
-                "permission to act on someone's behalf (SECURITY.md §8)"
+                "permission to act on someone's behalf (SECURITY.md \u00a78)"
             )
         if Capability.UPLOAD_RESUME in self.capabilities and not self.resume_sha256:
             raise ValueError("UPLOAD_RESUME was granted without naming the file's hash")

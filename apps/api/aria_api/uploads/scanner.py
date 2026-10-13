@@ -160,7 +160,7 @@ def assert_scanner_is_allowed(scanner: MalwareScanner, settings: Settings) -> No
         return
     raise ScannerMisconfigured(
         f"{scanner.name} does not scan anything and env={settings.env}. Uploads from real users "
-        "must be scanned (SECURITY.md §7). Configure ARIA_CLAMAV_HOST, or run with ARIA_ENV=dev."
+        "must be scanned (SECURITY.md \u00a77). Configure ARIA_CLAMAV_HOST, or run with ARIA_ENV=dev."
     )
 
 

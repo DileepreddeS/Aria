@@ -29,6 +29,14 @@ repos:
 
       # A changed lock is a changed dependency: refuse files younger than 14 days
       # unless they fix a CVE (DECISIONS 2026-10-12).
+      # A real person's name, email, phone or handle in a staged file. The denylist
+      # lives in private/pii-denylist.txt, never in the repository.
+      - id: no-personal-identifiers
+        name: no real personal identifiers
+        entry: uv run python infra/checks/no_personal_identifiers.py
+        language: system
+        types: [text]
+
       - id: dependency-age
         name: dependency versions at least 14 days old
         entry: uv run python infra/checks/dependency_age.py

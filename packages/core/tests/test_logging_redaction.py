@@ -55,7 +55,7 @@ class TestMessagesAreReducedNotRendered:
     def test_an_s2_field_never_appears(self, output: io.StringIO) -> None:
         candidate = Candidate(
             tenant_id=uuid.uuid4(),
-            full_name="Dileep Kumar Salla",
+            full_name="Jordan A. Rivera",
             work_authorization=VISA,
             session_cookie="abc123",
         )
@@ -64,7 +64,7 @@ class TestMessagesAreReducedNotRendered:
 
         assert VISA not in rendered
         assert "abc123" not in rendered
-        assert "Dileep" not in rendered
+        assert "Jordan" not in rendered
         # The shape survives, so the line is still useful.
         assert line["candidate"]["message"] == "Candidate"  # type: ignore[index]
         assert line["candidate"]["full_name"] == "<str redacted>"  # type: ignore[index]

@@ -22,17 +22,17 @@ def header_of(text: str, links: tuple[str, ...] = ()) -> dict[str, str]:
 class TestContactDetails:
     def test_a_plain_header(self) -> None:
         fields = header_of(
-            "Dileep Kumar Salla\n"
-            "Dallas, TX | (469) 555-0134 | dileep@example.test\n"
-            "linkedin.com/in/dileep | github.com/dileep\n"
+            "Jordan A. Rivera\n"
+            "Portland, OR | (555) 014-2288 | jordan.rivera@example.com\n"
+            "linkedin.com/in/jordan-rivera-example | github.com/jordan-rivera-example\n"
         )
-        assert fields["full_name"] == "Dileep Kumar Salla"
-        assert fields["email"] == "dileep@example.test"
-        assert fields["phone"] == "(469) 555-0134"
-        assert fields["location_city"] == "Dallas"
-        assert fields["location_region"] == "TX"
-        assert fields["linkedin_url"] == "https://linkedin.com/in/dileep"
-        assert fields["github_url"] == "https://github.com/dileep"
+        assert fields["full_name"] == "Jordan A. Rivera"
+        assert fields["email"] == "jordan.rivera@example.com"
+        assert fields["phone"] == "(555) 014-2288"
+        assert fields["location_city"] == "Portland"
+        assert fields["location_region"] == "OR"
+        assert fields["linkedin_url"] == "https://linkedin.com/in/jordan-rivera-example"
+        assert fields["github_url"] == "https://github.com/jordan-rivera-example"
 
     def test_an_international_phone_number(self) -> None:
         assert header_of("Jane Doe\n+44 20 7946 0958\n")["phone"] == "+44 20 7946 0958"
@@ -57,12 +57,12 @@ class TestContactDetails:
 
 
 class TestStreetAddressesAreDropped:
-    HEADER = "Dileep Kumar Salla\n1234 N Maple Street, Apt 4B, Dallas, TX 75201\ndileep@example.test\n"
+    HEADER = "Jordan A. Rivera\n1234 N Maple Street, Apt 4B, Portland, OR 97201\njordan.rivera@example.com\n"
 
     def test_the_city_and_region_survive(self) -> None:
         fields = header_of(self.HEADER)
-        assert fields["location_city"] == "Dallas"
-        assert fields["location_region"] == "TX"
+        assert fields["location_city"] == "Portland"
+        assert fields["location_region"] == "OR"
 
     def test_no_field_holds_the_street(self) -> None:
         for value in header_of(self.HEADER).values():

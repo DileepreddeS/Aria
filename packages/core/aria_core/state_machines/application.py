@@ -42,7 +42,7 @@ class ApplicationState(StrEnum):
     VERIFYING = "verifying"
     """Submitted according to the Runner; looking for proof before we believe it."""
     SUBMITTED = "submitted"
-    """Only reachable with evidence and a receipt (PRODUCT_SPEC §1.5)."""
+    """Only reachable with evidence and a receipt (PRODUCT_SPEC \u00a71.5)."""
     FOLLOW_UP = "follow_up"
 
     # ---- outcomes

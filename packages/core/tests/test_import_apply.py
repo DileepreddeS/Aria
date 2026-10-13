@@ -53,8 +53,8 @@ pytestmark = pytest.mark.db
 
 TODAY = dt.date(2026, 10, 8)
 
-RESUME_ONE = """Dileep Kumar Salla
-dileep@example.test | github.com/dileep
+RESUME_ONE = """Jordan A. Rivera
+jordan.rivera@example.com | github.com/jordan-rivera-example
 
 EXPERIENCE
 Accenture (client: Carvana) - Software Engineer
@@ -63,7 +63,7 @@ Jun 2024 - Present
 - Cut p95 API latency by 30% by adding Redis caching
 
 EDUCATION
-BS Computer Science, University of Texas at Dallas
+BS Computer Science, Cascadia State University
 Aug 2020 - May 2024
 
 TECHNICAL SKILLS
@@ -72,8 +72,8 @@ Languages: Python, TypeScript
 
 #: The same career, written for a different kind of role. The employer and months
 #: match; one bullet is reworded and one is new.
-RESUME_TWO = """Dileep Kumar Salla
-dileep@example.test
+RESUME_TWO = """Jordan A. Rivera
+jordan.rivera@example.com
 
 EXPERIENCE
 Accenture - Software Engineer
@@ -82,7 +82,7 @@ Jun 2024 - Present
 - Wrote the deployment pipeline for three services
 
 PROJECTS
-ARIA - a job-search agent | github.com/dileep/aria
+ARIA - a job-search agent | github.com/jordan-rivera-example/aria
 - Built a deterministic resume importer in Python
 """
 
@@ -427,7 +427,7 @@ class TestTheAuditTrail:
     async def test_an_import_is_recorded(
         self, engine: AsyncEngine, tenant_a: TenantId, candidate_id: uuid.UUID, taxonomy: SkillTaxonomy
     ) -> None:
-        await run_import(engine, tenant_a, candidate_id, RESUME_ONE, taxonomy, actor_id="dileep")
+        await run_import(engine, tenant_a, candidate_id, RESUME_ONE, taxonomy, actor_id="jordan")
         async with tenant_transaction(engine, tenant_a) as session:
             events = await read_chain(session, tenant_a)
         imports = [event for event in events if event.action == AuditAction.GRAPH_IMPORTED.value]
@@ -448,7 +448,7 @@ class TestTheAuditTrail:
             assert isinstance(value, int) or key == "source", f"{key} carries {value!r}"
         serialised = str(event.payload)
         assert "React" not in serialised
-        assert "dileep@example.test" not in serialised
+        assert "jordan.rivera@example.com" not in serialised
 
 
 class TestTheApprovalQueueStaysReadable:
@@ -476,7 +476,7 @@ class TestTheApprovalQueueStaysReadable:
     ) -> None:
         # A newer email is news. Only an exact repeat is skipped.
         await run_import(engine, tenant_a, candidate_id, RESUME_ONE, taxonomy)
-        moved = RESUME_ONE.replace("dileep@example.test", "new.address@example.test")
+        moved = RESUME_ONE.replace("jordan.rivera@example.com", "new.address@example.test")
         again = await run_import(engine, tenant_a, candidate_id, moved, taxonomy)
         async with tenant_transaction(engine, tenant_a) as session:
             values = (
@@ -491,7 +491,7 @@ class TestTheApprovalQueueStaysReadable:
                 .scalars()
                 .all()
             )
-        assert set(values) == {"dileep@example.test", "new.address@example.test"}
+        assert set(values) == {"jordan.rivera@example.com", "new.address@example.test"}
         assert len(again.profile_field_ids) == 1
 
     async def test_the_merge_question_points_at_the_line(

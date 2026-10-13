@@ -23,8 +23,8 @@ __all__ = [
 ]
 
 RESUME_LINES = [
-    "Dileep Kumar Salla",
-    "Software Engineer | dileep@example.test | github.com/example",
+    "Jordan A. Rivera",
+    "Software Engineer | jordan.rivera@example.com | github.com/example",
     "",
     "EXPERIENCE",
     "Accenture (client: Carvana) - Software Engineer",

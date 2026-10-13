@@ -3,7 +3,7 @@
 
     Usage:  ./tasks.ps1 <task>
     Tasks:  setup, up, down, kms-init, keys-init, migrate, anchor, test, test-db, lint,
-            fmt, typecheck, control-chars, secrets, audit, check, gateway, api, seed-me,
+            fmt, typecheck, control-chars, pii, secrets, audit, check, gateway, api, seed-me,
             parser-image
 
     CI uses the Makefile. This file is for local development on Windows.
@@ -84,6 +84,9 @@ switch ($Task) {
     "control-chars" {
         Invoke-Step "no stray control characters" { uv run python infra/checks/no_control_characters.py }
     }
+    "pii" {
+        Invoke-Step "no real personal identifiers" { uv run python infra/checks/no_personal_identifiers.py }
+    }
     "secrets" {
         Invoke-Step "gitleaks" { gitleaks dir . --redact --verbose }
     }
@@ -95,6 +98,7 @@ switch ($Task) {
         & $PSCommandPath lint
         & $PSCommandPath typecheck
         & $PSCommandPath control-chars
+        & $PSCommandPath pii
         & $PSCommandPath test-db
         & $PSCommandPath secrets
     }

@@ -142,7 +142,7 @@ def decide(pages: Sequence[PageCensus], locked: str | None = None) -> tuple[Tria
         what = "a scanned image" if scanned else "a picture of text, or blank"
         return (
             Triage.NO_TEXT_LAYER,
-            f"this PDF has no text layer — it is {what}, so neither ARIA nor an applicant tracking "
+            f"this PDF has no text layer \u2014 it is {what}, so neither ARIA nor an applicant tracking "
             f"system can read it. Export a PDF from the document you edit. {_OTHER_DOORS}",
         )
     if not pages or characters / len(pages) < MIN_CHARACTERS_PER_PAGE:

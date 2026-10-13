@@ -156,7 +156,7 @@ class Settings(BaseSettings):
         if not address.is_loopback:
             raise ValueError(
                 f"the LLM gateway may only bind loopback addresses, got {value!r}. "
-                "It is an internal service and is not exposed (SECURITY.md §2.5)."
+                "It is an internal service and is not exposed (SECURITY.md \u00a72.5)."
             )
         return value
 

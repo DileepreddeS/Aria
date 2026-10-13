@@ -60,7 +60,7 @@ def _print_lines(payload: dict[str, Any], key: str = "summary") -> None:
 
 def _truncate(text: str, width: int = _TEXT_WIDTH) -> str:
     collapsed = " ".join(text.split())
-    return collapsed if len(collapsed) <= width else collapsed[: width - 1] + "…"
+    return collapsed if len(collapsed) <= width else collapsed[: width - 1] + "\u2026"
 
 
 # ---------------------------------------------------------------------- commands
@@ -328,7 +328,7 @@ def build_parser() -> argparse.ArgumentParser:
     facts.add_argument("--status", default="draft", choices=["draft", "approved", "rejected"])
     facts.set_defaults(handler=_cmd_facts)
 
-    approve = subparsers.add_parser("approve", help="approve something — this makes it a claim")
+    approve = subparsers.add_parser("approve", help="approve something \u2014 this makes it a claim")
     approve.add_argument("fact_id", metavar="id")
     approve.add_argument(
         "--kind",

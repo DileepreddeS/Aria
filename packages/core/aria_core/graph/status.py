@@ -72,7 +72,7 @@ class ExperienceBucket(StrEnum):
     """Salaried and contract work. What "years of experience" means by default."""
     PART_TIME = "part_time"
     """Paid work alongside something else: an on-campus job, a graduate or research
-    assistantship, a few hours a week. Real employment, and not a full-time year — a
+    assistantship, a few hours a week. Real employment, and not a full-time year \u2014 a
     two-year assistantship at ten hours a week is not two years of experience. Counted
     when a question asks about work experience generally, or about part-time work."""
     INTERNSHIP = "internship"

@@ -35,7 +35,7 @@ def assert_parser_isolation(settings: Settings) -> None:
         if not settings.is_development:
             raise ParserIsolationUnavailable(
                 f"parser_isolation=process with env={settings.env}. Uploads from real users are "
-                "parsed in a container (SECURITY.md §7)."
+                "parsed in a container (SECURITY.md \u00a77)."
             )
         return
     status = image_status(settings.parser_image)
@@ -56,7 +56,7 @@ def run_preflight_checks(settings: Settings) -> None:
     if "aria_migrate" in dsn or "aria_owner" in dsn:
         raise RuntimeError(
             "the API's database URL names a privileged role. It connects as aria_app, which owns "
-            "nothing and is subject to row-level security (SECURITY.md §2.4)."
+            "nothing and is subject to row-level security (SECURITY.md \u00a72.4)."
         )
 
     # A scanner that does not scan may only be used in dev/ci. Without this, a

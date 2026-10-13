@@ -39,6 +39,11 @@ jobs:
       # A literal control byte is invisible in a diff and in review, so it is caught
       # here rather than by someone noticing a path behaving oddly.
       - run: make control-chars
+      # The denylist is personal data, so it is a repository secret rather than a file.
+      # Without it the step fails: set ARIA_PII_DENYLIST before relying on CI.
+      - run: make pii
+        env:
+          ARIA_PII_DENYLIST: ${{ secrets.ARIA_PII_DENYLIST }}
 
   typecheck:
     runs-on: ubuntu-24.04

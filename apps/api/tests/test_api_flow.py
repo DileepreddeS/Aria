@@ -37,8 +37,8 @@ pytestmark = pytest.mark.db
 
 TOKEN = "test-token-not-a-secret"
 
-RESUME = b"""Dileep Kumar Salla
-Dallas, TX | (469) 555-0134 | dileep@example.test
+RESUME = b"""Jordan A. Rivera
+Portland, OR | (555) 014-2288 | jordan.rivera@example.com
 
 EXPERIENCE
 Accenture - Software Engineer
@@ -52,7 +52,7 @@ Summer 2023
 - Automated a manual claims report with Python
 
 EDUCATION
-BS Computer Science, University of Texas at Dallas
+BS Computer Science, Cascadia State University
 Aug 2020 - May 2024
 
 TECHNICAL SKILLS

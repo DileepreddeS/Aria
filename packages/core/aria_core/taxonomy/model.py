@@ -42,7 +42,7 @@ class SkillCategory(StrEnum):
     INFRA = "infra"
     TOOLING = "tooling"
     PRACTICE = "practice"
-    """Testing, accessibility, code review — things done rather than used."""
+    """Testing, accessibility, code review \u2014 things done rather than used."""
     DOMAIN = "domain"
     """Distributed systems, computer vision, payments."""
 

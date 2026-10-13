@@ -130,7 +130,7 @@ def detect_type(content: bytes, *, allow_docx: bool = False) -> DetectedType:
             if not allow_docx:
                 raise UnsupportedFileType(
                     "this is a Word document, and ARIA is not accepting .docx at the moment",
-                    "Open it in Word or Google Docs and use Save As (or Download As) PDF — the "
+                    "Open it in Word or Google Docs and use Save As (or Download As) PDF \u2014 the "
                     "PDF keeps your LinkedIn and GitHub links clickable. ARIA accepts PDF and "
                     "plain text.",
                 )

@@ -1,6 +1,6 @@
 """Importing a second resume must not double the graph — or merge two claims into one.
 
-Dileep imports two base resumes, so the same achievement arrives twice in different
+The founder imports two base resumes, so the same achievement arrives twice in different
 words. The rule that matters most here is the one that stops a merge: **two facts
 whose numbers differ are never duplicates.** "Cut latency by 30%" and "cut latency by
 60%" are nearly the same sentence and are not the same claim, and merging them would

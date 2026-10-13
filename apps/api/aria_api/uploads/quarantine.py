@@ -36,7 +36,7 @@ class UploadTooLarge(Exception):
 
     def __init__(self, limit_bytes: int) -> None:
         super().__init__(
-            f"the file is larger than the {limit_bytes // (1024 * 1024)} MB limit (SECURITY.md §7)"
+            f"the file is larger than the {limit_bytes // (1024 * 1024)} MB limit (SECURITY.md \u00a77)"
         )
         self.limit_bytes = limit_bytes
 

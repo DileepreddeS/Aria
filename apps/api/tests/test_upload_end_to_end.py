@@ -30,8 +30,8 @@ from aria_document_parser.client import InProcessDocumentParser
 pytestmark = pytest.mark.db
 
 RESUME_LINES = [
-    "Dileep Kumar Salla",
-    "dileep@example.test",
+    "Jordan A. Rivera",
+    "jordan.rivera@example.com",
     "EXPERIENCE",
     "Accenture - Software Engineer, Jun 2024 - Present",
     "Built 20+ React components used by 4 teams",
@@ -547,8 +547,8 @@ class TestTheAuditTrail:
             events = await read_chain(session, tenant_a)
 
         rendered = " ".join(f"{event.payload}{event.reason}" for event in events)
-        assert "Dileep" not in rendered
-        assert "dileep@example.test" not in rendered
+        assert "Jordan" not in rendered
+        assert "jordan.rivera@example.com" not in rendered
         assert "React components" not in rendered
 
     async def test_the_filename_is_recorded_but_only_its_length_is_audited(
@@ -565,7 +565,7 @@ class TestTheAuditTrail:
             candidate_id,
             store,
             _docx(RESUME_LINES),
-            filename="Dileep_Salla_Resume_2026.docx",
+            filename="Jordan_Rivera_Resume_2026.docx",
             allow_docx=True,
         )
 
@@ -573,10 +573,10 @@ class TestTheAuditTrail:
             row = (await session.execute(select(Upload))).scalars().one()
             events = await read_chain(session, tenant_a)
 
-        assert row.original_filename == "Dileep_Salla_Resume_2026.docx"
+        assert row.original_filename == "Jordan_Rivera_Resume_2026.docx"
         received = next(event for event in events if event.action == "upload.received")
-        assert received.payload["filename_length"] == len("Dileep_Salla_Resume_2026.docx")
-        assert "Dileep" not in str(received.payload)
+        assert received.payload["filename_length"] == len("Jordan_Rivera_Resume_2026.docx")
+        assert "Jordan" not in str(received.payload)
 
 
 class TestDuplicates:
@@ -661,7 +661,7 @@ class TestATwoColumnPdfIsRecoveredNotMisread:
         "PyTorch, scikit-learn",
         "Git, GitHub Actions",
         "Accessibility, WCAG",
-        "Dallas, TX",
+        "Portland, OR",
     ]
 
     async def test_the_upload_records_which_pages_were_rebuilt(

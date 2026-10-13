@@ -88,9 +88,9 @@ class DatePrecision(StrEnum):
 
     MONTH = "month"
     YEAR = "year"
-    """"2021" — the year is known, the month is not. Never assumed to be January."""
+    """"2021" \u2014 the year is known, the month is not. Never assumed to be January."""
     SEASON = "season"
-    """"Summer 2023" — a season is not a month, and its months differ by hemisphere."""
+    """"Summer 2023" \u2014 a season is not a month, and its months differ by hemisphere."""
     PRESENT = "present"
     """Still going. Usable as an end; :class:`MonthSpan` leaves it open."""
     ABSENT = "absent"

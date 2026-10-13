@@ -95,7 +95,7 @@ class CompletionRequest(AriaMessage):
         if unexpected:
             raise ValueError(
                 f"purpose {self.purpose.value} does not send {unexpected}; allowed keys are "
-                f"{sorted(allowed)} (SECURITY.md §13 data minimisation)"
+                f"{sorted(allowed)} (SECURITY.md \u00a713 data minimisation)"
             )
         return self
 

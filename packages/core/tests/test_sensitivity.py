@@ -30,7 +30,7 @@ class Envelope(AriaMessage):
 def _contact() -> Contact:
     return Contact(
         tenant_id=uuid.uuid4(),
-        full_name="Dileep Kumar Salla",
+        full_name="Jordan A. Rivera",
         visa_status="F-1 OPT, EAD valid to 2027-05-31",
     )
 
@@ -85,7 +85,7 @@ class TestSensitiveValuesDoNotLeakThroughSerialization:
 
         rendered = repr(summary)
         assert "F-1 OPT" not in rendered
-        assert "Dileep" not in rendered
+        assert "Jordan" not in rendered
 
     def test_fields_at_or_above_finds_what_must_not_be_dispatched(self) -> None:
         contact = _contact()

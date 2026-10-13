@@ -120,7 +120,7 @@ class TestDocx:
     def test_a_real_docx_yields_its_paragraphs_in_order(self) -> None:
         result = extract_docx(make_docx())
         lines = [line for line in result.text.splitlines() if line.strip()]
-        assert lines[0] == "Dileep Kumar Salla"
+        assert lines[0] == "Jordan A. Rivera"
         assert "Built 20+ React components used by 4 teams" in lines
 
     def test_tabs_and_breaks_survive(self) -> None:
@@ -208,7 +208,7 @@ class TestDocx:
     def test_header_text_is_reported_and_left_out_of_the_body(self) -> None:
         # Contact details in a header are often invisible to an ATS
         # (RESUME_ENGINE §1.8), so their presence is worth saying out loud.
-        header = docx_document_xml(["dileep@example.test | +1 555 0100"]) + " " * 300
+        header = docx_document_xml(["jordan.rivera@example.com | +1 555 0100"]) + " " * 300
         result = extract_docx(make_docx(extra_parts={"word/header1.xml": header}))
         assert result.has_header_or_footer_text is True
         assert "header or footer" in result.detail
@@ -308,7 +308,7 @@ class TestTheIsolatedWorker:
 
     async def test_a_docx_parses_through_a_subprocess(self) -> None:
         result = await SubprocessDocumentParser().parse(make_docx(), "docx")
-        assert "Dileep Kumar Salla" in result.text
+        assert "Jordan A. Rivera" in result.text
 
     async def test_a_refusal_crosses_the_boundary_as_a_refusal(self) -> None:
         # A crashed worker and a refused file must be impossible to confuse.
@@ -442,8 +442,8 @@ class TestLinkAnnotations:
         assert "https://github.com/example" in result.text[heading_at:]
 
     def test_a_mailto_link_is_kept_because_it_carries_an_email(self) -> None:
-        result = extract_pdf(make_pdf_with_links(["mailto:dileep@example.test"]))
-        assert "mailto:dileep@example.test" in result.links
+        result = extract_pdf(make_pdf_with_links(["mailto:jordan.rivera@example.com"]))
+        assert "mailto:jordan.rivera@example.com" in result.links
 
     @pytest.mark.parametrize(
         "hostile",

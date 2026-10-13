@@ -57,7 +57,7 @@ class TestTypeComesFromContent:
             (b"%PDF-1.7\n...", DetectedType.PDF),
             (b"\x89PNG\r\n\x1a\n\x00\x00", DetectedType.PNG),
             (b"\xff\xd8\xff\xe0JFIF", DetectedType.JPEG),
-            (b"Dileep Kumar Salla\nSoftware Engineer\n", DetectedType.TXT),
+            (b"Jordan A. Rivera\nSoftware Engineer\n", DetectedType.TXT),
         ],
     )
     def test_each_accepted_type_is_recognised(self, content: bytes, expected: DetectedType) -> None:

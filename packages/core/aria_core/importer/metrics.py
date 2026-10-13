@@ -241,7 +241,7 @@ _FROM_TO_GAP = re.compile(r"\s*(?:\w+\s+){0,2}(?:to|\u2192|[-\u2013])\s*(?:\w+\s
 #: neighbours in a character class, and a regex is the worst place to be guessing
 #: which one is on the page.
 _NUMBER = re.compile(
-    r"(?:(?P<qualifier>[A-Za-z]{0,2})(?P<currency>[$€£¥])\s?)?"
+    r"(?:(?P<qualifier>[A-Za-z]{0,2})(?P<currency>[$\u20ac\u00a3\u00a5])\s?)?"
     r"(?P<digits>\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)"
     # No apostrophes: a curly or straight apostrophe after a number is never a unit,
     # so leaving it out of the class makes "the 90s" fall through to the bare-number

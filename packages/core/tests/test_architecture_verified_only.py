@@ -100,7 +100,7 @@ class TestOnlyTheRepositoryReadsFacts:
 
         assert not violations, (
             "facts may only be read through aria_core.graph.facts, which filters on approval "
-            "status — otherwise an unreviewed imported bullet can reach a resume:\n  "
+            "status \u2014 otherwise an unreviewed imported bullet can reach a resume:\n  "
             + "\n  ".join(violations)
         )
 

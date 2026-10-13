@@ -192,7 +192,7 @@ def extract_docx(content: bytes, limits: ParseLimits | None = None) -> DocxExtra
     notes = [f"{len(paragraphs)} paragraph(s), {len(text)} characters"]
     if header_footer_text:
         notes.append(
-            "text found in a header or footer and not imported — an ATS often cannot read "
+            "text found in a header or footer and not imported \u2014 an ATS often cannot read "
             "those, so check nothing important lives only there"
         )
     if external:

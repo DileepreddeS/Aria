@@ -319,13 +319,13 @@ class ImportPlan:
             f"{len(self.experiences)} role(s), "
             f"{len(self.educations)} education entr(y/ies), "
             f"{len(self.projects)} project(s), "
-            f"{len(self.all_facts)} fact(s) — all as drafts for you to approve",
+            f"{len(self.all_facts)} fact(s) \u2014 all as drafts for you to approve",
         ]
         for experience in self.experiences:
             when = experience.date_text or "dates unknown"
             lines.append(
                 f"  line {experience.source_line}: {experience.label()} "
-                f"[{experience.kind.value}] {when} — {len(experience.facts)} bullet(s)"
+                f"[{experience.kind.value}] {when} \u2014 {len(experience.facts)} bullet(s)"
             )
         for education in self.educations:
             lines.append(f"  line {education.source_line}: {education.label()} {education.date_text}")
@@ -338,7 +338,7 @@ class ImportPlan:
         if self.unknown_skills:
             lines.append(f"  not in the taxonomy yet: {', '.join(self.unknown_skills)}")
         for detail in self.dropped:
-            lines.append(f"  dropped from line {detail.source_line}: {detail.what} — {detail.reason}")
+            lines.append(f"  dropped from line {detail.source_line}: {detail.what} \u2014 {detail.reason}")
         for block in self.unparsed:
             where = (
                 f"line {block.first_line}"

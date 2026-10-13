@@ -88,7 +88,7 @@ class AriaMessage(BaseModel):
         if unclassified:
             raise UnclassifiedFieldError(
                 f"{cls.__module__}.{cls.__qualname__}: field(s) {sorted(unclassified)} do not declare a "
-                f"Sensitivity. Annotate them, e.g. `x: Annotated[str, Sensitivity.S1]` (SECURITY.md §3)."
+                f"Sensitivity. Annotate them, e.g. `x: Annotated[str, Sensitivity.S1]` (SECURITY.md \u00a73)."
             )
 
     @model_validator(mode="after")

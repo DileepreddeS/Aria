@@ -59,7 +59,7 @@ Summer 2023
 - Automated a manual claims report with Python, saving 6 hours a week
 - Shipped an internal dashboard in React
 
-University of Texas at Dallas - Graduate Research Assistant
+Cascadia State University - Graduate Research Assistant
 Sept 2022 - May 2023
 - Fine-tuned a model for defect detection
 """

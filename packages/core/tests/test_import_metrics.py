@@ -1,6 +1,6 @@
 """The metric extractor must never report a number that is not a result.
 
-Dileep's review note drives this file: the extractor "must not treat years or version
+The founder's review note drives this file: the extractor "must not treat years or version
 numbers (YOLO11m, Llama-3-8B, WCAG 2.1, GPT-4o) as metrics and must capture baselines".
 Each of those four is a named test below, because a version number presented as an
 achievement is the shortest path from a real resume to an untrue one.
@@ -194,8 +194,8 @@ class TestCurrency:
             ("Saved $120K a year", "$120K"),
             ("Drove $500K in savings", "$500K"),
             ("Cut spend by $2M", "$2M"),
-            ("Raised £120K from investors", "£120K"),
-            ("Secured €2.5M in funding", "€2.5M"),
+            ("Raised \u00a3120K from investors", "\u00a3120K"),
+            ("Secured \u20ac2.5M in funding", "\u20ac2.5M"),
             ("Returned $120k to the business", "$120k"),
             ("Booked C$500K of revenue", "C$500K"),
             ("Won US$1.2M in contracts", "US$1.2M"),

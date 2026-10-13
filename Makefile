@@ -1,5 +1,5 @@
 # CI task definitions. Local development on Windows uses ./tasks.ps1.
-.PHONY: install lint typecheck test secrets sast audit control-chars parser-image ci
+.PHONY: install lint typecheck test secrets sast audit control-chars pii parser-image ci
 
 install:
 	uv sync --all-packages --frozen
@@ -27,6 +27,12 @@ parser-image:
 control-chars:
 	uv run python infra/checks/no_control_characters.py
 
+# A real person's identifiers anywhere in the repository. The denylist comes from the
+# ARIA_PII_DENYLIST secret in CI and private/pii-denylist.txt locally; without one
+# the check fails rather than passing unchecked.
+pii:
+	uv run python infra/checks/no_personal_identifiers.py
+
 secrets:
 	gitleaks dir . --redact --verbose --exit-code 1
 
@@ -39,4 +45,4 @@ audit:
 	uv run pip-audit
 	uv run python infra/checks/dependency_age.py
 
-ci: lint typecheck control-chars test
+ci: lint typecheck control-chars pii test

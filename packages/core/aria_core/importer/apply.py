@@ -162,7 +162,7 @@ class ImportOutcome:
                 f"  {self.rejected_again} bullet(s) matched something you rejected before, so I left them out"
             )
         for label, question in self.held_back:
-            lines.append(f"  held back: {label} — {question.prompt}")
+            lines.append(f"  held back: {label} \u2014 {question.prompt}")
         for proposal in self.merge_proposals:
             lines.append(f"  possible duplicate ({proposal.score:.0%}): {proposal.new_text[:60]!r}")
         for question in self.questions:

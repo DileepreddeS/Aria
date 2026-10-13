@@ -64,7 +64,10 @@ class QuestionTemplate:
 #: — not "tell me more about yourself", which produces prose nobody can verify.
 ENRICHMENT_PROMPTS: dict[str, Prompt] = {
     QuestionTemplate.MISSING_METRIC: Prompt(
-        text='You wrote "{text}". Do you know a number for it — how many, how much faster, how much saved?',
+        text=(
+            'You wrote "{text}". Do you know a number for it \u2014 '
+            "how many, how much faster, how much saved?"
+        ),
         why=(
             "A bullet with a number survives scrutiny in a way one without does not, and "
             "a number you supply is the only kind ARIA will ever print. Your answer "
@@ -98,12 +101,12 @@ PROFILE_FIELD_PROMPTS: dict[ProfileFieldKind, Prompt] = {
     ProfileFieldKind.FULL_NAME: Prompt(
         text="What name should applications use for you?",
         why="It goes at the top of every resume and in every form.",
-        example='"Dileep Kumar Salla"',
+        example='"Jordan A. Rivera"',
     ),
     ProfileFieldKind.EMAIL: Prompt(
         text="Which email address should employers reply to?",
         why="Every application asks for one, and ARIA will not invent it.",
-        example='"dileep@example.test"',
+        example='"jordan.rivera@example.com"',
     ),
     ProfileFieldKind.PHONE: Prompt(
         text="What phone number should applications use?",
@@ -117,9 +120,9 @@ PROFILE_FIELD_PROMPTS: dict[ProfileFieldKind, Prompt] = {
         text="Which city are you based in?",
         why=(
             "Used to match roles by location and to answer the forms that ask. City and "
-            "region only — ARIA has no field for a street address and does not keep one."
+            "region only \u2014 ARIA has no field for a street address and does not keep one."
         ),
-        example='"Dallas"',
+        example='"Portland"',
     ),
     ProfileFieldKind.LOCATION_REGION: Prompt(
         text="Which state or region?",
@@ -153,7 +156,7 @@ MOTIVATION_PROMPTS: dict[MotivationKind, Prompt] = {
         example='"Small, with code review that is actually read"',
     ),
     MotivationKind.COMPANY_PREFERENCE: Prompt(
-        text="What kind of company are you looking for — size, stage, domain?",
+        text="What kind of company are you looking for \u2014 size, stage, domain?",
         why="Filters the job search, and answers 'why us?' without flattery.",
         example='"Series B to D, anything but adtech"',
     ),

@@ -1,6 +1,6 @@
 """What "graph complete" means, as a set of checks that pass or fail.
 
-Dileep asked for a completeness report that defines complete **measurably**. A
+The founder asked for a completeness report that defines complete **measurably**. A
 definition nobody can check is not a gate, and "the graph looks good" is how a product
 ends up applying for jobs with half a resume.
 

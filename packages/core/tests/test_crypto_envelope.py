@@ -117,7 +117,7 @@ class TestFieldEncryption:
 
     def test_unicode_survives(self, cipher: EnvelopeCipher, ref: FieldRef) -> None:
         key, _ = cipher.create_data_key()
-        value = "Hispanic/Latino — decline to self-identify ✓"
+        value = "Hispanic/Latino \u2014 decline to self-identify \u2713"
         assert cipher.decrypt(key, ref, cipher.encrypt(key, ref, value)) == value
 
 

@@ -86,7 +86,7 @@ def test_member_imports_only_what_it_declares(member: Path) -> None:
         if top != own and top not in _declared(member)
     }
     assert not undeclared, (
-        f"{own} imports first-party packages its pyproject.toml does not declare — this works "
+        f"{own} imports first-party packages its pyproject.toml does not declare \u2014 this works "
         f"inside the workspace and breaks when {own} is installed alone: "
         + "; ".join(f"{top} at {', '.join(places)}" for top, places in sorted(undeclared.items()))
     )

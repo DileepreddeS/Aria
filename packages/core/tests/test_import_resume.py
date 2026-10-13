@@ -1,6 +1,6 @@
 """Reading a whole resume: roles, degrees, projects, skills — and the questions.
 
-The resume in :data:`RESUME` is shaped like Dileep's own: a consultancy role with a
+The resume in :data:`RESUME` is shaped like the founder's own: a consultancy role with a
 client, an internship, an assistantship whose pay status only he knows, a project, a
 degree with a GPA, a skills list containing one term the taxonomy lacks, and a section
 heading the importer has never heard of. Each of those exercises one refusal.
@@ -27,8 +27,8 @@ from aria_core.taxonomy.model import SkillTaxonomy
 
 TODAY = dt.date(2026, 10, 8)
 
-RESUME = """Dileep Kumar Salla
-Dallas, TX | (469) 555-0134 | dileep@example.test | linkedin.com/in/dileep
+RESUME = """Jordan A. Rivera
+Portland, OR | (555) 014-2288 | jordan.rivera@example.com | linkedin.com/in/jordan-rivera-example
 
 SUMMARY
 Software engineer focused on building accessible, fast web applications end to end.
@@ -43,16 +43,16 @@ Zelis - Software Engineering Intern
 May 2023 - Aug 2023
 - Automated a manual claims report with Python, saving 6 hours a week
 
-University of Texas at Dallas - Graduate Research Assistant
+Cascadia State University - Graduate Research Assistant
 Sept 2022 - May 2023
 - Fine-tuned YOLO11m for defect detection, reaching 94.2% accuracy
 
 PROJECTS
-ARIA - a job-search agent that builds truthful resumes | github.com/dileep/aria
+ARIA - a job-search agent that builds truthful resumes | github.com/jordan-rivera-example/aria
 - Built a deterministic resume importer in Python with Postgres
 
 EDUCATION
-BS Computer Science, University of Texas at Dallas
+BS Computer Science, Cascadia State University
 Aug 2020 - May 2024
 GPA: 3.8/4.0
 - Relevant Coursework: Algorithms, Databases, Machine Learning
@@ -145,7 +145,7 @@ class TestRoles:
 
 class TestTheQuestionsItAsks:
     def test_an_assistantship_asks_whether_it_was_paid(self, plan: ImportPlan) -> None:
-        # Paid means part-time employment; unpaid means project time. Only Dileep
+        # Paid means part-time employment; unpaid means project time. Only the candidate
         # knows, and the two count differently in every answer.
         paid = [q for q in plan.all_questions if q.kind is QuestionKind.PAID_OR_UNPAID]
         assert len(paid) == 1
@@ -189,7 +189,7 @@ class TestTheQuestionsItAsks:
 class TestEducationAndProjects:
     def test_the_degree_and_school_are_separated(self, plan: ImportPlan) -> None:
         (education,) = plan.educations
-        assert education.school == "University of Texas at Dallas"
+        assert education.school == "Cascadia State University"
         assert "Computer Science" in education.degree
 
     def test_the_gpa_is_kept_as_written(self, plan: ImportPlan) -> None:
@@ -204,7 +204,7 @@ class TestEducationAndProjects:
     def test_a_project_keeps_its_name_and_repository(self, plan: ImportPlan) -> None:
         (project,) = plan.projects
         assert project.name == "ARIA"
-        assert project.repository_url == "https://github.com/dileep/aria"
+        assert project.repository_url == "https://github.com/jordan-rivera-example/aria"
         assert project.kind is ProjectKind.OPEN_SOURCE
 
     def test_a_project_description_is_imported_as_a_claim(self, plan: ImportPlan) -> None:
@@ -315,7 +315,7 @@ class TestMergedColumns:
     MERGED = (
         "EXPERIENCE EDUCATION\n"
         "Accenture - Software Engineer BS Computer Science\n"
-        "Jun 2024 - Present University of Texas at Dallas\n"
+        "Jun 2024 - Present Cascadia State University\n"
         "- Built 20+ React components Aug 2020 - May 2024\n"
     )
 
@@ -368,11 +368,7 @@ class TestEducationNeedsASchoolOrADegree:
         # A resume that puts the GPA on a fourth line pushes it past the head of its
         # own entry. It belongs to the degree above, not to a row of its own.
         text = (
-            "EDUCATION\n"
-            "BS Computer Science\n"
-            "University of Texas at Dallas\n"
-            "Aug 2020 - May 2024\n"
-            "GPA: 3.8/4.0\n"
+            "EDUCATION\nBS Computer Science\nCascadia State University\nAug 2020 - May 2024\nGPA: 3.8/4.0\n"
         )
         plan = parse_resume_text(text, taxonomy, today=TODAY)
         (education,) = plan.educations

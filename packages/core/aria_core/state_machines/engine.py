@@ -172,7 +172,7 @@ async def transition_application(
     if to_state is S.SUBMITTED and not evidence_ref:
         raise EvidenceRequired(
             "SUBMITTED needs evidence_ref: a confirmation page, URL or email. "
-            'ARIA does not record "submitted" on a claim (PRODUCT_SPEC §1.5).'
+            'ARIA does not record "submitted" on a claim (PRODUCT_SPEC \u00a71.5).'
         )
 
     await session.execute(

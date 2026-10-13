@@ -1,6 +1,6 @@
 """A plain-text notes file is a list of skills, and nothing more.
 
-Dileep asked for his ARIA v1 skills notes to be importable as a ``.txt`` source. The
+The founder asked for their ARIA v1 skills notes to be importable as a ``.txt`` source. The
 risk is that running the resume parser over it would find the word "experience" in one
 of his own headings and start inventing roles out of a word list.
 
