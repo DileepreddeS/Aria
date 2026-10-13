@@ -61,6 +61,10 @@ _CONTINUATION_GAP = 1.0
 #: A hanging indent: wrapped lines start this many font sizes right of the first.
 _HANGING_MIN = 0.8
 _HANGING_MAX = 3.0
+#: Two line starts are the same x position within this many font sizes. Tighter than
+#: _CONTINUATION_ALIGN: a bullet column 4pt right of the entry's edge must not merge
+#: with the edge itself.
+_SAME_X = 0.2
 #: A date segment is short: "Feb 2024 - Jul 2025", "Expected Dec 2026".
 _MAX_DATE_WORDS = 6
 
@@ -200,15 +204,47 @@ def _hanging_indents(lines: list[ClassifiedLine]) -> list[ClassifiedLine]:
     Inside an entry, a plain line followed closely by lines indented a little to its
     right is a bullet whose text wraps: x_marker for the first line, x_text for the
     rest. Restricted to lines under an entry header and not bold, so a location or a
-    header's second line is never read as a bullet. A one-line bullet with neither a
-    marker nor a wrap shows nothing geometric to tell it from a plain line, and stays
-    TEXT; assembly reports what it could not place.
+    header's second line is never read as a bullet.
+
+    A wrap proves where the column's x_marker is, and §5.3 makes every line starting
+    there a new bullet, wrapped or not: a one-line bullet at x_marker is a bullet, in
+    an entry where nothing wraps as much as in one where something does. That second
+    pass needs x_marker clearly right of the entry header's own edge. Where bullets sit
+    flush with the header, geometry cannot tell them from a location line, and they
+    stay TEXT for assembly to report (RESUME_ENGINE §5.9 measures that case).
     """
     result = list(lines)
+    markers: dict[tuple[int, int], list[float]] = {}
+    for position, following in _wrapped_runs(result):
+        current = result[position]
+        result[position] = ClassifiedLine(current.line, LineClass.BULLET)
+        for index in following:
+            result[index] = ClassifiedLine(result[index].line, LineClass.CONTINUATION)
+        markers.setdefault((current.line.page, current.line.column), []).append(current.line.x0)
+
+    header_x: float | None = None
+    for position, current in enumerate(result):
+        if current.kind is LineClass.SECTION_HEADER:
+            header_x = None
+        elif current.kind is LineClass.ENTRY_HEADER:
+            header_x = current.line.x0
+        if header_x is None or current.kind is not LineClass.TEXT or current.line.bold:
+            continue
+        line = current.line
+        tolerance = _SAME_X * line.font_size
+        at_marker = any(abs(line.x0 - x) <= tolerance for x in markers.get((line.page, line.column), ()))
+        if at_marker and line.x0 - header_x > tolerance:
+            result[position] = ClassifiedLine(line, LineClass.BULLET)
+    return result
+
+
+def _wrapped_runs(lines: list[ClassifiedLine]) -> list[tuple[int, list[int]]]:
+    """Each plain line inside an entry that wraps onto indented lines, with those lines."""
+    runs: list[tuple[int, list[int]]] = []
     in_entry = False
     position = 0
-    while position < len(result):
-        current = result[position]
+    while position < len(lines):
+        current = lines[position]
         if current.kind is LineClass.SECTION_HEADER:
             in_entry = False
         elif current.kind is LineClass.ENTRY_HEADER:
@@ -219,8 +255,8 @@ def _hanging_indents(lines: list[ClassifiedLine]) -> list[ClassifiedLine]:
         following = position + 1
         wrapped: list[int] = []
         indent: float | None = None
-        while following < len(result) and result[following].kind is LineClass.TEXT:
-            previous_line, line = result[following - 1].line, result[following].line
+        while following < len(lines) and lines[following].kind is LineClass.TEXT:
+            previous_line, line = lines[following - 1].line, lines[following].line
             step = line.x0 - current.line.x0
             size = current.line.font_size
             close = 0 <= line.top - previous_line.bottom <= _CONTINUATION_GAP * size
@@ -233,8 +269,6 @@ def _hanging_indents(lines: list[ClassifiedLine]) -> list[ClassifiedLine]:
             wrapped.append(following)
             following += 1
         if wrapped:
-            result[position] = ClassifiedLine(current.line, LineClass.BULLET)
-            for index in wrapped:
-                result[index] = ClassifiedLine(result[index].line, LineClass.CONTINUATION)
+            runs.append((position, wrapped))
         position = following if wrapped else position + 1
-    return result
+    return runs

@@ -27,7 +27,13 @@ from aria_core.taxonomy.loader import load_default_taxonomy
 from aria_document_parser.pdf import extract_pdf
 
 FIXTURES = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "resumes"
-GATE = ["clean_inline_block", "float_scrambled", "markerless_bullets", "per_glyph_contact"]
+GATE = [
+    "clean_inline_block",
+    "float_scrambled",
+    "markerless_bullets",
+    "no_marker_bullets",
+    "per_glyph_contact",
+]
 TODAY = dt.date(2026, 10, 12)
 
 
@@ -146,6 +152,8 @@ def _flat_text(name: str) -> str:
         ("float_scrambled", "do not have the shape of an entry"),
         # Every bullet glued to the line above it: eleven roles in a row with none.
         ("markerless_bullets", "in a row have no bullets"),
+        # Wrapped tails and one-line bullets read as roles: "25%" as an employer.
+        ("no_marker_bullets", "in a row have no bullets"),
     ],
 )
 def test_the_flat_text_of_a_hard_fixture_is_refused_not_imported(name: str, gate: str) -> None:

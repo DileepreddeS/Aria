@@ -5,7 +5,7 @@
   "pathology": "CSS list-style: disc; no bullet glyph reaches the text layer",
   "must_fail": false,
   "fail_reason": null,
-  "notes": "The hanging-indent rule (5.3) must group bullets without a marker glyph. A glyph-only rule emits wrapped continuation lines as separate entries.",
+  "notes": "Tests drawn markers, not the hanging-indent rule. Chromium renders CSS list-style discs as vector shapes, 27 of them, one beside each bullet (22 on page 1, 5 on page 2), and Stage 0 reads each as a drawn bullet marker. A glyph-only rule emits wrapped continuation lines as separate entries. The hanging-indent rule (RESUME_ENGINE 5.3) is exercised by no_marker_bullets.pdf. Verified 2026-10-12.",
   "contact_line": "(555) 014-2288 | jordan.rivera@example.com | linkedin.com/in/jordan-rivera-example | github.com/jordan-rivera-example | Portland, OR",
   "entries": [
     {

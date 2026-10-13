@@ -24,7 +24,13 @@ from aria_document_parser.lines import (
 )
 
 FIXTURES = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "resumes"
-GATE_FIXTURES = ["clean_inline_block", "float_scrambled", "markerless_bullets", "per_glyph_contact"]
+GATE_FIXTURES = [
+    "clean_inline_block",
+    "float_scrambled",
+    "markerless_bullets",
+    "no_marker_bullets",
+    "per_glyph_contact",
+]
 
 
 def _lines(content: bytes, *, ink: bool = True) -> tuple[list[LayoutLine], WeightSource, int]:
@@ -72,7 +78,9 @@ class TestTheGateFixtures:
         lines, _, _ = _lines((FIXTURES / f"{name}.pdf").read_bytes())
         entries = _truth(name)["entries"]
         assert isinstance(entries, list)
-        assert sum(1 for line in lines if line.marker) == sum(entry["bullet_count"] for entry in entries)
+        # no_marker_bullets has none, glyph or drawn: its bullets are found by indent alone.
+        expected = 0 if name == "no_marker_bullets" else sum(entry["bullet_count"] for entry in entries)
+        assert sum(1 for line in lines if line.marker) == expected
 
     def test_list_style_bullets_are_read_from_the_shape_beside_them(self) -> None:
         # No marker glyph and no indent difference: the drawn circle is the only signal.

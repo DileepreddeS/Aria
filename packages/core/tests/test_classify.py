@@ -186,6 +186,52 @@ class TestBulletsAndTheirTails:
         kinds = _kinds(header, first, wrap, second, *FILLER)
         assert kinds[:3] == [LineClass.ENTRY_HEADER, LineClass.BULLET, LineClass.CONTINUATION]
 
+    # The geometry of no_marker_bullets.pdf: entry edge at 36, bullets at 40, wraps at 49.
+    def test_a_one_line_bullet_at_the_proven_marker_column_is_a_bullet(self) -> None:
+        header = _line("Nordvale Consulting \u2014 Software Engineer", top=88.0, bold=True)
+        place = _line("Pune, India", top=100.0, x0=36.0)
+        first = _line("Built 15+ React screens for the vehicle checkout platform", top=112.0, x0=40.0)
+        wrap = _line("mobile", top=124.0, x0=49.0)
+        single = _line("Led 15+ code reviews that cut post-release bugs by 28%", top=136.0, x0=40.0)
+        kinds = _kinds(header, place, first, wrap, single, *FILLER)
+        assert kinds[:5] == [
+            LineClass.ENTRY_HEADER,
+            LineClass.TEXT,
+            LineClass.BULLET,
+            LineClass.CONTINUATION,
+            LineClass.BULLET,
+        ]
+
+    def test_an_entry_where_nothing_wraps_uses_the_column_proven_elsewhere(self) -> None:
+        proven = [
+            _line("Nordvale Consulting \u2014 Software Engineer", top=88.0, bold=True),
+            _line("Built 15+ React screens for the vehicle checkout platform", top=100.0, x0=40.0),
+            _line("mobile", top=112.0, x0=49.0),
+        ]
+        header = _line("Brightfold Systems \u2014 Associate Software Engineer", top=130.0, bold=True)
+        place = _line("India", top=142.0, x0=36.0)
+        bullets = [
+            _line("Built 8 full-stack applications with React and Node", top=154.0, x0=40.0),
+            _line("Added server-side rendering, cutting TTFB by 45%", top=166.0, x0=40.0),
+        ]
+        kinds = _kinds(*proven, header, place, *bullets, *FILLER)
+        assert kinds[3:7] == [LineClass.ENTRY_HEADER, LineClass.TEXT, LineClass.BULLET, LineClass.BULLET]
+
+    def test_without_a_proven_column_an_indented_line_is_not_a_bullet(self) -> None:
+        header = _line("Brightfold Systems \u2014 Associate Software Engineer", top=88.0, bold=True)
+        single = _line("Built 8 full-stack applications with React and Node", top=100.0, x0=40.0)
+        assert _kinds(header, single, *FILLER)[:2] == [LineClass.ENTRY_HEADER, LineClass.TEXT]
+
+    def test_a_marker_column_flush_with_the_entry_proves_nothing(self) -> None:
+        # Bullets flush with the header: the wrap proves its own bullet, but a one-line
+        # bullet at the same x cannot be told from a location line (§5.9 measures this).
+        header = _line("Nordvale Consulting \u2014 Software Engineer", top=88.0, bold=True)
+        first = _line("Built 15+ React screens for the vehicle checkout platform", top=100.0, x0=36.0)
+        wrap = _line("mobile", top=112.0, x0=48.0)
+        single = _line("Pune, India", top=124.0, x0=36.0)
+        kinds = _kinds(header, first, wrap, single, *FILLER)
+        assert kinds[:4] == [LineClass.ENTRY_HEADER, LineClass.BULLET, LineClass.CONTINUATION, LineClass.TEXT]
+
     def test_outside_an_entry_an_indent_is_not_read_as_a_bullet(self) -> None:
         first = _line("A summary sentence about the candidate", top=102.0, x0=36.0)
         wrap = _line("and what they want next", top=114.0, x0=48.0)

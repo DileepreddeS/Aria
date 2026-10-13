@@ -213,7 +213,13 @@ class TestSingleColumnPagesAreLeftAlone:
         assert page.columns == 1
 
     def test_right_aligned_dates_are_not_a_column(self) -> None:
-        for name in ("clean_inline_block", "float_scrambled", "markerless_bullets", "per_glyph_contact"):
+        for name in (
+            "clean_inline_block",
+            "float_scrambled",
+            "markerless_bullets",
+            "no_marker_bullets",
+            "per_glyph_contact",
+        ):
             for page in read((FIXTURES / f"{name}.pdf").read_bytes()):
                 assert page.columns == 1, (name, page.page)
                 assert not page.ambiguous

@@ -154,7 +154,14 @@ class TestEachRowOfTheTriageTable:
         assert {font.name: font.has_to_unicode for font in pages[0].fonts}["Mystery"] is True
 
     @pytest.mark.parametrize(
-        "fixture", ["clean_inline_block", "float_scrambled", "markerless_bullets", "per_glyph_contact"]
+        "fixture",
+        [
+            "clean_inline_block",
+            "float_scrambled",
+            "markerless_bullets",
+            "no_marker_bullets",
+            "per_glyph_contact",
+        ],
     )
     def test_every_gate_fixture_is_readable(self, fixture: str) -> None:
         assert _triage((FIXTURES / f"{fixture}.pdf").read_bytes())[0] is Triage.READABLE

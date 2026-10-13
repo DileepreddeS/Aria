@@ -13,7 +13,13 @@ from aria_core.importer.dates import DatePrecision, parse_date_range
 from aria_document_parser.pdf import extract_pdf
 
 FIXTURES = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "resumes"
-GATE = ["clean_inline_block", "float_scrambled", "markerless_bullets", "per_glyph_contact"]
+GATE = [
+    "clean_inline_block",
+    "float_scrambled",
+    "markerless_bullets",
+    "no_marker_bullets",
+    "per_glyph_contact",
+]
 
 
 def _truth(name: str) -> dict[str, Any]:
@@ -67,12 +73,15 @@ def test_bullets_and_sections_match_the_truth(name: str) -> None:
 
 
 def test_every_fixture_classifies_identically() -> None:
-    # The same document rendered four ways: any difference in what a line *is* would be
-    # a pathology leaking through. Wording can differ where a line wraps — list-style
-    # bullets render a hair wider, and one bullet breaks a word earlier — so the
-    # comparison is of classes, and of entry headers' text, which never wrap.
+    # The same document rendered five ways: any difference in what a line *is* would be
+    # a pathology leaking through. Where a bullet wraps can differ — a bullet without a
+    # marker's indent is wider and one of them fits on a single line — so the comparison
+    # is of classes with continuations left out, and of entry headers' text, which never
+    # wrap.
     readings = [classify(extract_pdf((FIXTURES / f"{name}.pdf").read_bytes()).layout) for name in GATE]
-    kinds = [[line.kind for line in reading] for reading in readings]
+    kinds = [
+        [line.kind for line in reading if line.kind is not LineClass.CONTINUATION] for reading in readings
+    ]
     headers = [
         [line.line.text for line in reading if line.kind is LineClass.ENTRY_HEADER] for reading in readings
     ]
