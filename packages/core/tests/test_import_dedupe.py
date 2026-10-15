@@ -17,9 +17,12 @@ import pytest
 from aria_core.graph.months import MonthSpan
 from aria_core.importer.dedupe import (
     MatchKind,
+    achievement_key,
+    education_key,
     experience_key,
     find_duplicate_fact,
     match_experience,
+    project_key,
     similarity,
 )
 from aria_core.importer.plan import ProposedExperience, ProposedFact
@@ -179,3 +182,25 @@ class TestMatchingRoles:
         span = MonthSpan(dt.date(2024, 6, 1))
         assert experience_key("Acme, Inc.", span) == experience_key("acme inc", span)
         assert experience_key("Acme", span) != experience_key("Acme", None)
+
+
+class TestTheOtherEntitiesFollowTheRoleRule:
+    def test_a_project_is_its_name_and_its_months(self) -> None:
+        span = MonthSpan(dt.date(2025, 1, 1), dt.date(2025, 6, 1))
+        assert project_key("VERA-RAG", span) == project_key("vera rag", span)
+        assert project_key("VERA-RAG", None) == project_key("VERA-RAG", None)
+        assert project_key("VERA-RAG", span) != project_key("VERA-RAG", None)
+        assert project_key("VERA-RAG", span) != project_key("DentScan", span)
+
+    def test_a_degree_is_its_school_its_degree_and_its_months(self) -> None:
+        assert education_key("Cascadia State University", "M.S. Computer Science", None) == education_key(
+            "CASCADIA STATE UNIVERSITY", "M.S. computer science", None
+        )
+        assert education_key("Cascadia State University", "B.S. Physics", None) != education_key(
+            "Cascadia State University", "M.S. Computer Science", None
+        )
+
+    def test_an_achievement_is_its_title_and_its_issuer(self) -> None:
+        assert achievement_key("Dean's List", "Cascadia") == achievement_key("DEAN'S LIST", "cascadia")
+        assert achievement_key("Dean's List", None) == achievement_key("Dean's List", "")
+        assert achievement_key("Dean's List", "Cascadia") != achievement_key("Dean's List", None)

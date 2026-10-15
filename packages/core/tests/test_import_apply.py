@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from aria_core.audit.log import read_chain
 from aria_core.db.models import (
+    Achievement,
     Candidate,
     DeclaredSkill,
     Education,
@@ -508,3 +509,91 @@ class TestTheApprovalQueueStaysReadable:
         expected = RESUME_TWO.splitlines().index(bullet) + 1
         assert proposal.source_line == expected
         assert f"line {expected}" in str(proposal.as_question())
+
+
+#: Every kind of entry, so a second import of it proves each one is reused.
+EVERY_KIND = """Jordan A. Rivera
+jordan.rivera@example.com
+
+EXPERIENCE
+Nordvale Consulting - Software Engineer
+Feb 2024 - Jul 2025
+- Reduced the nightly batch from six hours to forty minutes
+
+EDUCATION
+M.S. Computer Science, Cascadia State University
+Aug 2025 - Dec 2026
+
+PROJECTS
+VERA-RAG | Python, FastAPI
+- Built a closed-loop RAG system with hybrid retrieval
+
+AWARDS
+Dean's List, Cascadia State University
+"""
+
+
+class TestImportingTheSameResumeTwice:
+    """The second import adds nothing: roles, degrees, projects and awards are reused."""
+
+    async def _twice(
+        self, engine: AsyncEngine, tenant: TenantId, candidate: uuid.UUID, taxonomy: SkillTaxonomy, text: str
+    ) -> tuple[ImportOutcome, ImportOutcome]:
+        upload_id = await make_upload(engine, tenant, candidate)
+        first = await run_import(engine, tenant, candidate, text, taxonomy, upload_id=upload_id)
+        second = await run_import(engine, tenant, candidate, text, taxonomy, upload_id=upload_id)
+        return first, second
+
+    async def test_nothing_new_is_written_the_second_time(
+        self, engine: AsyncEngine, tenant_a: TenantId, candidate_id: uuid.UUID, taxonomy: SkillTaxonomy
+    ) -> None:
+        first, second = await self._twice(engine, tenant_a, candidate_id, taxonomy, EVERY_KIND)
+        assert (len(first.education_ids), len(first.project_ids), len(first.achievement_ids)) == (1, 1, 1)
+        assert (second.experience_ids, second.education_ids, second.project_ids, second.achievement_ids) == (
+            (),
+            (),
+            (),
+            (),
+        )
+        assert second.reused_education_ids == first.education_ids
+        assert second.reused_project_ids == first.project_ids
+        assert second.reused_achievement_ids == first.achievement_ids
+        assert second.fact_ids == ()
+
+    @pytest.mark.parametrize("model", [Experience, Education, Project, Achievement], ids=lambda m: m.__name__)
+    async def test_one_row_of_each(
+        self,
+        engine: AsyncEngine,
+        tenant_a: TenantId,
+        candidate_id: uuid.UUID,
+        taxonomy: SkillTaxonomy,
+        model: type[Experience] | type[Education] | type[Project] | type[Achievement],
+    ) -> None:
+        await self._twice(engine, tenant_a, candidate_id, taxonomy, EVERY_KIND)
+        async with tenant_transaction(engine, tenant_a) as session:
+            rows = (await session.execute(select(model.id).where(model.candidate_id == candidate_id))).all()
+        assert len(rows) == 1
+
+    async def test_a_new_bullet_lands_under_the_reused_project(
+        self, engine: AsyncEngine, tenant_a: TenantId, candidate_id: uuid.UUID, taxonomy: SkillTaxonomy
+    ) -> None:
+        first = await run_import(engine, tenant_a, candidate_id, EVERY_KIND, taxonomy)
+        bullet = "- Built a closed-loop RAG system with hybrid retrieval\n"
+        more = EVERY_KIND.replace(bullet, bullet + "- Served Llama-3-8B with structured decoding\n")
+        second = await run_import(engine, tenant_a, candidate_id, more, taxonomy)
+        assert second.reused_project_ids == first.project_ids
+        assert len(second.fact_ids) == 1
+        async with tenant_transaction(engine, tenant_a) as session:
+            new = await get_fact(session, second.fact_ids[0])
+        assert new.project_id == first.project_ids[0]
+
+    async def test_the_same_project_name_over_other_months_is_another_project(
+        self, engine: AsyncEngine, tenant_a: TenantId, candidate_id: uuid.UUID, taxonomy: SkillTaxonomy
+    ) -> None:
+        dated = EVERY_KIND.replace(
+            "VERA-RAG | Python, FastAPI", "VERA-RAG | Python, FastAPI | Jan 2025 - Jun 2025"
+        )
+        first = await run_import(engine, tenant_a, candidate_id, EVERY_KIND, taxonomy)
+        second = await run_import(engine, tenant_a, candidate_id, dated, taxonomy)
+        assert len(first.project_ids) == len(second.project_ids) == 1
+        assert second.reused_project_ids == ()

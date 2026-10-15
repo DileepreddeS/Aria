@@ -36,9 +36,12 @@ from aria_core.importer.plan import ProposedExperience, ProposedFact
 __all__ = [
     "DuplicateFact",
     "MatchKind",
+    "achievement_key",
+    "education_key",
     "experience_key",
     "find_duplicate_fact",
     "match_experience",
+    "project_key",
     "similarity",
 ]
 
@@ -232,9 +235,34 @@ def experience_key(employer: str, span: MonthSpan | None) -> tuple[str, str]:
     over one continuous span is the same row to the calendar, and two resumes often
     word the same title differently ("SWE" and "Software Engineer").
     """
-    folded = " ".join(re.findall(r"[a-z0-9]+", employer.lower()))
-    when = f"{span.start.isoformat()}:{span.end.isoformat() if span and span.end else 'open'}" if span else ""
-    return folded, when
+    return _folded(employer), _when(span)
+
+
+def _folded(text: str) -> str:
+    return " ".join(re.findall(r"[a-z0-9]+", text.lower()))
+
+
+def _when(span: MonthSpan | None) -> str:
+    return f"{span.start.isoformat()}:{span.end.isoformat() if span.end else 'open'}" if span else ""
+
+
+def project_key(name: str, span: MonthSpan | None) -> tuple[str, str]:
+    """A project's identity, by the role rule: what it is called, and when.
+
+    The same name over different months is two projects, as two stints at one employer
+    are two roles. A project with no months matches only another with none.
+    """
+    return _folded(name), _when(span)
+
+
+def education_key(school: str, degree: str, span: MonthSpan | None) -> tuple[str, str, str]:
+    """A degree's identity: where, what, and when. Two degrees from one school are two."""
+    return _folded(school), _folded(degree), _when(span)
+
+
+def achievement_key(title: str, issuer: str | None) -> tuple[str, str]:
+    """An award or certification's identity: what it is, and who gave it."""
+    return _folded(title), _folded(issuer or "")
 
 
 def match_experience(

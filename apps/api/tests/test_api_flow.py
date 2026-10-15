@@ -1139,3 +1139,39 @@ class TestWithdrawingAReplacedReading:
         await client.post(f"/uploads/{old}/withdraw")
         second = (await client.post(f"/uploads/{old}/withdraw")).json()
         assert set(second["counts"].values()) == {0}
+
+
+class TestImportingTheSameUploadTwice:
+    """A second import of the same reading changes nothing: every kind of row is reused.
+
+    Roles were always matched on employer and months; degrees, projects and awards were
+    inserted again, so a re-import doubled them while each bullet, a duplicate of its
+    own text, was skipped and left under the first copy.
+    """
+
+    @staticmethod
+    async def _rows(engine: AsyncEngine, tenant: TenantId) -> dict[str, int]:
+        async with tenant_transaction(engine, tenant) as session:
+            return {
+                model.__tablename__: len((await session.execute(select(model.id))).all())
+                for model in (Experience, Education, Project, Fact, ProfileField)
+            }
+
+    async def test_the_graph_is_the_same_after_the_second_import(
+        self, client: httpx.AsyncClient, engine: AsyncEngine, tenant_a: TenantId
+    ) -> None:
+        name = "clean_inline_block"
+        upload = await _upload(
+            client, f"{name}.pdf", (FIXTURES / f"{name}.pdf").read_bytes(), "application/pdf"
+        )
+        first = (await client.post(f"/uploads/{upload['upload_id']}/import")).json()
+        after_first = await self._rows(engine, tenant_a)
+        second = (await client.post(f"/uploads/{upload['upload_id']}/import")).json()
+
+        assert await self._rows(engine, tenant_a) == after_first
+        assert (after_first["experiences"], after_first["education"], after_first["projects"]) == (4, 2, 3)
+        assert second["counts"]["experiences_created"] == 0
+        assert second["counts"]["educations"] == 0 and second["counts"]["educations_reused"] == 2
+        assert second["counts"]["projects"] == 0 and second["counts"]["projects_reused"] == 3
+        assert second["counts"]["facts"] == 0
+        assert second["counts"]["duplicates_skipped"] == first["counts"]["facts"]

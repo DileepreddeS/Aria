@@ -17,7 +17,9 @@ claim the candidate never made:
   kept precisely so an import can check against them.
 * **A role already in the graph is reused, not duplicated.** Same employer, same
   months, same job — importing a second resume adds its bullets to the role that is
-  already there instead of doubling the calendar.
+  already there instead of doubling the calendar. Degrees, projects and achievements
+  follow the same rule (school, degree and months; name and months; title and
+  issuer), so importing the same resume twice changes nothing.
 
 Near-duplicate *facts* are reported, never merged automatically: which wording to keep
 is the candidate's call. :func:`aria_core.graph.facts.merge_facts` applies their answer.
@@ -46,7 +48,14 @@ from aria_core.graph.facts import create_draft_fact, facts_for_deduplication
 from aria_core.graph.months import MonthSpan
 from aria_core.graph.questions import ask
 from aria_core.graph.status import ApprovalStatus
-from aria_core.importer.dedupe import DuplicateFact, find_duplicate_fact, match_experience
+from aria_core.importer.dedupe import (
+    DuplicateFact,
+    achievement_key,
+    education_key,
+    find_duplicate_fact,
+    match_experience,
+    project_key,
+)
 from aria_core.importer.plan import (
     ImportPlan,
     ImportQuestion,
@@ -107,11 +116,14 @@ class ImportOutcome:
     experience_ids: tuple[uuid.UUID, ...] = ()
     reused_experience_ids: tuple[uuid.UUID, ...] = ()
     education_ids: tuple[uuid.UUID, ...] = ()
+    reused_education_ids: tuple[uuid.UUID, ...] = ()
     project_ids: tuple[uuid.UUID, ...] = ()
+    reused_project_ids: tuple[uuid.UUID, ...] = ()
     fact_ids: tuple[uuid.UUID, ...] = ()
     profile_field_ids: tuple[uuid.UUID, ...] = ()
     declared_skill_ids: tuple[uuid.UUID, ...] = ()
     achievement_ids: tuple[uuid.UUID, ...] = ()
+    reused_achievement_ids: tuple[uuid.UUID, ...] = ()
     #: Entries that could not be written, with the question that would unblock them.
     held_back: tuple[tuple[str, ImportQuestion], ...] = ()
     #: Facts identical to one already present. Skipped silently — there is nothing to
@@ -135,11 +147,14 @@ class ImportOutcome:
             "experiences_created": len(self.experience_ids),
             "experiences_reused": len(self.reused_experience_ids),
             "educations": len(self.education_ids),
+            "educations_reused": len(self.reused_education_ids),
             "projects": len(self.project_ids),
+            "projects_reused": len(self.reused_project_ids),
             "facts": len(self.fact_ids),
             "profile_fields": len(self.profile_field_ids),
             "declared_skills": len(self.declared_skill_ids),
             "achievements": len(self.achievement_ids),
+            "achievements_reused": len(self.reused_achievement_ids),
             "held_back": len(self.held_back),
             "duplicates_skipped": self.duplicates_skipped,
             "rejected_again": self.rejected_again,
@@ -156,6 +171,15 @@ class ImportOutcome:
             f"{len(self.education_ids)} education entr(y/ies), "
             f"{len(self.project_ids)} project(s)",
         ]
+        known = (
+            len(self.reused_education_ids) + len(self.reused_project_ids) + len(self.reused_achievement_ids)
+        )
+        if known:
+            lines.append(
+                f"  {len(self.reused_education_ids)} education entr(y/ies), "
+                f"{len(self.reused_project_ids)} project(s) and {len(self.reused_achievement_ids)} "
+                "achievement(s) were already known"
+            )
         if self.duplicates_skipped:
             lines.append(f"  {self.duplicates_skipped} bullet(s) were already in your graph")
         if self.rejected_again:
@@ -412,10 +436,36 @@ async def apply_import_plan(
 
     # --------------------------------------------------------------- education
     education_ids: list[uuid.UUID] = []
+    known_educations = {
+        education_key(row[1], row[2], MonthSpan(row[3], row[4]) if row[3] is not None else None): row[0]
+        for row in (
+            await session.execute(
+                select(
+                    Education.id,
+                    Education.school,
+                    Education.degree,
+                    Education.start_month,
+                    Education.end_month,
+                )
+                .where(Education.candidate_id == candidate_id)
+                .order_by(Education.created_at)
+            )
+        ).all()
+    }
+    reused_education_ids: list[uuid.UUID] = []
     for proposed_education in plan.educations:
         if not proposed_education.school and not proposed_education.degree:
             continue
+        degree_key = education_key(
+            proposed_education.school, proposed_education.degree, proposed_education.span
+        )
+        if degree_key in known_educations:
+            reused_education_ids.append(known_educations[degree_key])
+            for proposed_fact in proposed_education.facts:
+                await write_fact(proposed_fact, education_id=known_educations[degree_key])
+            continue
         education_id = new_id()
+        known_educations[degree_key] = education_id
         start, end = _dates(proposed_education.span)
         await session.execute(
             insert(Education).values(
@@ -443,10 +493,28 @@ async def apply_import_plan(
 
     # ---------------------------------------------------------------- projects
     project_ids: list[uuid.UUID] = []
+    known_projects = {
+        project_key(row[1], MonthSpan(row[2], row[3]) if row[2] is not None else None): row[0]
+        for row in (
+            await session.execute(
+                select(Project.id, Project.name, Project.start_month, Project.end_month)
+                .where(Project.candidate_id == candidate_id)
+                .order_by(Project.created_at)
+            )
+        ).all()
+    }
+    reused_project_ids: list[uuid.UUID] = []
     for proposed_project in plan.projects:
         if not proposed_project.name:
             continue
+        project_identity = project_key(proposed_project.name, proposed_project.span)
+        if project_identity in known_projects:
+            reused_project_ids.append(known_projects[project_identity])
+            for proposed_fact in proposed_project.facts:
+                await write_fact(proposed_fact, project_id=known_projects[project_identity])
+            continue
         project_id = new_id()
+        known_projects[project_identity] = project_id
         start, end = _dates(proposed_project.span)
         await session.execute(
             insert(Project).values(
@@ -505,8 +573,24 @@ async def apply_import_plan(
 
     # ----------------------------------------------------------- achievements
     achievement_ids: list[uuid.UUID] = []
+    known_achievements = {
+        achievement_key(row[1], row[2]): row[0]
+        for row in (
+            await session.execute(
+                select(Achievement.id, Achievement.title, Achievement.issuer)
+                .where(Achievement.candidate_id == candidate_id)
+                .order_by(Achievement.created_at)
+            )
+        ).all()
+    }
+    reused_achievement_ids: list[uuid.UUID] = []
     for proposed_achievement in plan.achievements:
+        award_key = achievement_key(proposed_achievement.title, proposed_achievement.issuer)
+        if award_key in known_achievements:
+            reused_achievement_ids.append(known_achievements[award_key])
+            continue
         achievement_id = new_id()
+        known_achievements[award_key] = achievement_id
         await session.execute(
             insert(Achievement).values(
                 id=achievement_id,
@@ -577,6 +661,9 @@ async def apply_import_plan(
         upload_id=upload_id,
         experience_ids=tuple(experience_ids),
         reused_experience_ids=tuple(reused_ids),
+        reused_education_ids=tuple(reused_education_ids),
+        reused_project_ids=tuple(reused_project_ids),
+        reused_achievement_ids=tuple(reused_achievement_ids),
         education_ids=tuple(education_ids),
         project_ids=tuple(project_ids),
         fact_ids=tuple(created_facts),
