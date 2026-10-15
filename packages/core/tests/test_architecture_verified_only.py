@@ -43,14 +43,17 @@ APPROVED_READ_PATHS = (
     "get_fact",
     "facts_for_deduplication",
     "fact_skill_canonicals",
+    "draft_facts_from_upload",
+    "fact_ids_under",
+    "fact_status_counts",
 )
 
 #: Read paths that filter on status, and must say so in their body. The others are
 #: deliberately different and are checked by name instead: get_fact shows the approval
 #: flow one fact whatever its state, facts_for_deduplication returns the status with
 #: every row so the importer can treat the four states differently, and
-#: fact_skill_canonicals returns skill ids and no text at all.
-STATUS_FILTERED_READ_PATHS = ("approved_facts", "draft_facts", "rejected_facts")
+#: fact_skill_canonicals, fact_ids_under and fact_status_counts return ids or counts and no text.
+STATUS_FILTERED_READ_PATHS = ("approved_facts", "draft_facts", "rejected_facts", "draft_facts_from_upload")
 
 
 def _python_files() -> list[Path]:

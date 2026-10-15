@@ -151,6 +151,38 @@ def _cmd_lines(client: AriaClient, args: argparse.Namespace) -> int:
     return 0
 
 
+def _print_withdrawal(payload: dict[str, Any], verb: str) -> int:
+    counts = {name: count for name, count in payload.get("counts", {}).items() if count}
+    for name, count in counts.items():
+        print(f"  {verb:<13}{count:>4}  {name.replace('_', ' ')}")
+    for reason, count in payload.get("kept", {}).items():
+        print(f"  {'keeps':<13}{count:>4}  {reason}")
+    return sum(counts.values())
+
+
+def _cmd_withdraw(client: AriaClient, args: argparse.Namespace) -> int:
+    preview = client.withdrawal(args.upload_id)
+    print(f"upload {args.upload_id}, replaced by {preview['superseded_by']}:")
+    if not _print_withdrawal(preview, "would delete"):
+        print("  nothing left to withdraw")
+        return 0
+    if not args.yes:
+        try:
+            answer = input("delete these drafts and questions? [y/N] ")
+        except EOFError:
+            answer = ""
+        if answer.strip().lower() not in ("y", "yes"):
+            print("nothing withdrawn")
+            return 1
+    done = client.withdraw(args.upload_id)
+    print("withdrawn:")
+    _print_withdrawal(done, "deleted")
+    # If the new reading was imported first, bullets it shared with the old one were
+    # skipped as duplicates of drafts that are now gone. Importing again is idempotent.
+    print(f"\nnext: aria import {done['superseded_by']}  (safe to run again; it adds only what is missing)")
+    return 0
+
+
 def _cmd_facts(client: AriaClient, args: argparse.Namespace) -> int:
     payload = client.facts(status=args.status)
     facts = payload.get("facts", [])
@@ -358,6 +390,14 @@ def build_parser() -> argparse.ArgumentParser:
     importer.add_argument("upload_id")
     importer.add_argument("--as-notes", action="store_true", help="read it as a skills list")
     importer.set_defaults(handler=_cmd_import)
+
+    withdraw = subparsers.add_parser(
+        "withdraw",
+        help="delete the drafts and open questions a replaced upload imported (shows the count first)",
+    )
+    withdraw.add_argument("upload_id")
+    withdraw.add_argument("--yes", action="store_true", help="do not ask before deleting")
+    withdraw.set_defaults(handler=_cmd_withdraw)
 
     lines = subparsers.add_parser("lines", help="show how ARIA read a PDF upload, line by line")
     lines.add_argument("upload_id")

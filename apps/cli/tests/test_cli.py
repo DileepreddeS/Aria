@@ -17,7 +17,7 @@ import json
 import socket
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import httpx
 import pytest
@@ -326,6 +326,77 @@ class TestTheClientSendsTheRightRequest:
         assert run(recorder, ["upload", str(resume)], monkeypatch) == 0
         out = capsys.readouterr().out
         assert f"replaces upload {earlier}" in out
+
+
+class TestWithdraw:
+    NEW = str(uuid.uuid4())
+    PREVIEW: ClassVar[dict[str, Any]] = {
+        "upload_id": UPLOAD_ID,
+        "superseded_by": NEW,
+        "withdrawn": False,
+        "counts": {"facts": 23, "roles": 9, "education": 0, "projects": 0, "questions": 18},
+        "kept": {"approved facts": 1},
+    }
+
+    def _recorder(self) -> Recorder:
+        done = {**self.PREVIEW, "withdrawn": True}
+        return Recorder(
+            {
+                ("GET", f"/uploads/{UPLOAD_ID}/withdrawal"): self.PREVIEW,
+                ("POST", f"/uploads/{UPLOAD_ID}/withdraw"): done,
+            }
+        )
+
+    def test_the_count_comes_first_and_no_means_nothing_happens(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        recorder = self._recorder()
+        monkeypatch.setattr("builtins.input", lambda _prompt: "n")
+        assert run(recorder, ["withdraw", UPLOAD_ID], monkeypatch) == 1
+        out = capsys.readouterr().out
+        assert "would delete   23  facts" in out and "would delete   18  questions" in out
+        assert "keeps           1  approved facts" in out
+        assert "nothing withdrawn" in out
+        assert [request.method for request in recorder.seen] == ["GET"]
+
+    def test_yes_at_the_prompt_withdraws(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        recorder = self._recorder()
+        monkeypatch.setattr("builtins.input", lambda _prompt: "y")
+        assert run(recorder, ["withdraw", UPLOAD_ID], monkeypatch) == 0
+        out = capsys.readouterr().out
+        assert "deleted        23  facts" in out
+        assert f"next: aria import {self.NEW}" in out
+        assert [request.method for request in recorder.seen] == ["GET", "POST"]
+
+    def test_no_terminal_to_ask_is_a_no(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        recorder = self._recorder()
+
+        def closed(_prompt: str) -> str:
+            raise EOFError
+
+        monkeypatch.setattr("builtins.input", closed)
+        assert run(recorder, ["withdraw", UPLOAD_ID], monkeypatch) == 1
+        assert [request.method for request in recorder.seen] == ["GET"]
+
+    def test_yes_flag_skips_the_question(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        recorder = self._recorder()
+
+        def never(_prompt: str) -> str:
+            raise AssertionError("asked despite --yes")
+
+        monkeypatch.setattr("builtins.input", never)
+        assert run(recorder, ["withdraw", UPLOAD_ID, "--yes"], monkeypatch) == 0
+        assert [request.method for request in recorder.seen] == ["GET", "POST"]
+
+    def test_nothing_to_withdraw_asks_nothing(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        empty = {**self.PREVIEW, "counts": dict.fromkeys(self.PREVIEW["counts"], 0), "kept": {}}
+        recorder = Recorder({("GET", f"/uploads/{UPLOAD_ID}/withdrawal"): empty})
+        assert run(recorder, ["withdraw", UPLOAD_ID], monkeypatch) == 0
+        assert "nothing left to withdraw" in capsys.readouterr().out
 
 
 class TestTheReportIsUsableInAScript:

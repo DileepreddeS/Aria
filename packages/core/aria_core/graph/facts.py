@@ -30,7 +30,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Final
 
-from sqlalchemy import Select, insert, select, update
+from sqlalchemy import Select, delete, func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aria_core.audit.log import append_event
@@ -54,9 +54,13 @@ __all__ = [
     "approved_facts",
     "approved_skill_usage",
     "create_draft_fact",
+    "delete_draft_facts",
     "draft_facts",
+    "draft_facts_from_upload",
     "edit_fact",
+    "fact_ids_under",
     "fact_skill_canonicals",
+    "fact_status_counts",
     "facts_for_deduplication",
     "merge_facts",
     "reconsider_fact",
@@ -594,3 +598,89 @@ async def revision_history(session: AsyncSession, fact_id: uuid.UUID) -> list[tu
         )
     ).all()
     return [(row[0], row[1]) for row in rows]
+
+
+async def draft_facts_from_upload(
+    session: AsyncSession, candidate_id: uuid.UUID, upload_id: uuid.UUID
+) -> list[tuple[uuid.UUID, str]]:
+    """``(fact_id, current text)`` for every *draft* fact one upload produced.
+
+    For withdrawing a superseded reading: drafts only, because a fact the candidate
+    approved or rejected is their decision and survives. The text is returned so a
+    question naming the fact by its wording can be found; nothing builds output from it.
+    """
+    rows = (
+        await session.execute(
+            select(Fact.id, FactRevision.text)
+            .join(
+                FactRevision,
+                (FactRevision.fact_id == Fact.id) & (FactRevision.version == Fact.current_version),
+            )
+            .where(
+                Fact.candidate_id == candidate_id,
+                Fact.source_upload_id == upload_id,
+                Fact.status == ApprovalStatus.DRAFT.value,
+            )
+            .order_by(Fact.created_at, Fact.id)
+        )
+    ).all()
+    return [(row[0], row[1]) for row in rows]
+
+
+async def fact_ids_under(
+    session: AsyncSession,
+    *,
+    experience_ids: Sequence[uuid.UUID] = (),
+    project_ids: Sequence[uuid.UUID] = (),
+    education_ids: Sequence[uuid.UUID] = (),
+) -> list[tuple[uuid.UUID, uuid.UUID]]:
+    """``(fact_id, parent_id)`` for every fact under these roles, projects and degrees.
+
+    Ids only, whatever the status: deleting a parent deletes its facts by cascade, so
+    the caller needs to see every one of them, approved or from another upload, before
+    it decides a parent may go.
+    """
+    pairs: list[tuple[uuid.UUID, uuid.UUID]] = []
+    for column, ids in (
+        (Fact.experience_id, experience_ids),
+        (Fact.project_id, project_ids),
+        (Fact.education_id, education_ids),
+    ):
+        if ids:
+            rows = (await session.execute(select(Fact.id, column).where(column.in_(list(ids))))).all()
+            pairs.extend((row[0], row[1]) for row in rows if row[1] is not None)
+    return pairs
+
+
+async def delete_draft_facts(session: AsyncSession, fact_ids: Sequence[uuid.UUID]) -> int:
+    """Delete these facts **if they are still drafts**; returns how many went.
+
+    The status is checked in the statement itself, so a fact approved between the
+    count the candidate saw and this call survives. Revisions, skills, metrics and
+    themes go with each fact by cascade. Only withdrawing a superseded upload calls
+    this: everywhere else a fact is rejected or merged and kept.
+    """
+    if not fact_ids:
+        return 0
+    deleted = (
+        await session.execute(
+            delete(Fact)
+            .where(Fact.id.in_(list(fact_ids)), Fact.status == ApprovalStatus.DRAFT.value)
+            .returning(Fact.id)
+        )
+    ).all()
+    return len(deleted)
+
+
+async def fact_status_counts(
+    session: AsyncSession, candidate_id: uuid.UUID, upload_id: uuid.UUID
+) -> dict[str, int]:
+    """How many of one upload's facts are in each status. Counts only, no text."""
+    rows = (
+        await session.execute(
+            select(Fact.status, func.count())
+            .where(Fact.candidate_id == candidate_id, Fact.source_upload_id == upload_id)
+            .group_by(Fact.status)
+        )
+    ).all()
+    return {row[0]: int(row[1]) for row in rows}

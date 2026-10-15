@@ -105,6 +105,12 @@ class AriaClient:
     def import_upload(self, upload_id: uuid.UUID | str, *, as_notes: bool = False) -> dict[str, Any]:
         return dict(self._request("POST", f"/uploads/{upload_id}/import", params={"as_notes": as_notes}))
 
+    def withdrawal(self, upload_id: uuid.UUID | str) -> dict[str, Any]:
+        return dict(self._request("GET", f"/uploads/{upload_id}/withdrawal"))
+
+    def withdraw(self, upload_id: uuid.UUID | str) -> dict[str, Any]:
+        return dict(self._request("POST", f"/uploads/{upload_id}/withdraw"))
+
     def lines(self, upload_id: uuid.UUID | str) -> dict[str, Any]:
         return dict(self._request("GET", f"/uploads/{upload_id}/lines"))
 

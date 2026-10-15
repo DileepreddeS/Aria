@@ -38,6 +38,7 @@ __all__ = [
     "QuestionOut",
     "RejectRequest",
     "UploadResponse",
+    "WithdrawalResponse",
 ]
 
 
@@ -103,6 +104,21 @@ class ImportResponse(Body):
     dropped: list[str] = Field(default_factory=list)
     #: Imported, but worth a look: a start date more than a year ahead, say.
     flags: list[str] = Field(default_factory=list)
+
+
+class WithdrawalResponse(Body):
+    """What withdrawing a superseded upload deletes (preview) or deleted (done)."""
+
+    upload_id: uuid.UUID
+    superseded_by: uuid.UUID
+    #: False for the preview, true once the rows are gone.
+    withdrawn: bool = False
+    #: facts, roles, education, projects, questions, profile_fields, declared_skills,
+    #: achievements.
+    counts: dict[str, int]
+    #: Rows from the upload that stay, by reason: "approved facts", "roles still
+    #: holding facts that stay".
+    kept: dict[str, int] = Field(default_factory=dict)
 
 
 class ClassifiedLineBody(Body):

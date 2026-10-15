@@ -34,7 +34,16 @@ from aria_api.app import create_app
 from aria_api.auth import API_TOKEN_HEADER
 from aria_core.audit.log import read_chain
 from aria_core.config import Settings
-from aria_core.db.models import Candidate, Education, Experience, Fact, ProfileField, Project, Upload
+from aria_core.db.models import (
+    Candidate,
+    Education,
+    Experience,
+    Fact,
+    ProfileField,
+    Project,
+    Upload,
+    UserQuestion,
+)
 from aria_core.db.session import tenant_transaction
 from aria_core.schemas.identity import TenantId, UserId, new_id
 
@@ -1006,3 +1015,127 @@ class TestAFileReadBeforeStageZero:
         second = await client.post("/uploads", files={"file": ("resume.txt", RESUME, "text/plain")})
         assert second.json()["duplicate_of"] == first.json()["upload_id"]
         assert second.json()["reprocessed_from"] is None
+
+
+class TestWithdrawingAReplacedReading:
+    """`aria withdraw`: one step for the drafts and questions a superseded upload left.
+
+    The old reading is a text resume imported and then read again with --reprocess:
+    real drafts, real roles, real open questions, on an upload that is no longer current.
+    """
+
+    async def _replaced(self, client: httpx.AsyncClient) -> tuple[str, str, dict[str, Any]]:
+        old = await _upload_and_import(client)
+        again = await client.post(
+            "/uploads", files={"file": ("resume.txt", RESUME, "text/plain")}, params={"reprocess": True}
+        )
+        new = again.json()
+        assert new["reprocessed_from"] == old["upload"]["upload_id"]
+        return old["upload"]["upload_id"], new["upload_id"], old["import"]
+
+    @staticmethod
+    async def _left(engine: AsyncEngine, tenant: TenantId, upload_id: str) -> dict[str, int]:
+        source = uuid.UUID(upload_id)
+        async with tenant_transaction(engine, tenant) as session:
+            return {
+                model.__tablename__: len(
+                    (await session.execute(select(model.id).where(model.source_upload_id == source))).all()
+                )
+                for model in (Fact, Experience, Education, Project, ProfileField, UserQuestion)
+            }
+
+    async def test_the_preview_counts_what_the_import_wrote_and_changes_nothing(
+        self, client: httpx.AsyncClient, engine: AsyncEngine, tenant_a: TenantId
+    ) -> None:
+        old, new, imported = await self._replaced(client)
+        before = await self._left(engine, tenant_a, old)
+        response = await client.get(f"/uploads/{old}/withdrawal")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["withdrawn"] is False and body["superseded_by"] == new
+        assert body["counts"]["facts"] == imported["counts"]["facts"] == before["facts"]
+        assert body["counts"]["roles"] == before["experiences"] > 0
+        assert body["counts"]["questions"] == before["user_questions"] > 0
+        assert await self._left(engine, tenant_a, old) == before
+
+    async def test_withdrawing_deletes_every_draft_and_open_question_from_it(
+        self, client: httpx.AsyncClient, engine: AsyncEngine, tenant_a: TenantId
+    ) -> None:
+        old, _, _ = await self._replaced(client)
+        preview = (await client.get(f"/uploads/{old}/withdrawal")).json()
+        body = (await client.post(f"/uploads/{old}/withdraw")).json()
+        assert body["withdrawn"] is True and body["counts"] == preview["counts"]
+        assert set((await self._left(engine, tenant_a, old)).values()) == {0}
+
+    async def test_an_approved_fact_survives_and_so_does_its_role(
+        self, client: httpx.AsyncClient, engine: AsyncEngine, tenant_a: TenantId
+    ) -> None:
+        old, _, _ = await self._replaced(client)
+        fact = (await client.get("/facts")).json()["facts"][0]
+        assert (await client.post(f"/facts/{fact['fact_id']}/approve", json={})).status_code == 200
+        body = (await client.post(f"/uploads/{old}/withdraw")).json()
+        assert body["kept"]["approved facts"] == 1
+        assert body["kept"]["roles still holding facts that stay"] == 1
+        async with tenant_transaction(engine, tenant_a) as session:
+            survivors = (
+                await session.execute(
+                    select(Fact.id, Fact.experience_id).where(Fact.source_upload_id == uuid.UUID(old))
+                )
+            ).all()
+            role = (
+                await session.execute(select(Experience.id).where(Experience.id == survivors[0][1]))
+            ).all()
+        assert [str(row[0]) for row in survivors] == [fact["fact_id"]]
+        assert len(role) == 1
+
+    async def test_the_audit_event_says_what_went_and_what_replaced_it(
+        self, client: httpx.AsyncClient, engine: AsyncEngine, tenant_a: TenantId
+    ) -> None:
+        old, new, _ = await self._replaced(client)
+        body = (await client.post(f"/uploads/{old}/withdraw")).json()
+        async with tenant_transaction(engine, tenant_a) as session:
+            events = await read_chain(session, tenant_a)
+        (event,) = [event for event in events if event.action == "graph.withdrawn"]
+        assert event.payload["upload_id"] == old and event.payload["superseded_by"] == new
+        for name in ("facts", "roles", "education", "projects", "questions"):
+            assert event.payload[name] == body["counts"][name]
+        assert "Accenture" not in json.dumps(event.payload) + event.reason
+
+    async def test_the_new_reading_imports_in_full_afterwards(self, client: httpx.AsyncClient) -> None:
+        # Deleted, not rejected or dismissed: nothing withdrawn blocks the same bullet
+        # or the same question from the new reading.
+        old, new, imported = await self._replaced(client)
+        await client.post(f"/uploads/{old}/withdraw")
+        body = (await client.post(f"/uploads/{new}/import")).json()
+        assert body["counts"]["facts"] == imported["counts"]["facts"]
+        assert body["counts"].get("rejected_again", 0) == 0
+        assert body["questions_queued"] == imported["questions_queued"]
+
+    async def test_importing_the_new_reading_first_then_again_loses_nothing(
+        self, client: httpx.AsyncClient
+    ) -> None:
+        # The other order: the new reading's identical bullets are skipped as duplicates
+        # of the old drafts, which the withdrawal then deletes. Importing again restores them.
+        old, new, imported = await self._replaced(client)
+        first = (await client.post(f"/uploads/{new}/import")).json()
+        assert first["counts"]["facts"] == 0
+        await client.post(f"/uploads/{old}/withdraw")
+        again = (await client.post(f"/uploads/{new}/import")).json()
+        assert again["counts"]["facts"] == imported["counts"]["facts"]
+
+    async def test_a_current_upload_cannot_be_withdrawn_wholesale(self, client: httpx.AsyncClient) -> None:
+        upload = (await _upload_and_import(client))["upload"]
+        for method, path in (("GET", "withdrawal"), ("POST", "withdraw")):
+            response = await client.request(method, f"/uploads/{upload['upload_id']}/{path}")
+            assert response.status_code == 409
+            assert "current reading" in response.json()["detail"]
+
+    async def test_an_unknown_upload_is_a_404(self, client: httpx.AsyncClient) -> None:
+        assert (await client.get(f"/uploads/{new_id()}/withdrawal")).status_code == 404
+        assert (await client.post(f"/uploads/{new_id()}/withdraw")).status_code == 404
+
+    async def test_withdrawing_twice_finds_nothing_the_second_time(self, client: httpx.AsyncClient) -> None:
+        old, _, _ = await self._replaced(client)
+        await client.post(f"/uploads/{old}/withdraw")
+        second = (await client.post(f"/uploads/{old}/withdraw")).json()
+        assert set(second["counts"].values()) == {0}

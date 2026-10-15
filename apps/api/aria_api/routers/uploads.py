@@ -22,7 +22,13 @@ from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import select
 
 from aria_api.deps import CallerDep, ParserDep, ScannerDep, SessionDep, SettingsDep, StoreDep, TaxonomyDep
-from aria_api.schemas import ClassifiedLineBody, ImportResponse, LinesResponse, UploadResponse
+from aria_api.schemas import (
+    ClassifiedLineBody,
+    ImportResponse,
+    LinesResponse,
+    UploadResponse,
+    WithdrawalResponse,
+)
 from aria_api.uploads.pipeline import find_duplicate_upload, ingest_upload, read_before_stage_zero
 from aria_core.db.models import Upload
 from aria_core.documents import LayoutDocument
@@ -32,6 +38,7 @@ from aria_core.importer.classify import classify
 from aria_core.importer.notes import parse_skills_notes
 from aria_core.importer.resume import parse_resume
 from aria_core.importer.shape import IntakeStatus, IntakeVerdict, assess
+from aria_core.importer.withdraw import NotSuperseded, UploadNotFound, Withdrawal, plan_withdrawal, withdraw
 from aria_core.schemas.base import utc_now
 from aria_core.schemas.untrusted import UntrustedContent, UntrustedSourceKind
 
@@ -305,4 +312,49 @@ async def upload_lines(upload_id: uuid.UUID, caller: CallerDep, session: Session
             for line in classify(layout)
         ],
         ambiguous_pages=[page.number for page in layout.pages if page.ambiguous_columns],
+    )
+
+
+async def _withdrawal(session: SessionDep, caller: CallerDep, upload_id: uuid.UUID) -> Withdrawal:
+    try:
+        return await plan_withdrawal(session, candidate_id=caller.candidate_id, upload_id=upload_id)
+    except UploadNotFound:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no such upload") from None
+    except NotSuperseded:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "this upload is the current reading of its file, so its drafts are decided one at a "
+                "time; only a reading that has been replaced can be withdrawn as a whole"
+            ),
+        ) from None
+
+
+@router.get("/{upload_id}/withdrawal", response_model=WithdrawalResponse)
+async def preview_withdrawal(
+    upload_id: uuid.UUID, caller: CallerDep, session: SessionDep
+) -> WithdrawalResponse:
+    """What withdrawing this superseded upload would delete, and what it would keep. Changes nothing."""
+    plan = await _withdrawal(session, caller, upload_id)
+    return WithdrawalResponse(
+        upload_id=plan.upload_id, superseded_by=plan.superseded_by, counts=plan.counts(), kept=plan.kept
+    )
+
+
+@router.post("/{upload_id}/withdraw", response_model=WithdrawalResponse)
+async def withdraw_upload(upload_id: uuid.UUID, caller: CallerDep, session: SessionDep) -> WithdrawalResponse:
+    """Delete a superseded upload's drafts and open questions, at the candidate's request.
+
+    Only drafts and open questions go, each checked as it is deleted; anything approved
+    or rejected stays. One audit event records the counts, the upload and the reading
+    that replaced it.
+    """
+    plan = await _withdrawal(session, caller, upload_id)
+    deleted = await withdraw(session, plan, tenant_id=caller.tenant_id, actor_id=caller.actor_id)
+    return WithdrawalResponse(
+        upload_id=plan.upload_id,
+        superseded_by=plan.superseded_by,
+        withdrawn=True,
+        counts=deleted,
+        kept=plan.kept,
     )
