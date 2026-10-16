@@ -243,8 +243,8 @@ def parse_resume_text(
                 prompt=f"{len(skills.unknown)} skill(s) are not in the taxonomy yet: "
                 + ", ".join(skills.unknown),
                 detail=(
-                    "They are kept against your profile as you wrote them. Adding them to "
-                    "the taxonomy lets ARIA match them to job requirements."
+                    "They are not in your graph: nothing is recorded for a skill ARIA cannot "
+                    "name. Adding them to the taxonomy lets ARIA match them to job requirements."
                 ),
             )
         )

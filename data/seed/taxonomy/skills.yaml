@@ -16,7 +16,7 @@
 #
 # Bump `version` on every change: it is recorded in each resume's artifacts, so a
 # resume can be explained with the taxonomy that produced it.
-version: "2026.10.1"
+version: "2026.10.2"
 
 skills:
   # ----------------------------------------------------------------- languages
@@ -603,6 +603,21 @@ skills:
     category: ml
     aliases: [rag, retrieval augmented generation, retrieval augmentation]
     implies: [llm, embeddings, semantic_search]
+  - id: langchain
+    display: LangChain
+    category: ml
+    aliases: [lang chain, langgraph]
+    implies: [llm, python]
+  - id: vllm
+    display: vLLM
+    category: ml
+    aliases: [v llm]
+    implies: [llm]
+  - id: openai_api
+    display: OpenAI API
+    category: ml
+    aliases: [openai, openai sdk, chatgpt api, gpt api]
+    implies: [llm, rest_api]
   - id: prompt_engineering
     display: prompt engineering
     category: ml
@@ -727,6 +742,10 @@ skills:
     display: Docker
     category: infra
     aliases: [containers, containerization, dockerfile, docker compose, podman]
+  - id: slurm
+    display: SLURM
+    category: infra
+    aliases: [slurm workload manager, sbatch, hpc scheduler]
   - id: kubernetes
     display: Kubernetes
     category: infra

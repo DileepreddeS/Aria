@@ -15,6 +15,14 @@ it as a name — capitalised, upper case, or carrying a symbol or digit. "Go to 
 does not make the candidate a Go programmer; "Go" does. Multi-word terms ("machine
 learning") are exempt: they are long enough to be unambiguous.
 
+**Splitting a skills line** happens only where the resume separates skills: commas,
+semicolons, bars, bullets, wide gaps, "and", "or", and never inside parentheses.
+"AWS (EC2, S3, Lambda)" is a skill and the services named under it, each resolved in
+its own right. A slash is not a separator: "CI/CD" and "TCP/IP" are one skill each.
+A term that does not resolve whole is taken as parts only when known skills cover
+every word of it ("GitHub Actions CI/CD", "HTML/CSS", "Java Spring Boot"); otherwise
+the whole term is reported as unknown, never a fragment of it.
+
 Implication edges are never followed here. Next.js implies React, and that is useful
 for *matching* a requirement later; writing React onto the candidate's graph because
 they wrote Next.js would be putting a word in their mouth.
@@ -33,11 +41,17 @@ __all__ = [
     "SkillFindings",
     "parse_skill_list_line",
     "resolve_terms",
+    "split_skill_terms",
     "tag_skills",
 ]
 
-#: Separators a resume uses between skills on one line.
-_SPLIT = re.compile(r"[,;|\u2022\u00b7\u2219/]|\s{2,}|\bor\b|\band\b", re.IGNORECASE)
+#: Separators a resume uses between skills on one line. Not "/": "CI/CD" is one skill,
+#: and "HTML/CSS" is two only because each half is known (see _resolve).
+_SPLIT = re.compile(r"[,;|\u2022\u00b7\u2219]|\s{2,}|\bor\b|\band\b", re.IGNORECASE)
+
+#: A parenthesised group, innermost first. Separators inside one do not split the line.
+_GROUP = re.compile(r"\([^()]*\)")
+_HELD = re.compile(r"\x00(\d+)\x00")
 
 #: A skills line often starts with its own category: "Languages: Python, Go".
 #: The label is dropped — ARIA's categories come from the taxonomy, and a resume's
@@ -100,17 +114,74 @@ def resolve_terms(
         cleaned = term.strip().strip(".,;:()[]\u2022").strip()
         if not cleaned or len(cleaned) > 60:
             continue
-        canonical = taxonomy.resolve(cleaned)
-        if canonical is None:
+        resolved = _resolve(taxonomy, cleaned)
+        if not resolved:
             if cleaned.lower() not in {item.lower() for item in unknown}:
                 unknown.append(cleaned)
             continue
-        if canonical in seen:
-            continue
-        seen.add(canonical)
-        skills.append(ResolvedSkill(canonical, cleaned, source_line))
+        for canonical, surface in resolved:
+            if canonical in seen:
+                continue
+            seen.add(canonical)
+            skills.append(ResolvedSkill(canonical, surface, source_line))
 
     return SkillFindings(tuple(skills), tuple(unknown))
+
+
+def _resolve(taxonomy: SkillTaxonomy, term: str) -> list[tuple[str, str]]:
+    """``(canonical, surface)`` for a term: the whole of it, or parts covering every word.
+
+    Parts are tried longest-first, so "GitHub Actions CI/CD" is GitHub Actions and CI/CD
+    rather than nothing. If any word is left uncovered the answer is empty, and the
+    caller reports the whole term: a fragment such as "CD" is never a finding.
+    """
+    whole = taxonomy.resolve(term)
+    if whole is not None:
+        return [(whole, term)]
+    # Word spans, so a part keeps the resume's own spelling ("CI/CD", not "CI CD").
+    spans = [match.span() for match in re.finditer(r"[^\s/]+", term)]
+    found: list[tuple[str, str]] = []
+    index = 0
+    while index < len(spans):
+        for size in range(min(_MAX_TERM_WORDS, len(spans) - index), 0, -1):
+            surface = term[spans[index][0] : spans[index + size - 1][1]]
+            canonical = taxonomy.resolve(surface)
+            if canonical is not None:
+                found.append((canonical, surface))
+                index += size
+                break
+        else:
+            return []
+    return found if len(found) > 1 else []
+
+
+def split_skill_terms(text: str) -> list[str]:
+    """A skills line's terms. A parenthesised group stays inside its term."""
+    held: list[str] = []
+
+    def hold(match: re.Match[str]) -> str:
+        held.append(match.group(0))
+        return f"\x00{len(held) - 1}\x00"
+
+    masked = text
+    while _GROUP.search(masked):
+        masked = _GROUP.sub(hold, masked)
+
+    def restore(part: str) -> str:
+        while _HELD.search(part):
+            part = _HELD.sub(lambda match: held[int(match.group(1))], part)
+        return part
+
+    return [restore(part) for part in _SPLIT.split(masked) if part and part.strip()]
+
+
+def _expand(term: str) -> list[str]:
+    """ "AWS (EC2, S3, Lambda)" is AWS and the three things named under it."""
+    head, bracket, rest = term.partition("(")
+    if not bracket or not rest.rstrip().endswith(")"):
+        return [term]
+    inner = rest.rstrip()[:-1]
+    return [head.strip(), *(item for part in split_skill_terms(inner) for item in _expand(part))]
 
 
 def parse_skill_list_line(line: SourceLine, taxonomy: SkillTaxonomy) -> SkillFindings:
@@ -119,7 +190,8 @@ def parse_skill_list_line(line: SourceLine, taxonomy: SkillTaxonomy) -> SkillFin
     label = _LABEL.match(text)
     if label:
         text = label.group("rest")
-    return resolve_terms(taxonomy, _SPLIT.split(text), source_line=line.number)
+    terms = [item for term in split_skill_terms(text) for item in _expand(term)]
+    return resolve_terms(taxonomy, terms, source_line=line.number)
 
 
 def _written_as_a_name(surface: str) -> bool:
