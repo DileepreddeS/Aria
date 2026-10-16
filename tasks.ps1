@@ -80,6 +80,7 @@ switch ($Task) {
         Invoke-Step "mypy (llm_gateway)" { uv run mypy services/llm_gateway }
         Invoke-Step "mypy (api)" { uv run mypy apps/api }
         Invoke-Step "mypy (cli)" { uv run mypy apps/cli }
+        Invoke-Step "mypy (resume)" { uv run mypy engines/resume }
     }
     "control-chars" {
         Invoke-Step "no stray control characters" { uv run python infra/checks/no_control_characters.py }

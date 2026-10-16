@@ -15,6 +15,7 @@ typecheck:
 	uv run mypy services/llm_gateway
 	uv run mypy apps/api
 	uv run mypy apps/cli
+	uv run mypy engines/resume
 
 test:
 	uv run pytest

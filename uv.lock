@@ -17,6 +17,7 @@ members = [
     "aria-core",
     "aria-document-parser",
     "aria-llm-gateway",
+    "aria-resume",
 ]
 
 [[package]]
@@ -221,6 +222,17 @@ requires-dist = [
     { name = "opentelemetry-instrumentation-fastapi", specifier = ">=0.50b0" },
     { name = "uvicorn", specifier = ">=0.32" },
 ]
+
+[[package]]
+name = "aria-resume"
+version = "0.1.0"
+source = { editable = "engines/resume" }
+dependencies = [
+    { name = "aria-core" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "aria-core", editable = "packages/core" }]
 
 [[package]]
 name = "asgi-lifespan"

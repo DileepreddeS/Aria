@@ -47,10 +47,12 @@ from aria_core.schemas.base import utc_now
 from aria_core.schemas.identity import TenantId, UserId, new_id
 
 __all__ = [
+    "ApprovedFactEvidence",
     "FactNotFound",
     "FactView",
     "IllegalFactTransition",
     "approve_fact",
+    "approved_fact_evidence",
     "approved_facts",
     "approved_skill_usage",
     "create_draft_fact",
@@ -684,3 +686,75 @@ async def fact_status_counts(
         )
     ).all()
     return {row[0]: int(row[1]) for row in rows}
+
+
+@dataclass(frozen=True, slots=True)
+class ApprovedFactEvidence:
+    """One approved fact with everything a resume may say about it, and nothing else."""
+
+    fact_id: uuid.UUID
+    text: str
+    experience_id: uuid.UUID | None
+    project_id: uuid.UUID | None
+    education_id: uuid.UUID | None
+    #: ``(canonical, surface_form)``: the candidate's own spelling travels with the id.
+    skills: tuple[tuple[str, str], ...]
+    #: ``(exact_value, measures, baseline)``, the value exactly as the candidate wrote it.
+    metrics: tuple[tuple[str, str | None, str | None], ...]
+    themes: tuple[str, ...]
+
+
+async def approved_fact_evidence(
+    session: AsyncSession, candidate_id: uuid.UUID
+) -> list[ApprovedFactEvidence]:
+    """Every **approved** fact with its skills, metrics and themes: the Resume Engine's evidence.
+
+    The engine never reads the database; the candidate snapshot it is given is built
+    from this, so a draft, rejected or merged fact cannot reach a resume however the
+    engine is written (DECISIONS 2026-10-16).
+    """
+    facts = (await session.execute(_current_text_query(candidate_id, ApprovalStatus.APPROVED))).all()
+    views = _to_views(facts)
+    ids = [view.fact_id for view in views]
+    skills: dict[uuid.UUID, list[tuple[str, str]]] = {}
+    metrics: dict[uuid.UUID, list[tuple[str, str | None, str | None]]] = {}
+    themes: dict[uuid.UUID, list[str]] = {}
+    if ids:
+        for skill in (
+            await session.execute(
+                select(FactSkill.fact_id, FactSkill.skill_canonical, FactSkill.surface_form)
+                .where(FactSkill.fact_id.in_(ids))
+                .order_by(FactSkill.created_at, FactSkill.skill_canonical)
+            )
+        ).all():
+            skills.setdefault(skill[0], []).append((skill[1], skill[2]))
+        for metric in (
+            await session.execute(
+                select(FactMetric.fact_id, FactMetric.exact_value, FactMetric.measures, FactMetric.baseline)
+                .where(FactMetric.fact_id.in_(ids))
+                .order_by(FactMetric.created_at, FactMetric.id)
+            )
+        ).all():
+            metrics.setdefault(metric[0], []).append((metric[1], metric[2], metric[3]))
+        for theme in (
+            await session.execute(
+                select(FactTheme.fact_id, FactTheme.theme)
+                .where(FactTheme.fact_id.in_(ids))
+                .order_by(FactTheme.theme)
+            )
+        ).all():
+            themes.setdefault(theme[0], []).append(theme[1])
+    return [
+        ApprovedFactEvidence(
+            fact_id=view.fact_id,
+            text=view.text,
+            experience_id=view.experience_id,
+            project_id=view.project_id,
+            education_id=view.education_id,
+            skills=tuple(skills.get(view.fact_id, ())),
+            metrics=tuple(metrics.get(view.fact_id, ())),
+            themes=tuple(themes.get(view.fact_id, ())),
+        )
+        for view in views
+        if view.status is ApprovalStatus.APPROVED
+    ]

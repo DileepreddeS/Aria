@@ -26,6 +26,7 @@ members = [
     "services/document_parser",
     "apps/api",
     "apps/cli",
+    "engines/resume",
 ]
 
 [tool.uv.sources]
@@ -34,6 +35,7 @@ aria-llm-gateway = { workspace = true }
 aria-document-parser = { workspace = true }
 aria-api = { workspace = true }
 aria-cli = { workspace = true }
+aria-resume = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -95,7 +97,7 @@ python_version = "3.12"
 strict = true
 warn_unreachable = true
 plugins = ["pydantic.mypy"]
-mypy_path = "packages/core:services/llm_gateway:services/document_parser:apps/api:apps/cli"
+mypy_path = "packages/core:services/llm_gateway:services/document_parser:apps/api:apps/cli:engines/resume"
 explicit_package_bases = true
 
 [[tool.mypy.overrides]]
@@ -110,6 +112,7 @@ testpaths = [
     "services/document_parser/tests",
     "apps/api/tests",
     "apps/cli/tests",
+    "engines/resume/tests",
 ]
 asyncio_mode = "auto"
 # importlib import mode: each workspace member has its own tests directory, and the
