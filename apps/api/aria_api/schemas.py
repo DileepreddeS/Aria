@@ -38,6 +38,7 @@ __all__ = [
     "QuestionOut",
     "ReconsiderQuestionResponse",
     "RejectRequest",
+    "ReviewResponse",
     "UploadResponse",
     "WithdrawalResponse",
 ]
@@ -105,6 +106,12 @@ class ImportResponse(Body):
     dropped: list[str] = Field(default_factory=list)
     #: Imported, but worth a look: a start date more than a year ahead, say.
     flags: list[str] = Field(default_factory=list)
+
+
+class ReviewResponse(Body):
+    upload_id: uuid.UUID
+    reviewed_at: dt.datetime
+    reviewed_by: uuid.UUID
 
 
 class ReconsiderQuestionResponse(Body):

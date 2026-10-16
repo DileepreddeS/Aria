@@ -138,6 +138,12 @@ class Upload(Base):
     #: disagreed about. The facts from this upload still import, and the approval view
     #: tells the candidate which pages to check against the original.
     needs_review: Mapped[bool] = mapped_column(nullable=False, default=False)
+    #: Who looked at a flagged upload's lines and found them right, and when (migration
+    #: 0007). The flag stays set, so the upload still says why it needed a look.
+    reviewed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
     #: Stage 0's reading of a PDF: aria_core.documents.LayoutDocument as JSON — every
     #: line in reading order with its page, column and position. Kept so a refused
     #: import can show the candidate what ARIA saw, and so a fact's source_line can be
@@ -168,6 +174,7 @@ class Upload(Base):
             "parse_status IN ('pending', 'parsed', 'refused', 'failed')", name="parse_status_is_known"
         ),
         CheckConstraint("cross_extractor IN ('agree', 'disagree')", name="cross_extractor_is_known"),
+        CheckConstraint("(reviewed_at IS NULL) = (reviewed_by IS NULL)", name="review_has_a_reviewer"),
         # One current reading per file; superseded readings are kept beside it.
         Index(
             "uq_uploads_candidate_id_sha256_current",

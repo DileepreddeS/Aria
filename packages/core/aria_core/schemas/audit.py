@@ -89,6 +89,8 @@ class AuditAction(StrEnum):
     UPLOAD_PARSED = "upload.parsed"
     UPLOAD_REFUSED = "upload.refused"
     UPLOAD_ORIGINAL_DELETED = "upload.original_deleted"
+    #: A flagged upload's lines checked against the original by the candidate.
+    UPLOAD_REVIEWED = "upload.reviewed"
     SENSITIVE_FIELD_READ = "sensitive_field.read"
     SENSITIVE_FIELD_WRITTEN = "sensitive_field.written"
     DATA_KEY_ROTATED = "data_key.rotated"

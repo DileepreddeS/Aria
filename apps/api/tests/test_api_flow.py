@@ -1199,3 +1199,83 @@ class TestReconsideringAQuestionOverHttp:
 
     async def test_an_unknown_question_is_a_404(self, client: httpx.AsyncClient) -> None:
         assert (await client.post(f"/questions/{new_id()}/reconsider")).status_code == 404
+
+
+class TestReviewingAFlaggedUpload:
+    """aria review: the candidate checked a flagged upload's lines; the gate stops waiting."""
+
+    NAME = "float_scrambled"  # the cross-check disagrees about its order, so it is flagged
+
+    async def _flagged(self, client: httpx.AsyncClient, *, reprocess: bool = False) -> str:
+        response = await client.post(
+            "/uploads",
+            files={
+                "file": (f"{self.NAME}.pdf", (FIXTURES / f"{self.NAME}.pdf").read_bytes(), "application/pdf")
+            },
+            params={"reprocess": reprocess},
+        )
+        body = response.json()
+        assert body["needs_review"] is True, body
+        return str(body["upload_id"])
+
+    @staticmethod
+    async def _review_check(client: httpx.AsyncClient) -> dict[str, Any]:
+        checks = (await client.get("/report/completeness")).json()["checks"]
+        found: dict[str, Any] = next(
+            check for check in checks if check["name"] == "no_uploads_awaiting_review"
+        )
+        return found
+
+    async def test_the_report_names_the_upload_and_reviewing_it_clears_the_check(
+        self, client: httpx.AsyncClient, engine: AsyncEngine, tenant_a: TenantId, user_a: UserId
+    ) -> None:
+        upload_id = await self._flagged(client)
+        waiting = await self._review_check(client)
+        assert waiting["met"] is False and upload_id in waiting["detail"]
+
+        response = await client.post(f"/uploads/{upload_id}/review")
+        assert response.status_code == 200
+        assert response.json()["reviewed_by"] == str(user_a)
+        assert (await self._review_check(client))["met"] is True
+
+        async with tenant_transaction(engine, tenant_a) as session:
+            row = (
+                await session.execute(
+                    select(Upload.needs_review, Upload.reviewed_at, Upload.reviewed_by).where(
+                        Upload.id == uuid.UUID(upload_id)
+                    )
+                )
+            ).one()
+            events = await read_chain(session, tenant_a)
+        # The flag stays, so the upload still says why it needed a look.
+        assert row[0] is True and row[1] is not None and row[2] == user_a
+        (event,) = [event for event in events if event.action == "upload.reviewed"]
+        assert event.subject_id == upload_id and event.payload["cross_extractor"] == "disagree"
+
+    async def test_reviewing_twice_is_a_409(self, client: httpx.AsyncClient) -> None:
+        upload_id = await self._flagged(client)
+        await client.post(f"/uploads/{upload_id}/review")
+        again = await client.post(f"/uploads/{upload_id}/review")
+        assert again.status_code == 409 and "already reviewed" in again.json()["detail"]
+
+    async def test_an_upload_that_was_not_flagged_has_nothing_to_review(
+        self, client: httpx.AsyncClient
+    ) -> None:
+        upload = await _upload(
+            client, "clean.pdf", (FIXTURES / "clean_inline_block.pdf").read_bytes(), "application/pdf"
+        )
+        response = await client.post(f"/uploads/{upload['upload_id']}/review")
+        assert response.status_code == 409 and "not flagged" in response.json()["detail"]
+
+    async def test_a_replaced_reading_neither_waits_nor_can_be_reviewed(
+        self, client: httpx.AsyncClient
+    ) -> None:
+        old = await self._flagged(client)
+        new = await self._flagged(client, reprocess=True)
+        waiting = await self._review_check(client)
+        assert old not in waiting["detail"] and new in waiting["detail"]
+        response = await client.post(f"/uploads/{old}/review")
+        assert response.status_code == 409 and new in response.json()["detail"]
+
+    async def test_an_unknown_upload_is_a_404(self, client: httpx.AsyncClient) -> None:
+        assert (await client.post(f"/uploads/{new_id()}/review")).status_code == 404

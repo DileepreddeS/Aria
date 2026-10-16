@@ -111,6 +111,9 @@ class AriaClient:
     def withdraw(self, upload_id: uuid.UUID | str) -> dict[str, Any]:
         return dict(self._request("POST", f"/uploads/{upload_id}/withdraw"))
 
+    def review(self, upload_id: uuid.UUID | str) -> dict[str, Any]:
+        return dict(self._request("POST", f"/uploads/{upload_id}/review", json={}))
+
     def lines(self, upload_id: uuid.UUID | str) -> dict[str, Any]:
         return dict(self._request("GET", f"/uploads/{upload_id}/lines"))
 

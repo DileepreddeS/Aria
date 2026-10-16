@@ -183,6 +183,12 @@ def _cmd_withdraw(client: AriaClient, args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_review(client: AriaClient, args: argparse.Namespace) -> int:
+    result = client.review(args.upload_id)
+    print(f"upload {result['upload_id']} reviewed at {result['reviewed_at']}")
+    return 0
+
+
 def _cmd_facts(client: AriaClient, args: argparse.Namespace) -> int:
     payload = client.facts(status=args.status)
     facts = payload.get("facts", [])
@@ -401,6 +407,12 @@ def build_parser() -> argparse.ArgumentParser:
     withdraw.add_argument("upload_id")
     withdraw.add_argument("--yes", action="store_true", help="do not ask before deleting")
     withdraw.set_defaults(handler=_cmd_withdraw)
+
+    review = subparsers.add_parser(
+        "review", help="record that you checked a flagged upload's lines and they are right"
+    )
+    review.add_argument("upload_id")
+    review.set_defaults(handler=_cmd_review)
 
     lines = subparsers.add_parser("lines", help="show how ARIA read a PDF upload, line by line")
     lines.add_argument("upload_id")

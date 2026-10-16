@@ -126,15 +126,24 @@ async def completeness(caller: CallerDep, session: SessionDep) -> CompletenessRe
     missing_fields = [kind.value for kind in REQUIRED_PROFILE_FIELDS if kind.value not in approved_fields]
 
     waiting = await open_questions(session, caller.candidate_id)
-    needs_review = int(
-        (
+    # A flagged upload holds the gate until the candidate has looked: once reviewed, or
+    # once read again (the new reading carries its own flag), it no longer does.
+    awaiting = [
+        str(row[0])
+        for row in (
             await session.execute(
-                select(func.count())
-                .select_from(Upload)
-                .where(Upload.candidate_id == caller.candidate_id, Upload.needs_review.is_(True))
+                select(Upload.id)
+                .where(
+                    Upload.candidate_id == caller.candidate_id,
+                    Upload.needs_review.is_(True),
+                    Upload.reviewed_at.is_(None),
+                    Upload.superseded_by.is_(None),
+                )
+                .order_by(Upload.created_at)
             )
-        ).scalar_one()
-    )
+        ).all()
+    ]
+    needs_review = len(awaiting)
 
     checks = [
         Check(
@@ -175,7 +184,8 @@ async def completeness(caller: CallerDep, session: SessionDep) -> CompletenessRe
             needs_review == 0,
             "none"
             if needs_review == 0
-            else f"{needs_review} upload(s) had pages the two PDF readers disagreed about",
+            else f"{needs_review} upload(s) had pages the two PDF readers disagreed about; check "
+            "the lines (aria lines <id>) and mark each reviewed (aria review <id>): " + ", ".join(awaiting),
         ),
     ]
 

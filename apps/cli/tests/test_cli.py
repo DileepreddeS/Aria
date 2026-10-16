@@ -328,6 +328,23 @@ class TestTheClientSendsTheRightRequest:
         assert f"replaces upload {earlier}" in out
 
 
+class TestReview:
+    def test_review_posts_and_says_when(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        recorder = Recorder(
+            {
+                ("POST", f"/uploads/{UPLOAD_ID}/review"): {
+                    "upload_id": UPLOAD_ID,
+                    "reviewed_at": "2026-10-15T16:40:00+00:00",
+                    "reviewed_by": str(uuid.uuid4()),
+                }
+            }
+        )
+        assert run(recorder, ["review", UPLOAD_ID], monkeypatch) == 0
+        assert f"upload {UPLOAD_ID} reviewed at 2026-10-15" in capsys.readouterr().out
+
+
 class TestReconsiderAQuestion:
     def test_it_goes_to_the_question_route_and_says_what_happened(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]

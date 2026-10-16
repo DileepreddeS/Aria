@@ -19,17 +19,19 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from aria_api.deps import CallerDep, ParserDep, ScannerDep, SessionDep, SettingsDep, StoreDep, TaxonomyDep
 from aria_api.schemas import (
     ClassifiedLineBody,
     ImportResponse,
     LinesResponse,
+    ReviewResponse,
     UploadResponse,
     WithdrawalResponse,
 )
 from aria_api.uploads.pipeline import find_duplicate_upload, ingest_upload, read_before_stage_zero
+from aria_core.audit.log import append_event
 from aria_core.db.models import Upload
 from aria_core.documents import LayoutDocument
 from aria_core.importer.apply import apply_import_plan, record_refused_import
@@ -39,6 +41,7 @@ from aria_core.importer.notes import parse_skills_notes
 from aria_core.importer.resume import parse_resume
 from aria_core.importer.shape import IntakeStatus, IntakeVerdict, assess
 from aria_core.importer.withdraw import NotSuperseded, UploadNotFound, Withdrawal, plan_withdrawal, withdraw
+from aria_core.schemas.audit import ActorKind, AuditAction, AuditEventDraft, AuditOutcome, SubjectKind
 from aria_core.schemas.base import utc_now
 from aria_core.schemas.untrusted import UntrustedContent, UntrustedSourceKind
 
@@ -358,3 +361,61 @@ async def withdraw_upload(upload_id: uuid.UUID, caller: CallerDep, session: Sess
         counts=deleted,
         kept=plan.kept,
     )
+
+
+@router.post("/{upload_id}/review", response_model=ReviewResponse)
+async def review_upload(upload_id: uuid.UUID, caller: CallerDep, session: SessionDep) -> ReviewResponse:
+    """The candidate checked a flagged upload's lines against the original and found them right.
+
+    Records who and when, and audits it; the needs_review flag stays, so the upload
+    still says why it needed a look. Only a flagged, current upload can be reviewed,
+    and only once.
+    """
+    row = (
+        await session.execute(
+            select(
+                Upload.candidate_id,
+                Upload.needs_review,
+                Upload.reviewed_at,
+                Upload.reviewed_by,
+                Upload.superseded_by,
+                Upload.cross_extractor,
+            ).where(Upload.id == upload_id)
+        )
+    ).first()
+    if row is None or row[0] != caller.candidate_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no such upload")
+    if row[4] is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"this upload was read again as {row[4]}; review that one if it is flagged",
+        )
+    if not row[1]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="this upload was not flagged for review"
+        )
+    if row[2] is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=f"already reviewed on {row[2]:%Y-%m-%d %H:%M} UTC"
+        )
+    reviewed_at = utc_now()
+    await session.execute(
+        update(Upload)
+        .where(Upload.id == upload_id)
+        .values(reviewed_at=reviewed_at, reviewed_by=caller.user_id)
+    )
+    await append_event(
+        session,
+        AuditEventDraft(
+            action=AuditAction.UPLOAD_REVIEWED,
+            actor_kind=ActorKind.USER,
+            actor_id=caller.actor_id,
+            subject_kind=SubjectKind.UPLOAD,
+            subject_id=str(upload_id),
+            outcome=AuditOutcome.OK,
+            reason="the candidate checked the flagged lines against the original",
+            payload={"cross_extractor": row[5]},
+        ),
+        tenant_id=caller.tenant_id,
+    )
+    return ReviewResponse(upload_id=upload_id, reviewed_at=reviewed_at, reviewed_by=caller.user_id)
