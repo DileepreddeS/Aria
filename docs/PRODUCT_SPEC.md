@@ -188,7 +188,7 @@ All inter-component messages are Pydantic models in `packages/core/schemas`, ver
 | API | FastAPI, Pydantic v2 |
 | Database | PostgreSQL 16 (Docker locally; managed Postgres in production), SQLAlchemy 2 + Alembic, row-level security per tenant |
 | Workflows | LangGraph (agent graphs, checkpoints, human interrupts) + Postgres work queue |
-| LLM access | Own LLM gateway service (LiteLLM inside) with data-class policies, cost tracking, provider failover |
+| LLM access | Own LLM gateway service: one adapter per provider behind a common interface (Anthropic first, via its SDK), with data-class policies, cost tracking, provider failover |
 | Local ML | sentence-transformers embeddings, DeBERTa-v3 NLI for truth checks |
 | Browser | Playwright (Python) + CDP sessions, dedicated Chrome profile |
 | PDF | Jinja2 HTML/CSS → Chromium print-to-PDF; pypdf + pdfminer for extraction checks |

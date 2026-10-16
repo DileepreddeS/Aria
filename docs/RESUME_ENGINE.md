@@ -20,6 +20,8 @@ Other parts of ARIA call it only through its public API (section 10).
 4. **Bullet formula:** strong verb + specific technology + what was built/changed + exact measurable result.
    One or two lines. Allowed verbs come from a list per candidate voice (default: built, shipped, wired, added,
    trained, led, set up, sped up, improved, containerized, designed, cut, migrated, automated).
+   **No verb opens more than three bullets on one resume;** a fourth is a recruiter-check failure (§9 6c).
+   Repetition is the tell that a person did not write it.
 5. **No AI voice.** Banned words: leveraged, spearheaded, cutting-edge, synergy, robust, seamlessly, utilize,
    facilitate, innovative, streamlined, orchestrated, championed, transformative, impactful, holistic,
    paradigm, dynamic, proactive, revolutionized, best-in-class, world-class, game-changing, passionate,
@@ -452,7 +454,8 @@ All validators are code first, LLM only where noted. Each returns pass/fail plus
 
 **6c Recruiter check**
 - Banned words and phrases → fail. Weak openings ("Responsible for", "Worked on", "Helped") → fail.
-- Allowed verb at the start of every bullet; at least 60% of bullets quantified; no duplicate verbs in a row.
+- Allowed verb at the start of every bullet; at least 60% of bullets quantified; no duplicate verbs in a row;
+  no verb opening more than three bullets on the page.
 - Vague phrase list ("cloud-native solutions", "modern web systems", "digital solutions") → fail unless
   literally in the fact.
 - **6-second test (LLM, JSON):** given the top 3 requirements, does the top third of the page show each one?
@@ -489,17 +492,25 @@ and by the §9 6a assertions:
 
 **Public API**
 ```python
-def build_resume(jd_text: str, candidate_id: str, options: ResumeOptions) -> ResumeResult
-def explain(resume_id: str) -> EvidenceMap          # "why is this bullet here?"
-def gap_report(resume_id: str) -> GapReport
+def build_resume(jd_text: str, snapshot: CandidateSnapshot, options: ResumeOptions, llm: LlmClient) -> ResumeResult
+def explain(result: ResumeResult) -> EvidenceMap    # "why is this bullet here?"
+def gap_report(result: ResumeResult) -> GapReport
 ```
+The engine is pure: it never reads the database. `CandidateSnapshot` is built outside it, from approved rows
+only, so "only verified facts can appear on a resume" is a property of the input type rather than of
+discipline (DECISIONS 2026-10-16). The caller stores the result; the PDF's file name is generated, never derived
+from the JD or the company.
 `ResumeResult.status` ∈ {`ok`, `needs_review`, `no_fit`}.
 
 ## 11. Evaluation (required before the engine is used for real applications)
 
-`evals/resume/`: 30 real JDs (6 per role type) with the expected must-haves labelled by hand.
+`evals/resume/`: 30 real JDs, 6 for each of five role types (frontend, backend, full-stack, AI/LLM
+engineer, general SWE), with the expected must-haves labelled by hand. Each JD is kept with its source URL and
+capture date, recruiter names and contact details removed by hand, company names kept. Templates for data,
+DevOps and ML/research exist outside the gate.
 Metrics per run: truth violations (must be 0), must-have coverage, 6-second pass rate, one-page rate,
-banned-word count (must be 0), human rating 1–5 on 10 sampled resumes. Any change to prompts, taxonomy,
+banned-word count (must be 0), and the founder's judgement on 10 sampled resumes: a binary "would send"
+(the gate is at least 8 of 10) with a 1–5 rating alongside for tuning. Any change to prompts, taxonomy,
 weights or templates must not lower these numbers. CI runs the deterministic parts. The LLM parts run on demand.
 
 ## 12. Same graph, other outputs
