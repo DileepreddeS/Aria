@@ -185,6 +185,24 @@ class TestWhatTheEnrichmentInterviewFinds:
             gaps = await find_gaps(session, candidate_id)
         assert not any("nightly export" in gap.prompt for gap in gaps)
 
+    async def test_a_bullet_of_model_scores_is_not_a_gap(
+        self, engine: AsyncEngine, tenant_a: TenantId, candidate_id: uuid.UUID, taxonomy: SkillTaxonomy
+    ) -> None:
+        # Regression: decimals with nothing after them read as version numbers, so a
+        # bullet that is nothing but results was asked for a number.
+        await imported(engine, tenant_a, candidate_id, taxonomy)
+        async with tenant_transaction(engine, tenant_a) as session:
+            await create_draft_fact(
+                session,
+                tenant_id=tenant_a,
+                candidate_id=candidate_id,
+                text="Per-class results: glass shatter 0.950, tire flat 0.874, lamp broken 0.830",
+                source=GraphSource.RESUME_IMPORT,
+            )
+        async with tenant_transaction(engine, tenant_a) as session:
+            gaps = await find_gaps(session, candidate_id)
+        assert not any("glass shatter" in gap.prompt for gap in gaps)
+
     async def test_finding_gaps_writes_nothing(
         self, engine: AsyncEngine, tenant_a: TenantId, candidate_id: uuid.UUID, taxonomy: SkillTaxonomy
     ) -> None:

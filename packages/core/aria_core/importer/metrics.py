@@ -38,7 +38,7 @@ from aria_core.graph.status import Theme
 from aria_core.importer.dates import parse_date_range
 from aria_core.schemas.base import utc_now
 
-__all__ = ["Metric", "detect_themes", "extract_metrics"]
+__all__ = ["Metric", "detect_themes", "extract_metrics", "states_a_result"]
 
 #: Unit and magnitude suffixes that may be welded to a number. Order matters: the
 #: longest match is stripped first, so "ms" is not read as "m" plus a stray "s".
@@ -626,3 +626,40 @@ def detect_themes(text: str) -> tuple[Theme, ...]:
     shown, so a miss costs relevance and never truth.
     """
     return tuple(theme for theme, pattern in _THEME_PATTERNS if pattern.search(text))
+
+
+#: Words that name a score. A decimal after one of these is a result, not a version.
+_SCORE_WORDS = frozenset(
+    """accuracy auc bleu dice f1 iou mae map mse perplexity precision r2 recall result results
+    rmse roc rouge score scores top1 top-1 top5 top-5 wer""".split()
+)
+#: A decimal standing on its own: 0.950, .87, 12.5. Not v2.1, not 3.12.4.
+_DECIMAL = re.compile(r"(?<![\w.])(?:\d+)?\.\d+(?![\w.])")
+
+
+def states_a_result(line: str, *, today: dt.date | None = None) -> bool:
+    """Whether a bullet already reports a measured result, for the enrichment interview.
+
+    Broader than :func:`extract_metrics`, on purpose. That function stores what each
+    number measures, so it only takes numbers it can read with their unit or noun;
+    "glass shatter 0.950, tire flat 0.874" is a line of scores whose labels sit before
+    each number, and storing them would put a misread "measures" on the fact. Asking
+    the candidate for a number such a bullet already gives is the opposite mistake,
+    and this test only decides whether to ask.
+
+    A score is a decimal with a leading zero (0.950, .87), or any decimal within three
+    words of a score's name, before or two after: mAP, F1, accuracy, precision, recall,
+    AUC, IoU, BLEU, ROUGE, RMSE, score. A bare dotted number still reads as a version: "migrated to
+    Python 3.12" is asked about.
+    """
+    if extract_metrics(line, today=today):
+        return True
+    for match in _DECIMAL.finditer(line):
+        if match.group(0).startswith(("0.", ".")):
+            return True
+        before = _tokens_before(line, match.start())[-3:]
+        after = line[match.end() :].split()[:2]
+        named = [word.strip(".,:;()[]").lower() for word in before + after]
+        if any(word in _SCORE_WORDS or word.startswith("map") for word in named):
+            return True
+    return False

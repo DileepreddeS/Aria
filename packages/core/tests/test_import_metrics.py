@@ -13,7 +13,7 @@ import datetime as dt
 import pytest
 
 from aria_core.graph.status import Theme
-from aria_core.importer.metrics import detect_themes, extract_metrics
+from aria_core.importer.metrics import detect_themes, extract_metrics, states_a_result
 
 TODAY = dt.date(2026, 10, 8)
 
@@ -226,3 +226,40 @@ class TestCurrency:
     def test_the_identifier_rule_still_holds(self, line: str) -> None:
         # The currency exception is narrow: it must not reopen the hole it sits next to.
         assert values(line) == []
+
+
+class TestStatesAResult:
+    """Whether to ask the candidate for a number: a line of scores already gives one."""
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "Per-class results: glass shatter 0.950, tire flat 0.874, lamp broken 0.830",
+            # Bare scores with no score word anywhere: only the leading zero says so.
+            "Glass shatter 0.950, tire flat 0.874, lamp broken 0.830",
+            "Achieved mAP50 of 0.712 on the CarDD test set",
+            "F1 score 0.91 on the held-out set",
+            "Reached 87.5 accuracy on the benchmark",
+            "Cut p95 latency by 30% with Redis caching",
+            "Built 15+ React screens for the checkout platform",
+        ],
+    )
+    def test_a_bullet_that_reports_a_result(self, line: str) -> None:
+        assert states_a_result(line)
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "Built the onboarding flow for new users",
+            "Migrated the platform to Python 3.12 and WCAG 2.1",
+            "Upgraded the service from v0.9 to v1.0",
+            "Trained YOLO11m on the CarDD dataset",
+        ],
+    )
+    def test_a_bullet_that_does_not(self, line: str) -> None:
+        assert not states_a_result(line)
+
+    def test_scores_are_not_stored_as_metrics(self) -> None:
+        # The labels sit before each number, where extract_metrics does not read them;
+        # deciding not to ask is all this does, and nothing misread reaches the graph.
+        assert extract_metrics("Per-class results: glass shatter 0.950, tire flat 0.874") == ()

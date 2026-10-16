@@ -184,12 +184,12 @@ async def _unevidenced_skills(session: AsyncSession, candidate_id: uuid.UUID) ->
 async def _facts_without_numbers(
     session: AsyncSession, candidate_id: uuid.UUID
 ) -> tuple[list[Gap], set[uuid.UUID]]:
-    """Bullets with no number in them, and the set of roles that have any bullet.
+    """Bullets that state no result, and the set of roles that have any bullet.
 
     Both come from the same read, which is why they are returned together: the fact
     list is the only place that knows which roles are evidenced.
     """
-    from aria_core.importer.metrics import extract_metrics
+    from aria_core.importer.metrics import states_a_result
 
     facts = await approved_facts(session, candidate_id) + await draft_facts(session, candidate_id)
     anchored = {fact.experience_id for fact in facts if fact.experience_id is not None}
@@ -197,7 +197,7 @@ async def _facts_without_numbers(
     prompt = ENRICHMENT_PROMPTS[QuestionTemplate.MISSING_METRIC]
     gaps: list[Gap] = []
     for fact in facts:
-        if len(fact.text) < _MIN_FACT_LENGTH or extract_metrics(fact.text):
+        if len(fact.text) < _MIN_FACT_LENGTH or states_a_result(fact.text):
             continue
         gaps.append(
             Gap(
