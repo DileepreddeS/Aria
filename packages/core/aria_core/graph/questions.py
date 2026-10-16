@@ -28,13 +28,13 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Final
 
-from sqlalchemy import insert, select, update
+from sqlalchemy import delete, insert, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aria_core.audit.log import append_event
 from aria_core.db.models import Experience, Motivation, ProfileField, UserQuestion
-from aria_core.graph.facts import create_draft_fact
+from aria_core.graph.facts import FactNotFound, create_draft_fact, get_fact
 from aria_core.graph.months import MonthSpan
 from aria_core.graph.status import (
     ApprovalStatus,
@@ -58,6 +58,7 @@ __all__ = [
     "QuestionNotFound",
     "QuestionStatus",
     "QuestionView",
+    "Reconsidered",
     "UnansweredQuestion",
     "answer_question",
     "ask",
@@ -66,6 +67,8 @@ __all__ = [
     "open_question_count",
     "open_questions",
     "questions_for",
+    "reconsider_question",
+    "subject_status",
 ]
 
 
@@ -726,3 +729,112 @@ async def _audit(
         ),
         tenant_id=tenant_id,
     )
+
+
+# ------------------------------------------------------------------ reconsidering
+
+#: Kinds whose answer changes a row that already existed rather than creating one.
+#: Answering again changes the same row, so reopening never duplicates anything.
+_CHANGES_IN_PLACE: Final[frozenset[str]] = frozenset({"paid_or_unpaid"})
+_SUBJECT_TABLES: Final[dict[str, Any]] = {
+    "experience": Experience,
+    "profile_field": ProfileField,
+    "motivation": Motivation,
+}
+
+
+class Reconsidered(StrEnum):
+    REOPENED = "reopened"
+    """Open again, where it was. Answering it applies the new answer."""
+    WITHDRAWN = "withdrawn"
+    """What the answer made is gone, so the question is deleted: the next import asks
+    it afresh about the row that exists now."""
+
+
+async def subject_status(
+    session: AsyncSession, subject_kind: str | None, subject_id: uuid.UUID | None
+) -> str | None:
+    """The approval status of what an answer created or changed; None if it is gone."""
+    if subject_kind is None or subject_id is None:
+        return None
+    if subject_kind == "fact":
+        try:
+            return (await get_fact(session, subject_id)).status.value
+        except FactNotFound:
+            return None
+    model = _SUBJECT_TABLES.get(subject_kind)
+    if model is None:
+        return None
+    found: str | None = (
+        await session.execute(select(model.status).where(model.id == subject_id))
+    ).scalar_one_or_none()
+    return found
+
+
+async def reconsider_question(
+    session: AsyncSession,
+    *,
+    tenant_id: TenantId,
+    question_id: uuid.UUID,
+    actor: UserId,
+) -> Reconsidered:
+    """Take back an answer or a dismissal, as ``aria reconsider`` does for a rejected fact.
+
+    - A dismissal, or an answer that only recorded text, reopens.
+    - An answer that changed a row which still exists reopens, still pointing at that row,
+      so answering again changes it in place.
+    - An answer that created a row which still exists is refused: answering again would
+      create a second one. Rejecting that row first makes the question reconsiderable.
+    - An answer whose row is gone (withdrawn with its upload, say) is withdrawn too. The
+      question is deleted, freeing its key, and the next import asks it afresh about the
+      row that exists now. Reopening it would ask about something no longer there.
+    """
+    row = (
+        await session.execute(select(UserQuestion).where(UserQuestion.id == question_id).with_for_update())
+    ).scalar_one_or_none()
+    if row is None:
+        raise QuestionNotFound(str(question_id))
+    if row.status == QuestionStatus.OPEN.value:
+        raise UnansweredQuestion("this question is still open", expected="an answered or dismissed question")
+
+    previous = row.status
+    status = await subject_status(session, row.subject_kind, row.subject_id)
+    applied = row.kind in _APPLIERS and row.subject_id is not None
+    if previous == QuestionStatus.ANSWERED.value and applied and status is None:
+        outcome = Reconsidered.WITHDRAWN
+        await session.execute(delete(UserQuestion).where(UserQuestion.id == question_id))
+    else:
+        if (
+            applied
+            and row.kind not in _CHANGES_IN_PLACE
+            and status is not None
+            and status != ApprovalStatus.REJECTED.value
+        ):
+            raise UnansweredQuestion(
+                f"answering this created {row.subject_kind} {row.subject_id}, which still exists; "
+                "reject it first, or answering again would create a second one",
+                expected="an answer whose result has been rejected or is gone",
+            )
+        keep_subject = row.kind in _CHANGES_IN_PLACE and status is not None
+        outcome = Reconsidered.REOPENED
+        await session.execute(
+            update(UserQuestion)
+            .where(UserQuestion.id == question_id)
+            .values(
+                status=QuestionStatus.OPEN.value,
+                answer=None,
+                answered_at=None,
+                answered_by=None,
+                subject_kind=row.subject_kind if keep_subject else None,
+                subject_id=row.subject_id if keep_subject else None,
+            )
+        )
+    await _audit(
+        session,
+        tenant_id=tenant_id,
+        question_id=question_id,
+        action=AuditAction.USER_QUESTION_RECONSIDERED,
+        actor_id=str(actor),
+        payload={"kind": row.kind, "was": previous, "outcome": outcome.value},
+    )
+    return outcome

@@ -328,6 +328,24 @@ class TestTheClientSendsTheRightRequest:
         assert f"replaces upload {earlier}" in out
 
 
+class TestReconsiderAQuestion:
+    def test_it_goes_to_the_question_route_and_says_what_happened(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        recorder = Recorder(
+            {
+                ("POST", f"/questions/{QUESTION_ID}/reconsider"): {
+                    "question_id": QUESTION_ID,
+                    "outcome": "withdrawn",
+                    "detail": "import the upload again and it will be asked afresh",
+                }
+            }
+        )
+        assert run(recorder, ["reconsider", QUESTION_ID, "--kind", "question"], monkeypatch) == 0
+        assert "withdrawn: import the upload again" in capsys.readouterr().out
+        assert [request.url.path for request in recorder.seen] == [f"/questions/{QUESTION_ID}/reconsider"]
+
+
 class TestWithdraw:
     NEW = str(uuid.uuid4())
     PREVIEW: ClassVar[dict[str, Any]] = {

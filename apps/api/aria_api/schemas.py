@@ -36,6 +36,7 @@ __all__ = [
     "LinesResponse",
     "QuestionList",
     "QuestionOut",
+    "ReconsiderQuestionResponse",
     "RejectRequest",
     "UploadResponse",
     "WithdrawalResponse",
@@ -106,6 +107,14 @@ class ImportResponse(Body):
     flags: list[str] = Field(default_factory=list)
 
 
+class ReconsiderQuestionResponse(Body):
+    question_id: uuid.UUID
+    #: "reopened": open again, answer it anew. "withdrawn": what the answer made is gone,
+    #: so the question was deleted and the next import asks it afresh.
+    outcome: str
+    detail: str
+
+
 class WithdrawalResponse(Body):
     """What withdrawing a superseded upload deletes (preview) or deleted (done)."""
 
@@ -113,7 +122,8 @@ class WithdrawalResponse(Body):
     superseded_by: uuid.UUID
     #: False for the preview, true once the rows are gone.
     withdrawn: bool = False
-    #: facts, roles, education, projects, questions, profile_fields, declared_skills,
+    #: facts, roles, education, projects, questions, answers (answered questions whose
+    #: row goes, so the next import asks them again), profile_fields, declared_skills,
     #: achievements.
     counts: dict[str, int]
     #: Rows from the upload that stay, by reason: "approved facts", "roles still

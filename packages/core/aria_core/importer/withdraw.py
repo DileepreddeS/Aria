@@ -19,6 +19,13 @@ facts, or the candidate approved one, under a role the old reading created.
 Questions that go with the drafts: the old upload's open questions, open questions
 about a row being deleted, and open "is this the same achievement?" questions whose
 other half is a fact being deleted.
+
+**Answers whose only effect is going.** An answered question whose answer made or
+changed a row being deleted ("were you paid?" setting a role's kind, "when?" creating a
+held-back role) is withdrawn with it. Left answered, its key would stop the next import
+asking it again, and the answer would be lost with the row: the new reading's role
+would come back without it, and nothing would ask. Answers whose row stays, and
+dismissals, are the candidate's decisions and stay.
 """
 
 from __future__ import annotations
@@ -80,6 +87,8 @@ class Withdrawal:
     declared_skills: tuple[uuid.UUID, ...] = ()
     achievements: tuple[uuid.UUID, ...] = ()
     questions: tuple[uuid.UUID, ...] = ()
+    #: Answered questions whose answer's row is being deleted.
+    answers: tuple[uuid.UUID, ...] = ()
     #: Rows from this upload that stay, as counts by kind and reason: "approved
     #: facts", "rejected roles", "roles still holding other facts".
     kept: dict[str, int] = field(default_factory=dict)
@@ -91,6 +100,7 @@ class Withdrawal:
             "education": len(self.education),
             "projects": len(self.projects),
             "questions": len(self.questions),
+            "answers": len(self.answers),
             "profile_fields": len(self.profile_fields),
             "declared_skills": len(self.declared_skills),
             "achievements": len(self.achievements),
@@ -188,11 +198,26 @@ async def plan_withdrawal(
             and any(row[4].endswith(suffix) for suffix in duplicate_of_going)
         )
     ]
+    deleted_rows = going | set(profile_fields)
+    answers = [
+        row[0]
+        for row in (
+            await session.execute(
+                select(UserQuestion.id, UserQuestion.subject_id).where(
+                    UserQuestion.candidate_id == candidate_id,
+                    UserQuestion.status == QuestionStatus.ANSWERED.value,
+                    UserQuestion.subject_id.is_not(None),
+                )
+            )
+        ).all()
+        if row[1] in deleted_rows
+    ]
     kept_questions = (
         await session.execute(
             select(UserQuestion.status).where(
                 UserQuestion.source_upload_id == upload_id,
                 UserQuestion.status != QuestionStatus.OPEN.value,
+                UserQuestion.id.not_in(answers) if answers else UserQuestion.id.is_not(None),
             )
         )
     ).all()
@@ -210,6 +235,7 @@ async def plan_withdrawal(
         declared_skills=tuple(declared_skills),
         achievements=tuple(achievements),
         questions=tuple(questions),
+        answers=tuple(answers),
         kept={reason: count for reason, count in kept.items() if count},
     )
 
@@ -240,6 +266,20 @@ async def withdraw(
             ).all()
         )
         if withdrawal.questions
+        else 0,
+        "answers": len(
+            (
+                await session.execute(
+                    delete(UserQuestion)
+                    .where(
+                        UserQuestion.id.in_(list(withdrawal.answers)),
+                        UserQuestion.status == QuestionStatus.ANSWERED.value,
+                    )
+                    .returning(UserQuestion.id)
+                )
+            ).all()
+        )
+        if withdrawal.answers
         else 0,
         "facts": await delete_draft_facts(session, withdrawal.facts),
     }

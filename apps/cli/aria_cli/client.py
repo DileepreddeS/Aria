@@ -153,6 +153,9 @@ class AriaClient:
     def answer(self, question_id: uuid.UUID | str, answer: str) -> dict[str, Any]:
         return dict(self._request("POST", f"/questions/{question_id}/answer", json={"answer": answer}))
 
+    def reconsider_question(self, question_id: uuid.UUID | str) -> dict[str, Any]:
+        return dict(self._request("POST", f"/questions/{question_id}/reconsider", json={}))
+
     def dismiss(self, question_id: uuid.UUID | str, reason: str = "") -> dict[str, Any]:
         return dict(self._request("POST", f"/questions/{question_id}/dismiss", json={"reason": reason}))
 

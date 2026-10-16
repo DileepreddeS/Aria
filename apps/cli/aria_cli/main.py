@@ -262,7 +262,10 @@ def _cmd_edit(client: AriaClient, args: argparse.Namespace) -> int:
 
 
 def _cmd_reconsider(client: AriaClient, args: argparse.Namespace) -> int:
-    if args.kind == "fact":
+    if args.kind == "question":
+        result = client.reconsider_question(args.fact_id)
+        print(f"{result['outcome']}: {result['detail']}")
+    elif args.kind == "fact":
         fact = client.reconsider(args.fact_id)
         print(f"back to draft: {_truncate(fact['text'])}")
     else:
@@ -429,9 +432,11 @@ def build_parser() -> argparse.ArgumentParser:
     edit.add_argument("--keep-draft", action="store_true", help="leave it a draft instead of approving it")
     edit.set_defaults(handler=_cmd_edit)
 
-    reconsider = subparsers.add_parser("reconsider", help="move something rejected back to draft")
+    reconsider = subparsers.add_parser(
+        "reconsider", help="move something rejected back to draft, or reopen an answered question"
+    )
     reconsider.add_argument("fact_id", metavar="id")
-    reconsider.add_argument("--kind", default="fact", choices=["fact", *ENTITY_KINDS])
+    reconsider.add_argument("--kind", default="fact", choices=["fact", "question", *ENTITY_KINDS])
     reconsider.set_defaults(handler=_cmd_reconsider)
 
     merge = subparsers.add_parser("merge", help="fold one fact into another")

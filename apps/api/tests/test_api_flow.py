@@ -1175,3 +1175,27 @@ class TestImportingTheSameUploadTwice:
         assert second["counts"]["projects"] == 0 and second["counts"]["projects_reused"] == 3
         assert second["counts"]["facts"] == 0
         assert second["counts"]["duplicates_skipped"] == first["counts"]["facts"]
+
+
+class TestReconsideringAQuestionOverHttp:
+    async def test_a_dismissal_is_taken_back_and_the_question_is_open_again(
+        self, client: httpx.AsyncClient
+    ) -> None:
+        await _upload_and_import(client)
+        question = (await client.get("/questions")).json()["questions"][0]
+        await client.post(f"/questions/{question['question_id']}/dismiss", json={"reason": "later"})
+        response = await client.post(f"/questions/{question['question_id']}/reconsider")
+        assert response.status_code == 200
+        assert response.json()["outcome"] == "reopened"
+        reopened = [row["question_id"] for row in (await client.get("/questions")).json()["questions"]]
+        assert question["question_id"] in reopened
+
+    async def test_an_open_question_is_a_409(self, client: httpx.AsyncClient) -> None:
+        await _upload_and_import(client)
+        question = (await client.get("/questions")).json()["questions"][0]
+        response = await client.post(f"/questions/{question['question_id']}/reconsider")
+        assert response.status_code == 409
+        assert "still open" in response.json()["detail"]
+
+    async def test_an_unknown_question_is_a_404(self, client: httpx.AsyncClient) -> None:
+        assert (await client.post(f"/questions/{new_id()}/reconsider")).status_code == 404

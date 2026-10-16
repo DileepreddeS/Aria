@@ -81,6 +81,9 @@ class AuditAction(StrEnum):
     USER_QUESTION_ASKED = "user_question.asked"
     USER_QUESTION_ANSWERED = "user_question.answered"
     USER_QUESTION_DISMISSED = "user_question.dismissed"
+    #: An answer or a dismissal taken back: the question reopened, or withdrawn so the
+    #: next import asks it afresh.
+    USER_QUESTION_RECONSIDERED = "user_question.reconsidered"
     UPLOAD_RECEIVED = "upload.received"
     UPLOAD_SCANNED = "upload.scanned"
     UPLOAD_PARSED = "upload.parsed"

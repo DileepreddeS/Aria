@@ -16,17 +16,26 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query, status
 
 from aria_api.deps import CallerDep, SessionDep
-from aria_api.schemas import AnswerRequest, AnswerResponse, QuestionList, QuestionOut, RejectRequest
+from aria_api.schemas import (
+    AnswerRequest,
+    AnswerResponse,
+    QuestionList,
+    QuestionOut,
+    ReconsiderQuestionResponse,
+    RejectRequest,
+)
 from aria_core.graph.questions import (
     QuestionNotFound,
     QuestionStatus,
     QuestionView,
+    Reconsidered,
     UnansweredQuestion,
     answer_question,
     dismiss_question,
     get_question,
     open_question_count,
     questions_for,
+    reconsider_question,
 )
 
 __all__ = ["router"]
@@ -122,3 +131,29 @@ async def dismiss(
     except UnansweredQuestion as error:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
     return _out(await get_question(session, question_id))
+
+
+@router.post("/{question_id}/reconsider", response_model=ReconsiderQuestionResponse)
+async def reconsider(
+    question_id: uuid.UUID, caller: CallerDep, session: SessionDep
+) -> ReconsiderQuestionResponse:
+    """Take back an answer or a dismissal.
+
+    Reopened when what the answer did still stands; withdrawn (deleted, so the next
+    import asks afresh) when what it made is gone; refused when answering again would
+    create a second row.
+    """
+    await _owned(session, question_id, caller)
+    try:
+        outcome = await reconsider_question(
+            session, tenant_id=caller.tenant_id, question_id=question_id, actor=caller.user_id
+        )
+    except UnansweredQuestion as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+    detail = (
+        "open again; answer it with aria answer"
+        if outcome is Reconsidered.REOPENED
+        else "what the answer made is gone, so the question was withdrawn; import the upload again "
+        "and it will be asked afresh"
+    )
+    return ReconsiderQuestionResponse(question_id=question_id, outcome=outcome.value, detail=detail)
