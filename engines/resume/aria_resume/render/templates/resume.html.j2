@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ document.name }}</title>
+<style>
+{%- for face in font_faces %}
+@font-face { font-family: "Carlito"; src: url(data:font/ttf;base64,{{ face.data }}) format("truetype"); font-weight: {{ face.weight }}; font-style: {{ face.style }}; }
+{%- endfor %}
+{% include "resume.css" %}
+</style>
+</head>
+<body>
+<div class="name">{{ document.name }}</div>
+{#- The contact line is one unstyled text node: a styled span or link here makes Chromium
+    place every glyph on its own, and extractors then read "d i l e e p". Links are added
+    to the PDF afterwards as annotations over the text (RESUME_ENGINE §10). -#}
+<div class="contact">{{ document.contact_line }}</div>
+{%- for section in document.sections %}
+<div class="section">
+<div class="heading">{{ section.heading }}</div>
+{%- for line in section.lines %}
+<div class="line">{{ line }}</div>
+{%- endfor %}
+{%- for entry in section.entries %}
+<div class="entry">
+{#- inline-block, never float: Chromium writes floated boxes into the text layer ahead of
+    the body, separating every entry header from its bullets. -#}
+<div class="head"><span class="what"><b>{{ entry.title }}</b>{% if entry.detail %} &mdash; {{ entry.detail }}{% endif %}</span><span class="when">{{ entry.dates }}</span></div>
+{%- if entry.subline %}
+<div class="sub">{{ entry.subline }}</div>
+{%- endif %}
+{#- A literal bullet character with a hanging indent, never a CSS list marker: CSS markers
+    never reach the text layer. -#}
+{%- for bullet in entry.bullets %}
+<div class="bullet">&bull;&nbsp;{{ bullet.text }}</div>
+{%- endfor %}
+</div>
+{%- endfor %}
+</div>
+{%- endfor %}
+</body>
+</html>

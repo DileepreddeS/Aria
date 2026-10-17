@@ -17,7 +17,7 @@ package = false
 # is old enough (2026-10-22); then one global `exclude-newer = "14 days"` replaces this.
 # A package added before then gets an entry here so the resolver honours the rule too;
 # infra/checks/dependency_age.py is the gate either way.
-exclude-newer-package = { pdfplumber = "14 days", pillow = "14 days", pypdfium2 = "14 days" }
+exclude-newer-package = { pdfplumber = "14 days", pillow = "14 days", pypdfium2 = "14 days", jinja2 = "14 days", playwright = "14 days", pyee = "14 days" }
 
 [tool.uv.workspace]
 members = [
@@ -123,4 +123,5 @@ consider_namespace_packages = true
 markers = [
     "db: needs the local Postgres from infra/docker-compose.yml",
     "docker: needs Docker and the parser image (./tasks.ps1 parser-image)",
+    "chromium: needs Playwright's Chromium (uv run playwright install chromium); CI installs it rather than skipping",
 ]

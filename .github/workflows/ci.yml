@@ -120,6 +120,12 @@ jobs:
       - name: Build the document parser image
         run: make parser-image
 
+      # Resumes are printed through Chromium; the chromium-marked tests need it and fail
+      # rather than skip without it. --with-deps adds the system libraries a bare runner
+      # lacks.
+      - name: Install Playwright's Chromium
+        run: uv run playwright install --with-deps chromium
+
       - name: Test
         run: make test
 

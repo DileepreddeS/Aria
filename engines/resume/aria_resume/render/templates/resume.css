@@ -1,0 +1,68 @@
+/* ARIA resume stylesheet. The PDF text layer is the product (RESUME_ENGINE §10);
+   aria_resume/render/lint.py checks the rules below against this file and the template. */
+
+@page {
+  size: Letter;
+  margin: 0.6in;
+}
+
+html {
+  font-family: "Carlito", sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.2;
+  color: #000;
+  /* Ligatures off: Carlito otherwise emits U+FB00-range characters, some unmapped,
+     which extract as (cid:NN). */
+  font-feature-settings: "liga" 0, "clig" 0, "dlig" 0;
+  font-variant-ligatures: none;
+}
+
+body {
+  margin: 0;
+}
+
+.name {
+  font-size: 14pt;
+  font-weight: 700;
+}
+
+.contact {
+  margin-bottom: 4pt;
+}
+
+.section {
+  margin-top: 6pt;
+}
+
+.heading {
+  font-weight: 700;
+  border-bottom: 0.75pt solid #000;
+  margin-bottom: 2pt;
+}
+
+.entry {
+  margin-top: 3pt;
+}
+
+/* The date sits in the right-hand band, from 55% of the content width on, which is where
+   Stage 0 reads an entry's dates (RESUME_ENGINE §5.3), so our own output parses by the
+   same rule as everyone else's. */
+.what {
+  display: inline-block;
+  width: 72%;
+  vertical-align: top;
+}
+
+.when {
+  display: inline-block;
+  width: 28%;
+  text-align: right;
+  vertical-align: top;
+}
+
+/* Hanging indent: a wrapped line starts under the text, right of the bullet character,
+   which is the second signal a geometric parser reads (RESUME_ENGINE §5.3). */
+.bullet {
+  padding-left: 11pt;
+  text-indent: -8pt;
+}

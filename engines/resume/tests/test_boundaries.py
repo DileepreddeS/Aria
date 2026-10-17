@@ -9,6 +9,8 @@ a model provider. Each of those is an import this test refuses.
 from __future__ import annotations
 
 import ast
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -21,11 +23,15 @@ FORBIDDEN: dict[str, str] = {
     "asyncpg": "database code",
     "alembic": "database code",
     "aria_core.db": "database code: the engine gets a snapshot, never a session",
-    "aria_core.graph": "the graph's database read paths; the snapshot is the engine's input",
+    "aria_core.graph.facts": "a database read path; the snapshot is the engine's input",
+    "aria_core.graph.entities": "a database read path; the snapshot is the engine's input",
+    "aria_core.graph.questions": "a database read path; the snapshot is the engine's input",
+    "aria_core.graph.derive": "a database read path; the snapshot carries what it derives",
+    "aria_core.graph.snapshot": "the snapshot's builder reads the database; the engine is handed its result",
+    "aria_core.importer.apply": "the importer's writer",
     "aria_api": "an app",
     "aria_cli": "an app",
     "aria_llm_gateway": "the gateway is reached through LlmClient, not imported",
-    "aria_document_parser": "parsing uploads is Stage 0, outside the engine",
     "anthropic": "a model provider: only the gateway calls one",
     "openai": "a model provider: only the gateway calls one",
     "litellm": "a model provider: only the gateway calls one",
@@ -33,6 +39,10 @@ FORBIDDEN: dict[str, str] = {
     "requests": "a network client: the engine makes no requests of its own",
     "aiohttp": "a network client: the engine makes no requests of its own",
 }
+
+#: The parser is imported only for its geometric reader, which the ATS check (6a) uses to
+#: read our own printed PDF back. Its worker, client and container code stay out.
+PARSER_ALLOWED = ("aria_document_parser.pdf", "aria_document_parser.errors")
 
 
 def _imports(source: str) -> list[tuple[str, int]]:
@@ -51,6 +61,10 @@ def _violations(source: str, name: str) -> list[str]:
         for module, line in _imports(source)
         for prefix, why in FORBIDDEN.items()
         if module == prefix or module.startswith(prefix + ".")
+    ] + [
+        f"{name}:{line} imports {module} (the parser beyond its geometric reader)"
+        for module, line in _imports(source)
+        if module.split(".")[0] == "aria_document_parser" and module not in PARSER_ALLOWED
     ]
 
 
@@ -74,3 +88,26 @@ def test_the_rule_would_catch_a_violation() -> None:
         ]
     )
     assert len(_violations(probe, "probe.py")) == 3
+
+
+def test_loading_the_whole_engine_loads_no_database_code() -> None:
+    # The import rules above see only the engine's own imports. A package __init__ that
+    # re-exports a database module would pass them and still load SQLAlchemy; this runs
+    # in a fresh interpreter and looks at what actually got loaded.
+    modules = sorted(
+        "aria_resume." + ".".join(path.relative_to(PACKAGE).with_suffix("").parts)
+        for path in PACKAGE.rglob("*.py")
+        if path.name != "__init__.py"
+    )
+    probe = (
+        "import importlib, sys\n"
+        f"for name in {modules!r}: importlib.import_module(name)\n"
+        "prefixes = ('sqlalchemy', 'asyncpg', 'alembic', 'aria_core.db')\n"
+        "loaded = sorted(m for m in sys.modules if m.startswith(prefixes))\n"
+        "print(','.join(loaded))\n"
+    )
+    # The interpreter running these tests, and a probe built from this repo's module names.
+    result = subprocess.run(  # noqa: S603  (fixed arguments)
+        [sys.executable, "-c", probe], capture_output=True, text=True, check=True
+    )
+    assert result.stdout.strip() == ""

@@ -21,23 +21,9 @@ Two properties hold across all of it. **Nothing an import produces is approved**
 :func:`aria_core.graph.facts.create_draft_fact` cannot be asked to. And **nothing the
 importer cannot read is filled in**: an unreadable date, an unknown heading or a
 missing employer becomes a question on the plan, never a plausible value.
+
+Import from the submodule, never from this package: this file re-exports nothing, so that
+importing a pure part of the importer (:mod:`classify`, :mod:`assemble`) does not load
+:mod:`apply` and with it the database layer. The Resume Engine reads its own output back
+through Stage 0 and must stay free of database code (DECISIONS 2026-10-16).
 """
-
-from __future__ import annotations
-
-from aria_core.importer.apply import ImportOutcome, MergeProposal, apply_import_plan
-from aria_core.importer.notes import parse_skills_notes
-from aria_core.importer.plan import ImportPlan, ImportQuestion, QuestionKind
-from aria_core.importer.resume import parse_resume, parse_resume_text
-
-__all__ = [
-    "ImportOutcome",
-    "ImportPlan",
-    "ImportQuestion",
-    "MergeProposal",
-    "QuestionKind",
-    "apply_import_plan",
-    "parse_resume",
-    "parse_resume_text",
-    "parse_skills_notes",
-]

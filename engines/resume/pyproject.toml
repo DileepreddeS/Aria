@@ -8,6 +8,21 @@ requires-python = ">=3.12,<3.13"
 # LlmClient the caller supplies, which in production is the gateway.
 dependencies = [
     "aria-core",
+    # The 6a ATS check reads the printed resume back through Stage 0's geometric reader
+    # (RESUME_ENGINE §9): our own PDF, never an upload, so in-process is safe.
+    "aria-document-parser",
+    # HTML templating for Stage 7, autoescape on. Pallets, BSD-3-Clause, pure Python
+    # wheel; 3.1.6 released 2025-03-05 (DECISIONS 2026-10-16).
+    "jinja2>=3.1.6",
+    # Stage 7 prints the page through headless Chromium (DECISIONS 2026-10-07, 2026-10-16).
+    # Microsoft, Apache-2.0, platform wheels only (no sdist, nothing runs at install);
+    # deps pyee (MIT) and greenlet (already locked). 1.63.0 of 2026-09-15: 1.64.0 is
+    # younger than 14 days. The browser itself comes from `playwright install chromium`.
+    "playwright>=1.63,<1.64",
+    # Reading the printed page back for links and the layout check. Already locked by
+    # the document parser.
+    "pdfplumber>=0.11",
+    "pypdf>=6.0",
 ]
 
 [build-system]
