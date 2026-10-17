@@ -42,6 +42,8 @@ __all__ = [
     "ClassifiedLine",
     "LineClass",
     "classify",
+    "leading_segments",
+    "leading_text",
 ]
 
 #: §5.3: a section heading is set at least this much larger than body text, or bold.
@@ -65,6 +67,9 @@ _HANGING_MAX = 3.0
 #: _CONTINUATION_ALIGN: a bullet column 4pt right of the entry's edge must not merge
 #: with the edge itself.
 _SAME_X = 0.2
+#: Segments closer than this many font sizes touch: they were split by a change of weight,
+#: not by distance, and read as one phrase ("**Brightfold Systems** - Associate Engineer").
+_TOUCHING = 1.0
 #: A date segment is short: "Feb 2024 - Jul 2025", "Expected Dec 2026".
 _MAX_DATE_WORDS = 6
 
@@ -134,6 +139,25 @@ def _section_header(line: LayoutLine, body: float) -> tuple[bool, SectionKind | 
     return True, known or SectionKind.UNKNOWN, certain
 
 
+def leading_segments(line: LayoutLine) -> int:
+    """How many segments, from the left, touch one another: the header's own phrase.
+
+    "**Brightfold Systems** — Associate Software Engineer" is two segments (the weight
+    changes) and one phrase; a project's stack or a date further right, past a gap, is not
+    part of it.
+    """
+    count = 1
+    for previous, segment in zip(line.segments, line.segments[1:], strict=False):
+        if segment.x0 - previous.x1 > _TOUCHING * max(previous.font_size, segment.font_size):
+            break
+        count += 1
+    return count
+
+
+def leading_text(line: LayoutLine) -> str:
+    return " ".join(segment.text for segment in line.segments[: leading_segments(line)])
+
+
 def _entry_header(line: LayoutLine, band: float) -> tuple[bool, str, bool]:
     if line.marker or not line.segments:
         return False, "", True
@@ -144,7 +168,13 @@ def _entry_header(line: LayoutLine, band: float) -> tuple[bool, str, bool]:
     trailing = line.segments[-1]
     if len(line.segments) > 1 and trailing.x0 >= band and _is_date(trailing.text):
         date_text = trailing.text
+    # The separator is in the bold part ("**Nordvale Consulting - Software Engineer**"), or
+    # opens the regular part that touches it ("**Brightfold Systems** - Associate ...").
+    # Not anywhere after it: "**Languages:** Python, Java" is a label and a list.
     separated = any(separator in first.text for separator in _SEPARATORS)
+    if not separated and leading_segments(line) > 1:
+        after = line.segments[1].text.lstrip()
+        separated = after.startswith(tuple(separator.strip() for separator in _SEPARATORS))
     if not (separated or date_text):
         return False, "", True
     return True, date_text, line.weight_source is not WeightSource.GLYPH_DENSITY

@@ -29,6 +29,7 @@ GATE_FIXTURES = [
     "float_scrambled",
     "markerless_bullets",
     "no_marker_bullets",
+    "bold_employer_headers",
     "per_glyph_contact",
 ]
 
@@ -119,6 +120,25 @@ class TestWordsAndRuns:
         line = _lines(page_pdf(content))[0][0]
         assert [segment.text for segment in line.segments] == ["Nordvale Consulting", "Feb 2024"]
         assert line.text == "Nordvale Consulting Feb 2024"
+
+    def test_a_change_of_named_weight_at_a_word_starts_a_new_run(self) -> None:
+        # "**Brightfold Systems** - Associate Software Engineer", drawn as one piece of text
+        # with a font switch: the bold employer is a part of its own, though it is the
+        # shorter half and a majority would call the whole run regular.
+        content = (
+            b"BT /F2 10 Tf 72 700 Td (Brightfold Systems) Tj /F1 10 Tf ( - Associate Software Engineer) Tj ET"
+        )
+        line = _lines(page_pdf(content))[0][0]
+        assert [(segment.text, segment.bold) for segment in line.segments] == [
+            ("Brightfold Systems", True),
+            ("- Associate Software Engineer", False),
+        ]
+        assert line.text == "Brightfold Systems - Associate Software Engineer"
+
+    def test_a_change_of_weight_inside_a_word_does_not_split_it(self) -> None:
+        content = b"BT /F2 10 Tf 72 700 Td (Bright) Tj /F1 10 Tf (fold Systems) Tj ET"
+        line = _lines(page_pdf(content))[0][0]
+        assert [segment.text for segment in line.segments] == ["Brightfold Systems"]
 
     def test_wide_word_spacing_does_not_split_a_run(self) -> None:
         # Justified text stretches spaces to about one em; that is still one run.

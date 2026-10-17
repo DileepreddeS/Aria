@@ -205,13 +205,31 @@ def rows(glyphs: Sequence[Glyph], page: int) -> tuple[list[Row], int]:
         ordered = sorted(cluster, key=lambda g: g.x0)
         runs: list[list[Glyph]] = [[ordered[0]]]
         last_ink = ordered[0] if not ordered[0].text.isspace() else None
+        spaced = False
         for glyph in ordered[1:]:
             if not glyph.text.isspace() and last_ink is not None:
-                if glyph.x0 - last_ink.x1 > RUN_GAP * max(glyph.size, last_ink.size):
+                size = max(glyph.size, last_ink.size)
+                gap = glyph.x0 - last_ink.x1
+                if gap > RUN_GAP * size:
                     runs.append([])
-            runs[-1].append(glyph)
+                # "**Brightfold Systems** - Associate Software Engineer": the weight the
+                # font names changes at a word boundary, so the bold employer is a part
+                # of its own. Judged by majority over the whole run instead, the header
+                # is bold only when the employer is the longer half.
+                # A name silent on weight counts as not bold, as in named_bold; two silent
+                # names (weight measured from ink instead) never split a run here.
+                elif (
+                    (last_ink.bold is True) != (glyph.bold is True)
+                    and (last_ink.bold is not None or glyph.bold is not None)
+                    and (spaced or gap > WORD_GAP * size)
+                ):
+                    runs.append([])
             if not glyph.text.isspace():
                 last_ink = glyph
+                spaced = False
+            else:
+                spaced = True
+            runs[-1].append(glyph)
         made = [Run(tuple(run), page) for run in runs if any(not glyph.text.isspace() for glyph in run)]
         made = [replace(run, bold=run.named_bold) for run in made]
         if made:

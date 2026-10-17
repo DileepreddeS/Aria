@@ -160,6 +160,7 @@ class TestEachRowOfTheTriageTable:
             "float_scrambled",
             "markerless_bullets",
             "no_marker_bullets",
+            "bold_employer_headers",
             "per_glyph_contact",
         ],
     )

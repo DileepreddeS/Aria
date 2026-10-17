@@ -92,12 +92,15 @@ class PageFont(AriaMessage):
 
 
 class LayoutSegment(AriaMessage):
-    """One run of text on a line, separated from the next by a gap wider than a word.
+    """One run of text on a line: separated from the next by a gap wider than a word, or
+    by a change in the weight the font names, at a word boundary.
 
     A resume line is often two or three runs: "Nordvale Consulting — Software Engineer"
-    at the left margin and "Feb 2024 - Jul 2025" at the right, sometimes in different
-    weights. §5.3 classifies by these parts — a date counts only in the right-hand
-    band, an entry header is bold where the employer is — so they travel separately.
+    at the left margin and "Feb 2024 - Jul 2025" at the right, and the employer often in
+    bold with the title in regular weight. §5.3 classifies by these parts — a date
+    counts only in the right-hand band, an entry header is bold where the employer is —
+    so they travel separately. Parts that touch (split by weight, not by distance) are
+    read together as one phrase by :func:`aria_core.importer.classify.leading_text`.
     """
 
     text: Annotated[str, Sensitivity.S1] = Field(min_length=1, max_length=2000)

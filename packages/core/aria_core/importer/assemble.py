@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 
 from aria_core.documents import LayoutDocument
 from aria_core.graph.status import AchievementKind, GraphSource
-from aria_core.importer.classify import ClassifiedLine, LineClass, classify
+from aria_core.importer.classify import ClassifiedLine, LineClass, classify, leading_segments, leading_text
 from aria_core.importer.entries import Entry, parse_education, parse_experience, parse_project
 from aria_core.importer.header import parse_header
 from aria_core.importer.lines import SourceLine
@@ -103,7 +103,11 @@ def _entries(section: _Section) -> tuple[list[Entry], list[ClassifiedLine]]:
         if line.kind is LineClass.ENTRY_HEADER:
             close()
             open_entry = True
-            first = line.line.segments[0].text
+            # The header's phrase: the bold employer and the title after it, which a
+            # change of weight splits into touching segments.
+            first = leading_text(line.line)
+            if line.date_text and first.endswith(line.date_text):
+                first = first[: -len(line.date_text)].rstrip()
             if section.kind is SectionKind.EDUCATION:
                 # "Cascadia State University \u2014 M.S. Computer Science": the school
                 # and the degree are read from lines of their own.
@@ -115,7 +119,7 @@ def _entries(section: _Section) -> tuple[list[Entry], list[ClassifiedLine]]:
             else:
                 # The rest of the header (a project's stack, say) is head text, but a
                 # date anywhere but the right-hand band is not read as one.
-                rest = " ".join(segment.text for segment in line.line.segments[1:])
+                rest = " ".join(segment.text for segment in line.line.segments[leading_segments(line.line) :])
                 if rest:
                     head.append(_source(line, rest))
             bullets = []

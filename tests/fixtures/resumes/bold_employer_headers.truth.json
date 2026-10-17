@@ -1,0 +1,76 @@
+{
+  "fixture": "bold_employer_headers.pdf",
+  "generator": "Chromium headless print-to-PDF",
+  "identity": "synthetic",
+  "pathology": "entry headers with only the employer, school or project name in bold; the title, degree and tagline after the dash are regular weight",
+  "must_fail": false,
+  "fail_reason": null,
+  "notes": "The style most resumes use. Before 2026-10-16, Stage 0 split a line into parts only at gaps and judged a part's weight by majority, so a header was bold only when its bold half was the longer: 'Brightfold Systems - Associate Software Engineer' read as plain text and its bullets went to the role above. Found by the Resume Engine reading its own PDF back (RESUME_ENGINE 9, 6a). Same nine entries as clean_inline_block, rebuilt from its text; bold_employer_headers.html is the source, printed with Chromium and the engine's Carlito faces.",
+  "contact_line": "(555) 014-2288 | jordan.rivera@example.com | linkedin.com/in/jordan-rivera-example | github.com/jordan-rivera-example | Portland, OR",
+  "entries": [
+    {
+      "section": "education",
+      "bullet_count": 0,
+      "employer": "Cascadia State University",
+      "title": "M.S. Computer Science",
+      "end": "2026-12"
+    },
+    {
+      "section": "education",
+      "bullet_count": 0,
+      "employer": "Westbrook Institute",
+      "title": "B.Tech, Electrical & Electronics Engineering",
+      "end": "2022-06"
+    },
+    {
+      "section": "experience",
+      "bullet_count": 2,
+      "employer": "Cascadia State University",
+      "title": "Graduate Research Assistant",
+      "start": "2026-10",
+      "end": "present"
+    },
+    {
+      "section": "experience",
+      "bullet_count": 7,
+      "employer": "Nordvale Consulting",
+      "title": "Software Engineer",
+      "start": "2024-02",
+      "end": "2025-07"
+    },
+    {
+      "section": "experience",
+      "bullet_count": 5,
+      "employer": "Brightfold Systems",
+      "title": "Associate Software Engineer",
+      "start": "2022-07",
+      "end": "2023-12"
+    },
+    {
+      "section": "experience",
+      "bullet_count": 2,
+      "employer": "Pinecrest Labs",
+      "title": "Software Engineer Intern",
+      "start": "2021-10",
+      "end": "2022-04"
+    },
+    {
+      "section": "project",
+      "bullet_count": 4,
+      "name": "ORBIT",
+      "title": "Autonomous Job Application Agent"
+    },
+    {
+      "section": "project",
+      "bullet_count": 4,
+      "name": "DentScan",
+      "title": "Vehicle Damage Detection"
+    },
+    {
+      "section": "project",
+      "bullet_count": 3,
+      "name": "VERA-RAG",
+      "title": "Self-Verifying Adaptive RAG System"
+    }
+  ]
+}

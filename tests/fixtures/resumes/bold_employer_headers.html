@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>bold_employer_headers</title>
+<style>
+/* Carlito Regular and Bold, embedded as data URIs when printed: engines/resume/aria_resume/render/fonts */
+
+@page { size: Letter; margin: 0.5in; }
+html { font-family: "Carlito"; font-size: 10.5pt; line-height: 1.2; color: #000;
+       font-feature-settings: "liga" 0, "clig" 0, "dlig" 0; }
+body { margin: 0; }
+.name { font-size: 16pt; font-weight: 700; text-align: center; }
+.contact { text-align: center; font-size: 9.4pt; margin-bottom: 4pt; }
+.heading { font-weight: 700; border-bottom: 0.75pt solid #000; margin-top: 6pt; margin-bottom: 2pt; }
+.head { margin-top: 3pt; }
+.what { display: inline-block; width: 74%; vertical-align: top; }
+.when { display: inline-block; width: 26%; text-align: right; vertical-align: top; }
+.stack .what { width: 44%; }
+.stack .when { width: 56%; }
+.bullet { padding-left: 11pt; text-indent: -8pt; }
+
+</style></head>
+<body>
+<div class="name">JORDAN A. RIVERA</div>
+<div class="contact">(555) 014-2288 | jordan.rivera@example.com | linkedin.com/in/jordan-rivera-example | github.com/jordan-rivera-example | Portland, OR</div>
+<div class="heading">EDUCATION</div>
+<div class="head"><span class="what"><b>Cascadia State University</b> — M.S. Computer Science</span><span class="when">Expected Dec 2026</span></div>
+<div class="line">Coursework: Deep Learning, Artificial Intelligence, Advanced Algorithms, Software Engineering</div>
+<div class="head"><span class="what"><b>Westbrook Institute, Pune, India</b> — B.Tech, Electrical &amp; Electronics Engineering</span><span class="when">Jun 2022</span></div>
+<div class="heading">EXPERIENCE</div>
+<div class="head"><span class="what"><b>Cascadia State University</b> — Graduate Research Assistant</span><span class="when">Oct 2026 – Present</span></div>
+<div class="line">Portland, OR</div>
+<div class="bullet">&bull;&nbsp;Fine-tune open-source large language models for research on LLM agents</div>
+<div class="bullet">&bull;&nbsp;Analyze agent trajectories and design guardrails that constrain agent tool use and behavior</div>
+<div class="head"><span class="what"><b>Nordvale Consulting</b> — Software Engineer</span><span class="when">Feb 2024 – Jul 2025</span></div>
+<div class="line">Pune, India</div>
+<div class="line">Client: Autolane — retail platform, 500K+ monthly active users</div>
+<div class="bullet">&bull;&nbsp;Built 15+ React.js screens for Autolane&#x27;s vehicle checkout platform using Redux Toolkit and TypeScript, shipped across web and mobile</div>
+<div class="bullet">&bull;&nbsp;Built 10+ production features (React.js, TypeScript, Node.js), cutting defect rates by 30% and maintaining 99.9% uptime across distributed microservices</div>
+<div class="bullet">&bull;&nbsp;Built a 20+ component reusable React library backed by Node.js REST APIs, adopted team-wide and cutting feature delivery time by 25%</div>
+<div class="bullet">&bull;&nbsp;Containerized microservices with Docker and Kubernetes, raising deploy frequency 40% with zero-downtime releases via GitHub Actions CI/CD</div>
+<div class="bullet">&bull;&nbsp;Led 15+ code reviews that cut post-release bugs by 28%, and mentored 2 junior engineers through a legacy jQuery-to-React migration</div>
+<div class="bullet">&bull;&nbsp;Improved the platform to WCAG 2.1 accessibility and full responsiveness, raising usability scores by 20%</div>
+<div class="bullet">&bull;&nbsp;Built analytics dashboards with GA4 and GTM, eliminating 3 hrs/week of manual reporting</div>
+<div class="head"><span class="what"><b>Brightfold Systems</b> — Associate Software Engineer</span><span class="when">Jul 2022 – Dec 2023</span></div>
+<div class="line">India</div>
+<div class="bullet">&bull;&nbsp;Built 8 full-stack applications (React.js, Next.js, Node.js) with event-driven flows via RabbitMQ</div>
+<div class="bullet">&bull;&nbsp;Added server-side rendering with Next.js, cutting TTFB by 45% and pushing Core Web Vitals above 90 on Lighthouse</div>
+<div class="bullet">&bull;&nbsp;Built 12+ REST and GraphQL APIs with JWT auth, rate limiting and versioning — 99.5% uptime across 50K+ daily requests</div>
+<div class="bullet">&bull;&nbsp;Wired RabbitMQ async messaging between 5 core services, cutting cascading failure incidents by 60% during peak traffic</div>
+<div class="bullet">&bull;&nbsp;Set up Docker deployments and GitHub Actions CI/CD across staging and production, enabling zero-downtime releases</div>
+<div class="head"><span class="what"><b>Pinecrest Labs</b> — Software Engineer Intern</span><span class="when">Oct 2021 – Apr 2022</span></div>
+<div class="line">India</div>
+<div class="bullet">&bull;&nbsp;Built 5 full-stack applications (React.js, Node.js, Spring Boot) with Kafka-driven microservice communication, cutting user-reported bugs by 30%</div>
+<div class="bullet">&bull;&nbsp;Sped up MySQL and MongoDB queries on 10K+ records by 40% through composite indexes and rewritten aggregation pipelines</div>
+<div class="heading">PROJECTS</div>
+<div class="head stack"><span class="what"><b>ORBIT</b> — Autonomous Job Application Agent</span><span class="when">Python, Playwright, PostgreSQL, Llama 3.3-70B, FastAPI</span></div>
+<div class="bullet">&bull;&nbsp;Built an autonomous multi-stage agent covering job discovery, per-posting resume tailoring and application submission across 5 applicant tracking systems</div>
+<div class="bullet">&bull;&nbsp;Designed a plan-then-inject rewriting architecture in which the model emits edit coordinates as JSON and Python applies them, eliminating the 18–42% content loss of direct LLM editing</div>
+<div class="bullet">&bull;&nbsp;Built a crawler over 1,579 company job boards that screens 39,000+ postings in under 60 seconds using title, location and eligibility filters before any model call</div>
+<div class="bullet">&bull;&nbsp;Grounded every generated resume claim in a verified-fact graph with DeBERTa NLI entailment checks, so no bullet can assert anything the candidate&#x27;s record does not support</div>
+<div class="head stack"><span class="what"><b>DentScan</b> — Vehicle Damage Detection</span><span class="when">PyTorch, YOLO11m, FastAPI, React.js</span></div>
+<div class="bullet">&bull;&nbsp;Trained YOLO11m on the CarDD dataset using A100 GPUs on NAU&#x27;s Summit HPC cluster, reaching mAP@0.5 = 0.700, a 41.1% improvement over prior SOTA (DCN+ at 0.496)</div>
+<div class="bullet">&bull;&nbsp;Per-class results: glass shatter 0.950, tire flat 0.874, lamp broken 0.830</div>
+<div class="bullet">&bull;&nbsp;First application of YOLO11m to CarDD, with Class-Balanced Loss, Grad-CAM explainability and SAM zero-shot segmentation; targeting IEEE T-ITS</div>
+<div class="bullet">&bull;&nbsp;Shipped a full-stack demo (FastAPI + React.js) with real-time inference and bounding-box visualization</div>
+<div class="head stack"><span class="what"><b>VERA-RAG</b> — Self-Verifying Adaptive RAG System</span><span class="when">FAISS, BM25, DeBERTa-v3, Llama-3, vLLM</span></div>
+<div class="bullet">&bull;&nbsp;Built a closed-loop RAG system with hybrid retrieval (FAISS + BM25 + Reciprocal Rank Fusion), improving retrieval precision 23% over single-pass baselines</div>
+<div class="bullet">&bull;&nbsp;Added DeBERTa-v3 NLI self-verification that detects hallucinated or unsupported claims and triggers agentic re-retrieval and regeneration</div>
+<div class="bullet">&bull;&nbsp;Served Llama-3-8B via vLLM with structured prompt templates and function-calling patterns</div>
+<div class="heading">SKILLS</div>
+<div class="line"><b>Languages:</b> Python, Java, JavaScript, TypeScript, C, SQL</div>
+<div class="line"><b>Frontend:</b> React.js, Next.js, Redux Toolkit, Tailwind CSS, HTML5, CSS3</div>
+<div class="line"><b>Backend:</b> Node.js, Express.js, Java Spring Boot, FastAPI, Flask, REST APIs, GraphQL</div>
+<div class="line"><b>AI/ML:</b> PyTorch, YOLO, FAISS, DeBERTa, LangChain, Hugging Face, vLLM, OpenAI API</div>
+<div class="line"><b>Databases:</b> PostgreSQL, MySQL, MongoDB, Redis</div>
+<div class="line"><b>Cloud &amp; Infra:</b> Docker, Kubernetes, AWS (EC2, S3, Lambda), GitHub Actions CI/CD, SLURM</div>
+<div class="line"><b>Tools:</b> Git, Playwright, Postman, Jira</div>
+</body></html>

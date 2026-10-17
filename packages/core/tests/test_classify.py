@@ -157,6 +157,32 @@ class TestEntryHeaders:
             _kinds(_line("Client: Autolane \u2014 retail platform", top=100.0), *FILLER)[0] is LineClass.TEXT
         )
 
+    def test_a_bold_employer_then_a_regular_title_is_a_header(self) -> None:
+        # Two touching parts, split by weight: the regular half is the longer, and the
+        # separator opens it rather than sitting in the bold half.
+        employer = "Brightfold Systems"
+        found = _classify(
+            _line(
+                employer,
+                top=100.0,
+                first_bold=True,
+                right=("\u2014 Associate Software Engineer", 36.0 + 5.0 * len(employer) + 3.0),
+            ),
+            *FILLER,
+        )[0]
+        assert found.kind is LineClass.ENTRY_HEADER
+
+    def test_a_bold_label_then_a_list_is_not_a_header(self) -> None:
+        # "**Languages:** Python, Java, Go": the comma is inside the list, not after the label.
+        label = "Languages:"
+        found = _classify(
+            _line(
+                label, top=100.0, first_bold=True, right=("Python, Java, Go", 36.0 + 5.0 * len(label) + 3.0)
+            ),
+            *FILLER,
+        )[0]
+        assert found.kind is not LineClass.ENTRY_HEADER
+
     def test_only_the_first_part_needs_to_be_bold(self) -> None:
         line = _line("ORBIT \u2014 Job Agent", top=100.0, bold=False, first_bold=True)
         assert _kinds(line, *FILLER)[0] is LineClass.ENTRY_HEADER

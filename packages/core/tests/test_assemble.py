@@ -100,6 +100,30 @@ def test_a_role_is_read_from_its_header_its_title_and_its_bullets() -> None:
     ]
 
 
+def test_a_bold_employer_and_a_regular_title_are_both_read() -> None:
+    # The header as most resumes set it: the employer bold, the title regular after the
+    # dash. Split by weight into two touching parts, and the date further right.
+    head = _line("Brightfold Systems", top=110.0, bold=True, right=("Jul 2022 - Dec 2023", 480.0))
+    title = {
+        "text": "\u2014 Associate Software Engineer",
+        "x0": 129.0,
+        "x1": 280.0,
+        "font_size": BODY,
+        "bold": False,
+    }
+    segments = [head["segments"][0], title, head["segments"][1]]
+    head = {**head, "segments": segments, "bold": False, "text": " ".join(str(s["text"]) for s in segments)}
+    plan = _plan(
+        *HEADER,
+        _line("EXPERIENCE", top=90.0, bold=True, rule_below=True),
+        head,
+        _line("Shipped 8 full-stack applications with Node.js and PostgreSQL", top=124.0, marker="*"),
+    )
+    (role,) = plan.experiences
+    assert (role.employer, role.title) == ("Brightfold Systems", "Associate Software Engineer")
+    assert len(role.facts) == 1
+
+
 def test_each_bullet_keeps_the_line_it_started_on() -> None:
     (role,) = _plan(*HEADER, *ROLE).experiences
     assert [fact.source_line for fact in role.facts] == [6, 8]
