@@ -1,5 +1,5 @@
 # CI task definitions. Local development on Windows uses ./tasks.ps1.
-.PHONY: install lint typecheck test secrets sast audit control-chars pii parser-image ci
+.PHONY: install lint typecheck test secrets sast audit control-chars pii parser-image browsers ci
 
 install:
 	uv sync --all-packages --frozen
@@ -25,6 +25,11 @@ test:
 # missing image fails them rather than skipping them.
 parser-image:
 	uv run python -m aria_document_parser.image build
+
+# The Chromium resumes are printed through. The chromium-marked tests need it and fail
+# rather than skip without it; --with-deps adds the system libraries a bare runner lacks.
+browsers:
+	uv run playwright install --with-deps chromium
 
 control-chars:
 	uv run python infra/checks/no_control_characters.py

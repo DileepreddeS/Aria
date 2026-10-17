@@ -1,10 +1,11 @@
 <#
+.DESCRIPTION
     ARIA local task runner (Windows).
 
     Usage:  ./tasks.ps1 <task>
     Tasks:  setup, up, down, kms-init, keys-init, migrate, anchor, test, test-db, lint,
             fmt, typecheck, control-chars, pii, secrets, audit, check, gateway, api, seed-me,
-            parser-image
+            parser-image, browsers
 
     CI uses the Makefile. This file is for local development on Windows.
 #>
@@ -36,6 +37,7 @@ switch ($Task) {
     "setup" {
         Invoke-Step "uv sync" { uv sync --all-packages }
         Invoke-Step "pre-commit install" { uv run pre-commit install }
+        Invoke-Step "install Playwright's Chromium" { uv run playwright install chromium }
         Write-Host "Next: ./tasks.ps1 kms-init; ./tasks.ps1 keys-init; ./tasks.ps1 up; ./tasks.ps1 migrate"
     }
     "up" {
@@ -122,6 +124,12 @@ switch ($Task) {
         # or to aria_core: the API compares the image's fingerprint with the checkout
         # and will not start on a stale one.
         Invoke-Step "build the document parser image" { uv run python -m aria_document_parser.image build }
+    }
+    "browsers" {
+        # Resumes are printed through Playwright's Chromium, downloaded into the user's
+        # Playwright cache. Run again after Playwright is upgraded: each release pins
+        # its own browser build. The chromium-marked tests fail without it.
+        Invoke-Step "install Playwright's Chromium" { uv run playwright install chromium }
     }
     default {
         Get-Help $PSCommandPath -Detailed
