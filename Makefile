@@ -13,6 +13,7 @@ typecheck:
 	# cannot hold two modules of the same name in one run.
 	uv run mypy packages/core
 	uv run mypy services/llm_gateway
+	uv run mypy services/document_parser
 	uv run mypy apps/api
 	uv run mypy apps/cli
 	uv run mypy engines/resume

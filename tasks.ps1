@@ -78,6 +78,7 @@ switch ($Task) {
         # mypy cannot hold two modules of the same name in one run.
         Invoke-Step "mypy (core)" { uv run mypy packages/core }
         Invoke-Step "mypy (llm_gateway)" { uv run mypy services/llm_gateway }
+        Invoke-Step "mypy (document_parser)" { uv run mypy services/document_parser }
         Invoke-Step "mypy (api)" { uv run mypy apps/api }
         Invoke-Step "mypy (cli)" { uv run mypy apps/cli }
         Invoke-Step "mypy (resume)" { uv run mypy engines/resume }
