@@ -178,8 +178,12 @@ def split_skill_terms(text: str) -> list[str]:
 def _expand(term: str) -> list[str]:
     """ "AWS (EC2, S3, Lambda)" is AWS and the three things named under it."""
     head, bracket, rest = term.partition("(")
-    if not bracket or not rest.rstrip().endswith(")"):
+    if not bracket:
         return [term]
+    if not rest.rstrip().endswith(")"):
+        # A group a line break cut off ("AWS (EC2" then "S3)"): the head and the first
+        # thing named under it, never one term spanning the bracket.
+        return [part for part in (head.strip(), rest.strip()) if part]
     inner = rest.rstrip()[:-1]
     return [head.strip(), *(item for part in split_skill_terms(inner) for item in _expand(part))]
 
@@ -227,7 +231,10 @@ def tag_skills(text: str, taxonomy: SkillTaxonomy, *, source_line: int | None = 
             canonical = taxonomy.resolve(surface)
             if canonical is None:
                 continue
-            if size == 1 and len(surface.strip(".,;:")) <= _PROSE_NAME_LENGTH:
+            if size == 1 and (
+                len(surface.strip(".,;:")) <= _PROSE_NAME_LENGTH or taxonomy.get(canonical).common_word
+            ):
+                # "Spring" the framework, not "the spring semester".
                 if not _written_as_a_name(surface.strip(".,;:")):
                     continue
             if canonical not in seen:

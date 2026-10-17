@@ -109,7 +109,11 @@ class Requirement(BaseModel):
 Components:
 - **Skill taxonomy** (`taxonomy/skills.yaml`, versioned): canonical id, aliases (React/React.js/ReactJS),
   parent/implies edges (Next.js → React → JavaScript; PostgreSQL → SQL; Kubernetes → containers),
-  category (frontend, backend, data, ml, infra, language). Unknown terms are logged for review, never dropped.
+  sibling groups (Redis, Memcached, Valkey), category (frontend, backend, data, ml, infra, language).
+  An alias is another name for the *same* skill: a spelling, abbreviation, version or rename. Every named
+  product, library, model or subtype is its own skill, however close a substitute, linked by `implies` to
+  what it is a kind of and by a sibling group to its alternatives; siblings serve matching only (§7) and are
+  never evidence on a resume. Unknown terms are logged for review, never dropped (DECISIONS 2026-10-17).
 - **Dedupe and merge** repeated requirements; keep the strongest weight.
 - **Implicit requirements:** "build REST APIs in Node" → node.js, rest_api, backend.
 

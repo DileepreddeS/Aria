@@ -37,6 +37,9 @@ class TestTheLinesThatWentWrong:
         assert findings.unknown == ()
         assert [skill.canonical for skill in findings.skills] == [
             "aws",
+            # EC2 and S3 are AWS services, each its own skill (taxonomy 2026.10.3).
+            "aws_ec2",
+            "aws_s3",
             "lambda_functions",
             "docker",
             "github_actions",
@@ -61,7 +64,12 @@ class TestParentheses:
         assert split_skill_terms("AWS (EC2, S3, Lambda), Docker") == ["AWS (EC2, S3, Lambda)", " Docker"]
 
     def test_the_head_and_each_thing_named_under_it_are_resolved(self, taxonomy: SkillTaxonomy) -> None:
-        assert _found("AWS (EC2, S3, Lambda)", taxonomy) == [("aws", "AWS"), ("lambda_functions", "Lambda")]
+        assert _found("AWS (EC2, S3, Lambda)", taxonomy) == [
+            ("aws", "AWS"),
+            ("aws_ec2", "EC2"),
+            ("aws_s3", "S3"),
+            ("lambda_functions", "Lambda"),
+        ]
 
     def test_unknown_names_inside_a_group_are_reported_one_by_one(self, taxonomy: SkillTaxonomy) -> None:
         findings = _read("Tools: Quuxly (Frobnitz, Zorblax)", taxonomy)
@@ -70,13 +78,14 @@ class TestParentheses:
     def test_a_group_cut_off_by_a_line_break_does_not_leave_a_fragment(self, taxonomy: SkillTaxonomy) -> None:
         findings = _read("AWS (EC2, S3", taxonomy)
         assert findings.unknown == ()
-        assert [skill.canonical for skill in findings.skills] == ["aws"]
+        # Not "AWS (EC2" read as one term, which spells the alias "aws ec2".
+        assert [skill.canonical for skill in findings.skills] == ["aws", "aws_ec2", "aws_s3"]
 
 
 class TestSlashes:
     @pytest.mark.parametrize(
         ("text", "expected"),
-        [("CI/CD", [("ci_cd", "CI/CD")]), ("TCP/IP", [("networking", "TCP/IP")])],
+        [("CI/CD", [("ci_cd", "CI/CD")]), ("TCP/IP", [("tcp_ip", "TCP/IP")])],
     )
     def test_a_slash_inside_a_skill_name_is_kept(
         self, taxonomy: SkillTaxonomy, text: str, expected: list[tuple[str, str]]

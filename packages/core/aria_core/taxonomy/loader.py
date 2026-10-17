@@ -3,7 +3,8 @@
 Everything that can be wrong with the file is checked here, at load time, so a
 malformed taxonomy is a start-up failure rather than a resume with a missing skill:
 duplicate canonical ids, an alias claimed by two skills, an ``implies`` edge pointing
-at nothing, and cycles.
+at nothing, cycles, and a sibling group naming a skill that does not exist or two skills
+of which one is a kind of the other.
 
 Cycles matter more than they look. :meth:`SkillTaxonomy.implications` walks the graph
 transitively; a cycle would still terminate because visited ids are tracked, but it
@@ -66,7 +67,47 @@ def load_taxonomy(path: Path) -> SkillTaxonomy:
             by_alias[key] = skill.canonical
 
     _validate_edges(skills, path)
-    return SkillTaxonomy(version=version, skills=skills, _by_alias=by_alias)
+    siblings = _sibling_groups(raw.get("sibling_groups") or [], skills, path)
+    return SkillTaxonomy(version=version, skills=skills, _by_alias=by_alias, _siblings=siblings)
+
+
+def _sibling_groups(groups: Any, skills: dict[str, Skill], path: Path) -> dict[str, frozenset[str]]:
+    """Each group's members are alternatives to each other, pairwise and symmetric.
+
+    A member that implies another is not its sibling but a kind of it (Hive is not an
+    alternative to Hadoop, it runs on it), so that pair is refused.
+    """
+    if not isinstance(groups, list):
+        raise TaxonomyError(f"{path}: 'sibling_groups' must be a list of lists")
+    found: dict[str, set[str]] = {}
+    for group in groups:
+        if not isinstance(group, list) or len(group) < 2:
+            raise TaxonomyError(f"{path}: a sibling group needs two or more ids, got {group!r}")
+        members = [str(member) for member in group]
+        if len(set(members)) != len(members):
+            raise TaxonomyError(f"{path}: sibling group {members} names a skill twice")
+        for member in members:
+            if member not in skills:
+                raise TaxonomyError(f"{path}: sibling group {members} names {member!r}, which is not a skill")
+        for member in members:
+            for other in members:
+                if member != other and other in _closure(skills, member):
+                    raise TaxonomyError(
+                        f"{path}: {member!r} implies {other!r}, so it is a kind of it, not a sibling"
+                    )
+            found.setdefault(member, set()).update(other for other in members if other != member)
+    return {member: frozenset(others) for member, others in found.items()}
+
+
+def _closure(skills: dict[str, Skill], canonical: str) -> set[str]:
+    seen: set[str] = set()
+    frontier = list(skills[canonical].implies)
+    while frontier:
+        current = frontier.pop()
+        if current not in seen:
+            seen.add(current)
+            frontier.extend(skills[current].implies)
+    return seen
 
 
 def _build_skill(entry: Any, path: Path) -> Skill:
@@ -89,6 +130,9 @@ def _build_skill(entry: Any, path: Path) -> Skill:
     implies = entry.get("implies") or []
     if not isinstance(implies, list):
         raise TaxonomyError(f"{path}: skill {canonical!r} has a non-list 'implies'")
+    common_word = entry.get("common_word", False)
+    if not isinstance(common_word, bool):
+        raise TaxonomyError(f"{path}: skill {canonical!r} has a non-boolean 'common_word'")
 
     return Skill(
         canonical=canonical,
@@ -96,6 +140,7 @@ def _build_skill(entry: Any, path: Path) -> Skill:
         category=category,
         aliases=frozenset(str(alias) for alias in aliases),
         implies=tuple(str(target) for target in implies),
+        common_word=common_word,
     )
 
 

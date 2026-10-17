@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from aria_core.importer.skills import tag_skills
 from aria_core.taxonomy.loader import DEFAULT_TAXONOMY_PATH, load_default_taxonomy, load_taxonomy
 from aria_core.taxonomy.model import SkillCategory, SkillTaxonomy, TaxonomyError, normalise
 
@@ -213,11 +214,11 @@ class TestTheShippedSeed:
             ("PyTorch", "pytorch"),
             ("YOLOv8", "yolo"),
             ("a11y", "accessibility"),
-            ("WCAG", "accessibility"),
+            ("WCAG", "wcag"),
             ("CI/CD", "ci_cd"),
             ("RAG", "rag"),
-            ("sentence transformers", "embeddings"),
-            ("DeBERTa", "nli"),
+            ("sentence transformers", "sentence_transformers"),
+            ("DeBERTa", "deberta"),
             # Common in new-grad JDs, not in his stack: these must resolve so a gap
             # report names a skill instead of an unknown term.
             ("Spring Boot", "spring_boot"),
@@ -227,8 +228,8 @@ class TestTheShippedSeed:
             ("gRPC", "grpc"),
             ("C#", "csharp"),
             ("Golang", "golang"),
-            ("Unreal Engine", "gaming"),
-            ("HIPAA", "healthcare_it"),
+            ("Unreal Engine", "unreal_engine"),
+            ("HIPAA", "hipaa"),
         ],
     )
     def test_terms_that_have_to_resolve(self, term: str, expected: str | None) -> None:
@@ -255,7 +256,197 @@ class TestTheShippedSeed:
     def test_the_seed_is_plain_data_with_no_surprises(self) -> None:
         # Parsed with safe_load, and nothing in it should need anything else.
         raw = yaml.safe_load(DEFAULT_TAXONOMY_PATH.read_text(encoding="utf-8"))
-        assert set(raw) == {"version", "skills"}
+        assert set(raw) == {"version", "skills", "sibling_groups"}
         assert all(
-            set(entry) <= {"id", "display", "category", "aliases", "implies"} for entry in raw["skills"]
+            set(entry) <= {"id", "display", "category", "aliases", "implies", "common_word"}
+            for entry in raw["skills"]
         )
+
+
+SIBLINGS = """
+version: "t"
+skills:
+  - {id: caching, category: practice}
+  - {id: redis, display: Redis, category: data, implies: [caching]}
+  - {id: memcached, display: Memcached, category: data, implies: [caching]}
+  - {id: valkey, display: Valkey, category: data, implies: [caching]}
+  - {id: spring, display: Spring, category: backend, aliases: [spring framework], common_word: true}
+sibling_groups:
+  - [redis, memcached, valkey]
+"""
+
+
+class TestSiblings:
+    """Alternatives, for matching only: never an alias, so never evidence on a resume."""
+
+    def test_a_group_makes_every_pair_siblings_both_ways(self, tmp_path: Path) -> None:
+        taxonomy = load_taxonomy(_write(tmp_path, SIBLINGS))
+        assert taxonomy.siblings("redis") == {"memcached", "valkey"}
+        assert taxonomy.siblings("valkey") == {"redis", "memcached"}
+        assert taxonomy.siblings("caching") == frozenset()
+
+    def test_a_sibling_resolves_to_itself_not_to_its_sibling(self, tmp_path: Path) -> None:
+        taxonomy = load_taxonomy(_write(tmp_path, SIBLINGS))
+        assert taxonomy.resolve("Memcached") == "memcached"
+
+    def test_an_unknown_skill_has_no_siblings_to_ask_about(self, tmp_path: Path) -> None:
+        with pytest.raises(TaxonomyError):
+            load_taxonomy(_write(tmp_path, SIBLINGS)).siblings("cobol")
+
+    @pytest.mark.parametrize(
+        ("groups", "says"),
+        [
+            ("[[redis, cobol]]", "not a skill"),
+            ("[[redis]]", "two or more"),
+            ("[[redis, redis]]", "twice"),
+            # Redis implies caching: it is a kind of caching, not an alternative to it.
+            ("[[redis, caching]]", "kind of"),
+            ("redis", "list of lists"),
+        ],
+    )
+    def test_a_bad_group_is_refused(self, tmp_path: Path, groups: str, says: str) -> None:
+        body = SIBLINGS.split("sibling_groups:")[0] + f"sibling_groups: {groups}\n"
+        with pytest.raises(TaxonomyError, match=says):
+            load_taxonomy(_write(tmp_path, body))
+
+
+class TestCommonWords:
+    def test_a_product_named_with_an_ordinary_word_is_tagged_only_as_a_name(self, tmp_path: Path) -> None:
+        taxonomy = load_taxonomy(_write(tmp_path, SIBLINGS))
+        assert [skill.canonical for skill in tag_skills("Built services on Spring", taxonomy).skills] == [
+            "spring"
+        ]
+        assert tag_skills("Graduated in the spring semester", taxonomy).skills == ()
+        # A multi-word alias is not an ordinary word.
+        found = tag_skills("used the spring framework", taxonomy).skills
+        assert [skill.canonical for skill in found] == ["spring"]
+
+    def test_the_flag_is_a_boolean(self, tmp_path: Path) -> None:
+        body = SIBLINGS.replace("common_word: true", "common_word: sometimes")
+        with pytest.raises(TaxonomyError, match="non-boolean"):
+            load_taxonomy(_write(tmp_path, body))
+
+
+class TestTheSeedNamesEachProductOnce:
+    """Taxonomy 2026.10.3 (DECISIONS 2026-10-17). An alias is the same skill; a sibling
+    product, library, model or subtype is its own. Split, never deleted: a term the
+    taxonomy does not know is never tagged, so the truth check could not catch it."""
+
+    @pytest.mark.parametrize(
+        ("term", "expected", "not_"),
+        [
+            ("Memcached", "memcached", "redis"),
+            ("Valkey", "valkey", "redis"),
+            ("MariaDB", "mariadb", "mysql"),
+            ("Cypress", "cypress", "selenium"),
+            ("Pulumi", "pulumi", "terraform"),
+            ("BullMQ", "bullmq", "celery"),
+            ("Sidekiq", "sidekiq", "celery"),
+            ("Vitest", "vitest", "jest"),
+            ("Grafana", "grafana", "prometheus"),
+            ("Sentry", "sentry", "datadog"),
+            ("Bitbucket", "bitbucket", "gitlab"),
+            ("Confluence", "confluence", "jira"),
+            ("Ubuntu", "ubuntu", "linux"),
+            ("Zustand", "zustand", "state_management"),
+            ("MobX", "mobx", "state_management"),
+            ("Pinecone", "pinecone", "vector_database"),
+            ("pgvector", "pgvector", "vector_database"),
+            ("LSTM", "lstm", "rnn"),
+            ("ResNet", "resnet", "cnn"),
+            ("EC2", "aws_ec2", "aws"),
+            ("npm", "npm", "package_management"),
+            ("NER", "named_entity_recognition", "nlp"),
+            ("Scrum", "scrum", "agile"),
+            ("GPT-4", "gpt", "llm"),
+            ("Claude", "claude_models", "llm"),
+            ("Llama", "llama", "llm"),
+            ("SSG", "static_site_generation", "server_side_rendering"),
+            ("AngularJS", "angularjs", "angular"),
+            ("Podman", "podman", "docker"),
+            ("OpenSearch", "opensearch", "elasticsearch"),
+        ],
+    )
+    def test_a_sibling_product_resolves_to_itself(self, term: str, expected: str, not_: str) -> None:
+        taxonomy = load_default_taxonomy()
+        assert taxonomy.resolve(term) == expected
+        assert taxonomy.resolve(term) != not_
+
+    @pytest.mark.parametrize(
+        ("term", "expected"),
+        [("Postgres", "postgresql"), ("k8s", "kubernetes"), ("golang", "golang"), ("ReactJS", "react")],
+    )
+    def test_a_spelling_is_still_an_alias(self, term: str, expected: str) -> None:
+        assert load_default_taxonomy().resolve(term) == expected
+
+    @pytest.mark.parametrize(
+        ("term", "expected"),
+        [("shell", "shell_scripting"), ("containers", "containers"), ("design system", "design_systems")],
+    )
+    def test_a_general_term_names_the_general_skill(self, term: str, expected: str) -> None:
+        # In a skills list "shell" is shell scripting, not Bash; "containers" is not Docker.
+        assert load_default_taxonomy().resolve(term) == expected
+
+    def test_sidekiq_is_not_evidence_of_python(self) -> None:
+        # The case that started this: Sidekiq is Ruby, BullMQ is Node.
+        taxonomy = load_default_taxonomy()
+        assert "python" not in taxonomy.implications("sidekiq")
+        assert "python" not in taxonomy.implications("bullmq")
+        assert "ruby" in taxonomy.implications("sidekiq")
+
+    def test_siblings_stay_linked_for_matching(self) -> None:
+        taxonomy = load_default_taxonomy()
+        assert {"memcached", "valkey"} <= taxonomy.siblings("redis")
+        assert "mariadb" in taxonomy.siblings("mysql")
+        assert "cypress" in taxonomy.siblings("selenium")
+
+    @pytest.mark.parametrize(
+        "word",
+        [
+            "parsing",
+            "rendering",
+            "mapping",
+            "migration",
+            "billing",
+            "checkout",
+            "transactions",
+            "metrics",
+            "optimization",
+            "scaling",
+            "ranking",
+            "relevance",
+            "indexing",
+            "attention",
+            "vision",
+            "notebooks",
+            "probability",
+            "legacy code",
+            "modernization",
+            "elastic",
+            "linear",
+        ],
+    )
+    def test_an_ordinary_word_names_no_skill(self, word: str) -> None:
+        taxonomy = load_default_taxonomy()
+        assert taxonomy.resolve(word) is None
+        assert tag_skills(f"Worked on {word} for the team", taxonomy).skills == ()
+
+    @pytest.mark.parametrize(
+        ("sentence", "absent"),
+        [
+            # Lowercase "lambda" is the Python keyword; "Lambda" is the AWS service.
+            ("Wrote a lambda to sort the rows", "lambda_functions"),
+            ("Picked celery for the salad", "celery"),
+            ("Moved to the spring release", "spring"),
+            ("Wrote shell scripts", "bash"),
+            ("Shipped containers to the registry", "docker"),
+            ("Ranked first; CV attached", "computer_vision"),
+        ],
+    )
+    def test_a_word_does_not_claim_a_product(self, sentence: str, absent: str) -> None:
+        found = {skill.canonical for skill in tag_skills(sentence, load_default_taxonomy()).skills}
+        assert absent not in found
+
+    def test_a_name_written_as_a_name_is_still_found(self) -> None:
+        found = tag_skills("Deployed on AWS Lambda with Celery", load_default_taxonomy()).skills
+        assert {"lambda_functions", "celery"} <= {skill.canonical for skill in found}

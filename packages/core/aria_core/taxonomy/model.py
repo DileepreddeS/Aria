@@ -12,6 +12,15 @@ how a resume ends up claiming something the candidate never said:
 * **Implication.** Next.js implies React implies JavaScript. Useful for *matching* a
   requirement to evidence. Never for a claim: years of React do not become years of
   JavaScript, and :mod:`aria_core.graph.derive` keeps the two apart.
+* **Siblings.** Redis, Memcached and Valkey are alternatives: a candidate with one is
+  a partial match for a JD asking for another. For matching only, and never an alias:
+  an alias says two terms name the *same* skill, and a resume prints what a fact
+  says, so a Redis fact must never back "Memcached" (DECISIONS 2026-10-17).
+
+An alias is another name for the same skill: a spelling, an abbreviation, a version,
+a rename. Every named product, library, model or subtype is its own skill, even when it
+is a close substitute for another, linked by ``implies`` to what it is a kind of and by
+a sibling group to its alternatives.
 
 Unknown terms are returned as unresolved and reported, never silently dropped — a
 skill the taxonomy has not heard of is a gap in the taxonomy, and pretending it does
@@ -58,6 +67,9 @@ class Skill:
     aliases: frozenset[str] = frozenset()
     implies: tuple[str, ...] = ()
     """Canonical ids this skill is evidence for. Directed, acyclic."""
+    common_word: bool = False
+    """Its one-word name is also an ordinary word ("Spring", "Celery", "Express"): in
+    prose it is tagged only when written as a name, never as the word."""
 
     def __post_init__(self) -> None:
         if not self.canonical:
@@ -92,6 +104,7 @@ class SkillTaxonomy:
     version: str
     skills: Mapping[str, Skill]
     _by_alias: Mapping[str, str] = field(default_factory=dict, repr=False)
+    _siblings: Mapping[str, frozenset[str]] = field(default_factory=dict, repr=False)
 
     # ------------------------------------------------------------------ lookups
     def resolve(self, term: str) -> str | None:
@@ -146,6 +159,15 @@ class SkillTaxonomy:
             seen.add(current)
             frontier.extend(self.get(current).implies)
         return frozenset(seen)
+
+    def siblings(self, canonical: str) -> frozenset[str]:
+        """The alternatives to this skill (Memcached for Redis). Symmetric.
+
+        For the Evidence Matcher's partial match (RESUME_ENGINE §7), never for a claim:
+        a sibling is evidence of nothing on a resume.
+        """
+        self.get(canonical)
+        return self._siblings.get(canonical, frozenset())
 
     def display_form(self, canonical: str, *, preferred: str | None = None) -> str:
         """The spelling to print. A JD's own surface form wins when there is one."""

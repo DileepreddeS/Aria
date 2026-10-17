@@ -4,11 +4,20 @@
 #   id:       canonical id, lowercase, stable forever (it is stored on facts)
 #   display:  how ARIA spells it when a job description does not provide a spelling
 #   category: language | frontend | backend | data | ml | infra | tooling | practice | domain
-#   aliases:  surface forms seen in the wild. Case, punctuation and separators are
+#   aliases:  other names for the *same* skill: spellings, abbreviations, versions,
+#             renames ("Postgres", "k8s"). Case, punctuation and separators are
 #             normalised, so "Next.js", "next js" and "NextJS" all match one alias.
+#             Never another product, library, model or subtype, however close: those
+#             are skills of their own, linked by implies and sibling_groups. A resume
+#             prints what a fact says, and an alias would let a Redis fact back
+#             "Memcached" (DECISIONS 2026-10-17). Split, never delete: a term the
+#             taxonomy does not know is never tagged, so the truth check cannot catch
+#             it in a bullet.
 #   implies:  canonical ids this skill is evidence *for*, when matching a requirement.
 #             Never used to add years or to put a skill on a resume (see
 #             aria_core.graph.derive): an implication informs matching, never a claim.
+#   common_word: true when the one-word name is also an ordinary word ("Spring",
+#             "Celery"): prose tags it only when it is written as a name.
 #
 # Scope: the founder's stack, plus the skills that recur in new-grad JDs he does not
 # have, so a gap report names a canonical skill instead of an unknown term. It grows
@@ -16,7 +25,7 @@
 #
 # Bump `version` on every change: it is recorded in each resume's artifacts, so a
 # resume can be explained with the taxonomy that produced it.
-version: "2026.10.2"
+version: "2026.10.3"
 
 skills:
   # ----------------------------------------------------------------- languages
@@ -40,13 +49,13 @@ skills:
   - id: cpp
     display: C++
     category: language
-    aliases: ["c++", cplusplus, c plus plus, c++11, c++17, c++20]
+    aliases: [c++, cplusplus, c plus plus, c++11, c++17, c++20]
   - id: c
     display: C
     category: language
     aliases: [ansi c, c99]
   - id: csharp
-    display: C#
+    display: "C#"
     category: language
     aliases: ["c#", c sharp, csharp]
   - id: golang
@@ -83,10 +92,20 @@ skills:
   - id: bash
     display: Bash
     category: language
-    aliases: [shell, shell scripting, sh, zsh, bash scripting]
+    aliases: [bash scripting]
+    implies: [shell_scripting]
+  - id: shell_scripting
+    display: shell scripting
+    category: language
+    aliases: [shell, shell scripting, shell scripts, sh]
+  - id: zsh
+    display: Zsh
+    category: language
+    implies: [shell_scripting]
   - id: powershell
     display: PowerShell
     category: language
+    implies: [shell_scripting]
   - id: sql
     display: SQL
     category: language
@@ -94,11 +113,25 @@ skills:
   - id: html
     display: HTML
     category: frontend
-    aliases: [html5, semantic html]
+    aliases: [html5]
+  - id: semantic_html
+    display: semantic HTML
+    category: frontend
+    aliases: [semantic html]
+    implies: [html]
   - id: css
     display: CSS
     category: frontend
-    aliases: [css3, flexbox, css grid]
+    aliases: [css3]
+  - id: flexbox
+    display: Flexbox
+    category: frontend
+    implies: [css]
+  - id: css_grid
+    display: CSS Grid
+    category: frontend
+    aliases: [css grid]
+    implies: [css]
   - id: dart
     display: Dart
     category: language
@@ -111,22 +144,40 @@ skills:
   - id: solidity
     display: Solidity
     category: language
-
   # ------------------------------------------------------------------ frontend
   - id: react
     display: React
     category: frontend
-    aliases: [react.js, reactjs, react js, react hooks]
+    aliases: [react.js, reactjs, react js]
     implies: [javascript, html, css]
+  - id: react_hooks
+    display: React Hooks
+    category: frontend
+    aliases: [react hooks]
+    implies: [react]
   - id: nextjs
     display: Next.js
     category: frontend
-    aliases: [next.js, next js, nextjs, next 13, next 14, app router]
+    aliases: [next.js, next js, nextjs, next 13, next 14]
     implies: [react, server_side_rendering]
+  - id: nextjs_app_router
+    display: Next.js App Router
+    category: frontend
+    aliases: [app router]
+    implies: [nextjs]
   - id: server_side_rendering
     display: server-side rendering
     category: frontend
-    aliases: [ssr, static site generation, ssg, isr]
+    aliases: [ssr]
+  - id: static_site_generation
+    display: static site generation
+    category: frontend
+    aliases: [static site generation, ssg]
+  - id: incremental_static_regeneration
+    display: incremental static regeneration
+    category: frontend
+    aliases: [incremental static regeneration, isr]
+    implies: [static_site_generation]
   - id: vue
     display: Vue
     category: frontend
@@ -140,13 +191,22 @@ skills:
   - id: angular
     display: Angular
     category: frontend
-    aliases: [angular 2, angular.js, angularjs]
+    aliases: [angular 2]
     implies: [typescript, html, css]
+  - id: angularjs
+    display: AngularJS
+    category: frontend
+    aliases: [angular.js]
+    implies: [javascript, html, css]
   - id: svelte
     display: Svelte
     category: frontend
-    aliases: [sveltekit, svelte kit]
     implies: [javascript, html, css]
+  - id: sveltekit
+    display: SvelteKit
+    category: frontend
+    aliases: [svelte kit]
+    implies: [svelte, server_side_rendering]
   - id: solid_js
     display: SolidJS
     category: frontend
@@ -160,6 +220,7 @@ skills:
     display: Remix
     category: frontend
     implies: [react, server_side_rendering]
+    common_word: true
   - id: redux
     display: Redux
     category: frontend
@@ -168,11 +229,36 @@ skills:
   - id: state_management
     display: state management
     category: frontend
-    aliases: [zustand, mobx, recoil, jotai, context api]
+  - id: zustand
+    display: Zustand
+    category: frontend
+    implies: [state_management]
+  - id: mobx
+    display: MobX
+    category: frontend
+    implies: [state_management]
+  - id: recoil
+    display: Recoil
+    category: frontend
+    implies: [state_management, react]
+    common_word: true
+  - id: jotai
+    display: Jotai
+    category: frontend
+    implies: [state_management, react]
+  - id: react_context
+    display: React Context
+    category: frontend
+    aliases: [context api, react context api]
+    implies: [react, state_management]
   - id: react_query
     display: React Query
     category: frontend
-    aliases: [tanstack query, swr]
+    aliases: [tanstack query]
+    implies: [react]
+  - id: swr
+    display: SWR
+    category: frontend
     implies: [react]
   - id: tailwind
     display: Tailwind CSS
@@ -182,21 +268,69 @@ skills:
   - id: sass
     display: Sass
     category: frontend
-    aliases: [scss, less]
+    aliases: [scss]
     implies: [css]
+  - id: less
+    display: Less
+    category: frontend
+    aliases: [less css]
+    implies: [css]
+    common_word: true
   - id: css_in_js
     display: CSS-in-JS
     category: frontend
-    aliases: [styled components, emotion, stitches]
     implies: [css, javascript]
+  - id: styled_components
+    display: styled-components
+    category: frontend
+    aliases: [styled components]
+    implies: [css_in_js]
+  - id: emotion
+    display: Emotion
+    category: frontend
+    implies: [css_in_js]
+    common_word: true
+  - id: stitches
+    display: Stitches
+    category: frontend
+    implies: [css_in_js]
+    common_word: true
   - id: component_library
     display: component library
     category: frontend
-    aliases: [design system, material ui, mui, chakra ui, shadcn, ant design, radix]
+  - id: design_systems
+    display: design systems
+    category: frontend
+    aliases: [design system, design systems]
+  - id: mui
+    display: MUI
+    category: frontend
+    aliases: [material ui, material-ui]
+    implies: [component_library, react]
+  - id: chakra_ui
+    display: Chakra UI
+    category: frontend
+    implies: [component_library, react]
+  - id: shadcn_ui
+    display: shadcn/ui
+    category: frontend
+    aliases: [shadcn]
+    implies: [component_library, react]
+  - id: ant_design
+    display: Ant Design
+    category: frontend
+    aliases: [antd]
+    implies: [component_library, react]
+  - id: radix_ui
+    display: Radix UI
+    category: frontend
+    aliases: [radix]
+    implies: [component_library, react]
   - id: storybook
     display: Storybook
     category: frontend
     implies: [component_library]
+    common_word: true
   - id: webpack
     display: Webpack
     category: tooling
@@ -209,6 +343,7 @@ skills:
     display: Babel
     category: tooling
     implies: [javascript]
+    common_word: true
   - id: jquery
     display: jQuery
     category: frontend
@@ -225,49 +360,107 @@ skills:
   - id: data_visualization
     display: data visualization
     category: frontend
-    aliases: [charting, chart.js, recharts, plotly, dataviz]
+    aliases: [charting, dataviz]
+  - id: chartjs
+    display: Chart.js
+    category: frontend
+    implies: [data_visualization, javascript]
+  - id: recharts
+    display: Recharts
+    category: frontend
+    implies: [data_visualization, react]
+  - id: plotly
+    display: Plotly
+    category: frontend
+    implies: [data_visualization]
   - id: three_js
     display: Three.js
     category: frontend
-    aliases: [three.js, threejs, webgl]
+    aliases: [three.js, threejs]
+    implies: [javascript, webgl]
+  - id: webgl
+    display: WebGL
+    category: frontend
     implies: [javascript]
   - id: web_components
     display: Web Components
     category: frontend
-    aliases: [custom elements, shadow dom, lit]
     implies: [javascript, html]
+  - id: custom_elements
+    display: custom elements
+    category: frontend
+    aliases: [custom elements]
+    implies: [web_components]
+  - id: shadow_dom
+    display: Shadow DOM
+    category: frontend
+    implies: [web_components]
+  - id: lit
+    display: Lit
+    category: frontend
+    implies: [web_components]
+    common_word: true
   - id: pwa
     display: progressive web apps
     category: frontend
-    aliases: [progressive web app, service worker, service workers]
+    aliases: [progressive web app]
+    implies: [javascript, service_workers]
+  - id: service_workers
+    display: service workers
+    category: frontend
+    aliases: [service worker, service workers]
     implies: [javascript]
   - id: responsive_design
     display: responsive design
     category: frontend
-    aliases: [mobile first, mobile-first, cross browser, cross-browser]
     implies: [css]
+  - id: mobile_first
+    display: mobile-first design
+    category: frontend
+    aliases: [mobile first, mobile-first]
+    implies: [responsive_design]
+  - id: cross_browser
+    display: cross-browser compatibility
+    category: practice
+    aliases: [cross browser, cross-browser, cross browser compatibility]
   - id: react_native
     display: React Native
     category: frontend
-    aliases: [react-native, expo]
+    aliases: [react-native]
     implies: [react, mobile_development]
+  - id: expo
+    display: Expo
+    category: frontend
+    implies: [react_native]
+    common_word: true
   - id: flutter
     display: Flutter
     category: frontend
     implies: [dart, mobile_development]
+    common_word: true
   - id: mobile_development
     display: mobile development
     category: frontend
-    aliases: [ios development, android development, mobile app development]
+    aliases: [mobile app development]
+  - id: ios_development
+    display: iOS development
+    category: frontend
+    aliases: [ios development, ios]
+    implies: [mobile_development]
+  - id: android_development
+    display: Android development
+    category: frontend
+    aliases: [android development, android]
+    implies: [mobile_development]
   - id: electron
     display: Electron
     category: frontend
     implies: [javascript, desktop_development]
+    common_word: true
   - id: desktop_development
     display: desktop application development
     category: frontend
     aliases: [desktop apps]
-
   # ------------------------------------------------------------------- backend
   - id: nodejs
     display: Node.js
@@ -279,6 +472,7 @@ skills:
     category: backend
     aliases: [express.js, expressjs]
     implies: [nodejs, rest_api]
+    common_word: true
   - id: nestjs
     display: NestJS
     category: backend
@@ -299,18 +493,33 @@ skills:
   - id: django
     display: Django
     category: backend
-    aliases: [django rest framework, drf]
     implies: [python, rest_api]
+  - id: django_rest_framework
+    display: Django REST Framework
+    category: backend
+    aliases: [django rest framework, drf]
+    implies: [django, rest_api]
   - id: spring_boot
     display: Spring Boot
     category: backend
-    aliases: [springboot, spring framework, spring]
-    implies: [java, rest_api]
-  - id: dotnet
-    display: .NET
+    aliases: [springboot]
+    implies: [spring, java, rest_api]
+  - id: spring
+    display: Spring
     category: backend
-    aliases: [.net, dotnet core, asp.net, asp.net core, net core]
+    aliases: [spring framework]
+    implies: [java]
+    common_word: true
+  - id: dotnet
+    display: ".NET"
+    category: backend
+    aliases: [".net", dotnet core, net core]
     implies: [csharp]
+  - id: aspnet
+    display: ASP.NET
+    category: backend
+    aliases: [asp.net, asp.net core]
+    implies: [dotnet, rest_api]
   - id: rails
     display: Ruby on Rails
     category: backend
@@ -323,58 +532,161 @@ skills:
   - id: rest_api
     display: REST APIs
     category: backend
-    aliases: [rest, restful, restful api, rest apis, web api, web services]
+    aliases: [rest, restful, restful api, rest apis, web api]
+    implies: [api_design]
+  - id: web_services
+    display: web services
+    category: backend
+    aliases: [web services]
     implies: [api_design]
   - id: graphql
     display: GraphQL
     category: backend
-    aliases: [apollo, relay]
     implies: [api_design]
+  - id: apollo_graphql
+    display: Apollo GraphQL
+    category: backend
+    aliases: [apollo, apollo client, apollo server]
+    implies: [graphql]
+    common_word: true
+  - id: relay
+    display: Relay
+    category: frontend
+    implies: [graphql, react]
+    common_word: true
   - id: grpc
     display: gRPC
     category: backend
-    aliases: [protocol buffers, protobuf]
-    implies: [api_design]
+    implies: [api_design, protobuf]
+  - id: protobuf
+    display: Protocol Buffers
+    category: backend
+    aliases: [protocol buffers, protobuf, protobufs]
   - id: websockets
     display: WebSockets
     category: backend
-    aliases: [websocket, socket.io, server sent events, sse]
+    aliases: [websocket]
+    implies: [real_time_systems]
+  - id: socket_io
+    display: Socket.IO
+    category: backend
+    aliases: [socket.io, socketio]
+    implies: [websockets]
+  - id: server_sent_events
+    display: server-sent events
+    category: backend
+    aliases: [server sent events, sse]
     implies: [real_time_systems]
   - id: openapi
     display: OpenAPI
     category: backend
     aliases: [swagger, openapi spec]
     implies: [api_design]
+    common_word: true
   - id: authentication
     display: authentication
     category: backend
-    aliases: [oauth, oauth2, oidc, openid connect, sso, jwt, auth, authz, authorization, saml]
+    aliases: [auth]
+    implies: [security_practices]
+  - id: oauth
+    display: OAuth
+    category: backend
+    aliases: [oauth2, oauth 2]
+    implies: [authorization]
+  - id: openid_connect
+    display: OpenID Connect
+    category: backend
+    aliases: [oidc, openid connect]
+    implies: [authentication, oauth]
+  - id: saml
+    display: SAML
+    category: backend
+    implies: [authentication]
+  - id: jwt
+    display: JWT
+    category: backend
+    aliases: [json web token, json web tokens]
+    implies: [authentication]
+  - id: single_sign_on
+    display: SSO
+    category: backend
+    aliases: [single sign on, single sign-on]
+    implies: [authentication]
+  - id: authorization
+    display: authorization
+    category: backend
+    aliases: [authz, access control]
     implies: [security_practices]
   - id: message_queue
     display: message queues
     category: backend
-    aliases: [rabbitmq, sqs, amqp, pub sub, pubsub, nats]
+    aliases: [pub sub, pubsub]
     implies: [distributed_systems]
+  - id: rabbitmq
+    display: RabbitMQ
+    category: backend
+    implies: [message_queue, amqp]
+  - id: amqp
+    display: AMQP
+    category: backend
+    implies: [message_queue]
+  - id: aws_sqs
+    display: Amazon SQS
+    category: backend
+    aliases: [sqs, aws sqs]
+    implies: [message_queue, aws]
+  - id: nats
+    display: NATS
+    category: backend
+    implies: [message_queue]
   - id: kafka
     display: Apache Kafka
     category: data
-    aliases: [kafka, event streaming]
-    implies: [message_queue, distributed_systems]
+    aliases: [kafka]
+    implies: [message_queue, distributed_systems, event_streaming]
+  - id: event_streaming
+    display: event streaming
+    category: backend
+    aliases: [event streaming]
   - id: celery
     display: Celery
     category: backend
-    aliases: [background jobs, task queue, sidekiq, bullmq]
-    implies: [python, message_queue]
+    implies: [python, task_queue]
+    common_word: true
+  - id: task_queue
+    display: task queues
+    category: backend
+    aliases: [background jobs, task queue, job queue, job queues]
+  - id: sidekiq
+    display: Sidekiq
+    category: backend
+    implies: [ruby, task_queue]
+  - id: bullmq
+    display: BullMQ
+    category: backend
+    implies: [nodejs, task_queue]
   - id: redis
     display: Redis
     category: data
-    aliases: [memcached, valkey]
+    implies: [caching]
+  - id: memcached
+    display: Memcached
+    category: data
+    implies: [caching]
+  - id: valkey
+    display: Valkey
+    category: data
     implies: [caching]
   - id: microservices
     display: microservices
     category: backend
-    aliases: [service oriented architecture, soa, micro services]
+    aliases: [micro services]
     implies: [distributed_systems, system_design]
+  - id: service_oriented_architecture
+    display: service-oriented architecture
+    category: backend
+    aliases: [service oriented architecture, soa]
+    implies: [distributed_systems]
   - id: serverless
     display: serverless
     category: infra
@@ -384,7 +696,6 @@ skills:
     display: API design
     category: practice
     aliases: [api versioning, contract design]
-
   # ---------------------------------------------------------------------- data
   - id: postgresql
     display: PostgreSQL
@@ -394,7 +705,10 @@ skills:
   - id: mysql
     display: MySQL
     category: data
-    aliases: [mariadb]
+    implies: [sql, relational_databases]
+  - id: mariadb
+    display: MariaDB
+    category: data
     implies: [sql, relational_databases]
   - id: sqlite
     display: SQLite
@@ -408,8 +722,13 @@ skills:
   - id: oracle_db
     display: Oracle Database
     category: data
-    aliases: [oracle, pl sql, plsql]
+    aliases: [oracle]
     implies: [sql, relational_databases]
+  - id: plsql
+    display: PL/SQL
+    category: language
+    aliases: [pl sql]
+    implies: [sql, oracle_db]
   - id: relational_databases
     display: relational databases
     category: data
@@ -418,12 +737,26 @@ skills:
   - id: mongodb
     display: MongoDB
     category: data
-    aliases: [mongo, mongoose]
-    implies: [nosql]
+    aliases: [mongo]
+    implies: [nosql, document_databases]
+  - id: mongoose
+    display: Mongoose
+    category: data
+    implies: [mongodb, nodejs]
+    common_word: true
   - id: nosql
     display: NoSQL
     category: data
-    aliases: [document database, key value store]
+  - id: document_databases
+    display: document databases
+    category: data
+    aliases: [document database, document databases, document store]
+    implies: [nosql]
+  - id: key_value_stores
+    display: key-value stores
+    category: data
+    aliases: [key value store, key value stores]
+    implies: [nosql]
   - id: dynamodb
     display: DynamoDB
     category: data
@@ -431,22 +764,38 @@ skills:
   - id: cassandra
     display: Cassandra
     category: data
-    aliases: [scylladb]
+    implies: [nosql, distributed_systems]
+  - id: scylladb
+    display: ScyllaDB
+    category: data
     implies: [nosql, distributed_systems]
   - id: neo4j
     display: Neo4j
     category: data
-    aliases: [graph database, cypher]
+    implies: [graph_databases, cypher]
+  - id: graph_databases
+    display: graph databases
+    category: data
+    aliases: [graph database, graph databases]
     implies: [nosql]
+  - id: cypher
+    display: Cypher
+    category: data
+    implies: [graph_databases]
+    common_word: true
   - id: elasticsearch
     display: Elasticsearch
     category: data
-    aliases: [opensearch, elastic]
+    implies: [search]
+  - id: opensearch
+    display: OpenSearch
+    category: data
     implies: [search]
   - id: snowflake
     display: Snowflake
     category: data
     implies: [data_warehousing, sql]
+    common_word: true
   - id: bigquery
     display: BigQuery
     category: data
@@ -455,11 +804,21 @@ skills:
     display: Redshift
     category: data
     implies: [data_warehousing, sql, aws]
+    common_word: true
   - id: data_warehousing
     display: data warehousing
     category: data
-    aliases: [data warehouse, data lake, lakehouse, olap]
+    aliases: [data warehouse]
     implies: [data_modeling]
+  - id: data_lakes
+    display: data lakes
+    category: data
+    aliases: [data lake, data lakes, lakehouse]
+    implies: [data_engineering]
+  - id: olap
+    display: OLAP
+    category: data
+    implies: [data_warehousing]
   - id: databricks
     display: Databricks
     category: data
@@ -467,13 +826,30 @@ skills:
   - id: spark
     display: Apache Spark
     category: data
-    aliases: [spark, pyspark]
+    aliases: [spark]
     implies: [distributed_systems, big_data]
+  - id: pyspark
+    display: PySpark
+    category: data
+    implies: [spark, python]
   - id: hadoop
     display: Hadoop
     category: data
-    aliases: [hdfs, mapreduce, hive]
     implies: [big_data, distributed_systems]
+  - id: hdfs
+    display: HDFS
+    category: data
+    implies: [hadoop]
+  - id: mapreduce
+    display: MapReduce
+    category: data
+    implies: [hadoop, distributed_systems]
+  - id: hive
+    display: Apache Hive
+    category: data
+    aliases: [hive]
+    implies: [hadoop, sql]
+    common_word: true
   - id: flink
     display: Apache Flink
     category: data
@@ -482,16 +858,35 @@ skills:
   - id: stream_processing
     display: stream processing
     category: data
-    aliases: [streaming data, real time data, kinesis]
+    aliases: [streaming data, real time data]
     implies: [real_time_systems]
+  - id: aws_kinesis
+    display: Amazon Kinesis
+    category: data
+    aliases: [kinesis, aws kinesis]
+    implies: [stream_processing, aws]
   - id: big_data
     display: big data
     category: data
   - id: airflow
     display: Apache Airflow
     category: data
-    aliases: [airflow, dagster, prefect, luigi]
+    aliases: [airflow]
     implies: [etl, python]
+  - id: dagster
+    display: Dagster
+    category: data
+    implies: [etl, python]
+  - id: prefect
+    display: Prefect
+    category: data
+    implies: [etl, python]
+    common_word: true
+  - id: luigi
+    display: Luigi
+    category: data
+    implies: [etl, python]
+    common_word: true
   - id: dbt
     display: dbt
     category: data
@@ -509,11 +904,16 @@ skills:
     display: pandas
     category: data
     implies: [python, data_analysis]
+    common_word: true
   - id: numpy
     display: NumPy
     category: data
-    aliases: [numpy, scipy]
+    aliases: [numpy]
     implies: [python]
+  - id: scipy
+    display: SciPy
+    category: data
+    implies: [python, numpy]
   - id: data_analysis
     display: data analysis
     category: data
@@ -526,13 +926,17 @@ skills:
   - id: query_optimization
     display: query optimization
     category: data
-    aliases: [query tuning, indexing, database indexing, explain analyze]
+    aliases: [query tuning, database indexing, explain analyze]
     implies: [sql, performance_optimization]
   - id: sqlalchemy
     display: SQLAlchemy
     category: data
-    aliases: [sqlalchemy 2, alembic]
+    aliases: [sqlalchemy 2]
     implies: [python, orm]
+  - id: alembic
+    display: Alembic
+    category: data
+    implies: [sqlalchemy, python]
   - id: prisma
     display: Prisma
     category: data
@@ -540,20 +944,55 @@ skills:
   - id: orm
     display: ORMs
     category: data
-    aliases: [orm, object relational mapping, hibernate, entity framework, typeorm]
+    aliases: [orm, object relational mapping]
     implies: [relational_databases]
+  - id: hibernate
+    display: Hibernate
+    category: data
+    implies: [orm, java]
+    common_word: true
+  - id: entity_framework
+    display: Entity Framework
+    category: data
+    aliases: [entity framework, ef core]
+    implies: [orm, dotnet]
+  - id: typeorm
+    display: TypeORM
+    category: data
+    implies: [orm, typescript]
   - id: tableau
     display: Tableau
     category: data
-    aliases: [power bi, powerbi, looker, superset]
     implies: [data_visualization, data_analysis]
-
+    common_word: true
+  - id: power_bi
+    display: Power BI
+    category: data
+    aliases: [powerbi]
+    implies: [data_visualization, data_analysis]
+  - id: looker
+    display: Looker
+    category: data
+    implies: [data_visualization, data_analysis]
+  - id: apache_superset
+    display: Apache Superset
+    category: data
+    aliases: [superset]
+    implies: [data_visualization, data_analysis]
   # ------------------------------------------------------------------------ ml
   - id: machine_learning
     display: machine learning
     category: ml
-    aliases: [ml, applied ml, classical ml, supervised learning, unsupervised learning]
+    aliases: [ml, applied ml, classical ml]
     implies: [statistics]
+  - id: supervised_learning
+    display: supervised learning
+    category: ml
+    implies: [machine_learning]
+  - id: unsupervised_learning
+    display: unsupervised learning
+    category: ml
+    implies: [machine_learning]
   - id: deep_learning
     display: deep learning
     category: ml
@@ -562,12 +1001,16 @@ skills:
   - id: pytorch
     display: PyTorch
     category: ml
-    aliases: [torch, pytorch lightning]
+    aliases: [torch]
     implies: [deep_learning, python]
+  - id: pytorch_lightning
+    display: PyTorch Lightning
+    category: ml
+    implies: [pytorch]
   - id: tensorflow
     display: TensorFlow
     category: ml
-    aliases: [tf, tensorflow 2]
+    aliases: [tensorflow 2]
     implies: [deep_learning, python]
   - id: keras
     display: Keras
@@ -581,12 +1024,24 @@ skills:
   - id: xgboost
     display: XGBoost
     category: ml
-    aliases: [lightgbm, catboost, gradient boosting]
+    implies: [gradient_boosting]
+  - id: gradient_boosting
+    display: gradient boosting
+    category: ml
+    aliases: [gradient boosted trees, gbm]
     implies: [machine_learning]
+  - id: lightgbm
+    display: LightGBM
+    category: ml
+    implies: [gradient_boosting]
+  - id: catboost
+    display: CatBoost
+    category: ml
+    implies: [gradient_boosting]
   - id: transformers
     display: transformers
     category: ml
-    aliases: [transformer, attention, self attention, encoder decoder]
+    aliases: [transformer, self attention, encoder decoder]
     implies: [deep_learning]
   - id: huggingface
     display: Hugging Face
@@ -596,8 +1051,27 @@ skills:
   - id: llm
     display: large language models
     category: ml
-    aliases: [llms, large language model, gpt, llama, claude, mistral, foundation models]
+    aliases: [llms, large language model, foundation models]
     implies: [transformers, nlp]
+  - id: gpt
+    display: GPT
+    category: ml
+    aliases: [gpt-4, gpt 4, gpt-4o, gpt 3.5]
+    implies: [llm]
+  - id: llama
+    display: Llama
+    category: ml
+    aliases: [llama 2, llama 3]
+    implies: [llm]
+  - id: claude_models
+    display: Claude
+    category: ml
+    implies: [llm]
+  - id: mistral
+    display: Mistral
+    category: ml
+    aliases: [mixtral]
+    implies: [llm]
   - id: rag
     display: retrieval-augmented generation
     category: ml
@@ -606,8 +1080,12 @@ skills:
   - id: langchain
     display: LangChain
     category: ml
-    aliases: [lang chain, langgraph]
+    aliases: [lang chain]
     implies: [llm, python]
+  - id: langgraph
+    display: LangGraph
+    category: ml
+    implies: [llm]
   - id: vllm
     display: vLLM
     category: ml
@@ -626,42 +1104,141 @@ skills:
   - id: fine_tuning
     display: fine-tuning
     category: ml
-    aliases: [finetuning, lora, qlora, peft, instruction tuning, rlhf]
+    aliases: [finetuning]
     implies: [llm, model_training]
+  - id: lora
+    display: LoRA
+    category: ml
+    implies: [fine_tuning]
+  - id: qlora
+    display: QLoRA
+    category: ml
+    implies: [fine_tuning]
+  - id: peft
+    display: PEFT
+    category: ml
+    aliases: [parameter efficient fine tuning]
+    implies: [fine_tuning]
+  - id: instruction_tuning
+    display: instruction tuning
+    category: ml
+    implies: [fine_tuning]
+  - id: rlhf
+    display: RLHF
+    category: ml
+    aliases: [reinforcement learning from human feedback]
+    implies: [fine_tuning]
   - id: model_training
     display: model training
     category: ml
-    aliases: [training pipeline, hyperparameter tuning, transfer learning]
+    aliases: [training pipeline]
+    implies: [machine_learning]
+  - id: hyperparameter_tuning
+    display: hyperparameter tuning
+    category: ml
+    implies: [model_training]
+  - id: transfer_learning
+    display: transfer learning
+    category: ml
     implies: [machine_learning]
   - id: embeddings
     display: embeddings
     category: ml
-    aliases: [sentence transformers, word2vec, vector embeddings, sentence embeddings]
-    implies: [nlp, deep_learning]
+    aliases: [vector embeddings, sentence embeddings]
+    implies: [deep_learning]
+  - id: sentence_transformers
+    display: Sentence Transformers
+    category: ml
+    aliases: [sentence transformers, sbert]
+    implies: [embeddings, python]
+  - id: word2vec
+    display: word2vec
+    category: ml
+    implies: [embeddings]
   - id: vector_database
     display: vector databases
     category: ml
-    aliases: [vector db, pinecone, weaviate, qdrant, chroma, faiss, pgvector, milvus]
+    aliases: [vector db, vector databases]
     implies: [embeddings, semantic_search]
+  - id: pinecone
+    display: Pinecone
+    category: ml
+    implies: [vector_database]
+    common_word: true
+  - id: weaviate
+    display: Weaviate
+    category: ml
+    implies: [vector_database]
+  - id: qdrant
+    display: Qdrant
+    category: ml
+    implies: [vector_database]
+  - id: chroma
+    display: Chroma
+    category: ml
+    aliases: [chromadb]
+    implies: [vector_database]
+    common_word: true
+  - id: faiss
+    display: FAISS
+    category: ml
+    implies: [semantic_search]
+  - id: pgvector
+    display: pgvector
+    category: ml
+    implies: [vector_database, postgresql]
+  - id: milvus
+    display: Milvus
+    category: ml
+    implies: [vector_database]
   - id: semantic_search
     display: semantic search
     category: ml
-    aliases: [similarity search, nearest neighbour search, knn search, hybrid search]
+    aliases: [similarity search, nearest neighbour search, knn search]
     implies: [search]
+  - id: hybrid_search
+    display: hybrid search
+    category: ml
+    implies: [semantic_search]
   - id: nlp
     display: natural language processing
     category: ml
-    aliases: [nlp, text classification, named entity recognition, ner, sentiment analysis, spacy, nltk]
+    aliases: [nlp]
     implies: [machine_learning]
+  - id: text_classification
+    display: text classification
+    category: ml
+    implies: [nlp]
+  - id: named_entity_recognition
+    display: named entity recognition
+    category: ml
+    aliases: [ner]
+    implies: [nlp]
+  - id: sentiment_analysis
+    display: sentiment analysis
+    category: ml
+    implies: [nlp]
+  - id: spacy
+    display: spaCy
+    category: ml
+    implies: [nlp, python]
+  - id: nltk
+    display: NLTK
+    category: ml
+    implies: [nlp, python]
   - id: nli
     display: natural language inference
     category: ml
-    aliases: [nli, entailment, textual entailment, deberta]
+    aliases: [nli, entailment, textual entailment]
     implies: [nlp]
+  - id: deberta
+    display: DeBERTa
+    category: ml
+    implies: [transformers]
   - id: computer_vision
     display: computer vision
     category: ml
-    aliases: [cv, image processing, vision]
+    aliases: [image processing]
     implies: [deep_learning]
   - id: opencv
     display: OpenCV
@@ -681,48 +1258,175 @@ skills:
   - id: image_segmentation
     display: image segmentation
     category: ml
-    aliases: [semantic segmentation, instance segmentation, unet, sam]
     implies: [computer_vision]
+  - id: semantic_segmentation
+    display: semantic segmentation
+    category: ml
+    implies: [image_segmentation]
+  - id: instance_segmentation
+    display: instance segmentation
+    category: ml
+    implies: [image_segmentation]
+  - id: unet
+    display: U-Net
+    category: ml
+    aliases: [unet]
+    implies: [image_segmentation, cnn]
+  - id: segment_anything
+    display: Segment Anything
+    category: ml
+    aliases: [sam, segment anything model]
+    implies: [image_segmentation]
   - id: cnn
     display: convolutional neural networks
     category: ml
-    aliases: [cnn, convnet, resnet, efficientnet, vgg]
+    aliases: [cnn, convnet]
     implies: [deep_learning]
+  - id: resnet
+    display: ResNet
+    category: ml
+    implies: [cnn]
+  - id: efficientnet
+    display: EfficientNet
+    category: ml
+    implies: [cnn]
+  - id: vgg
+    display: VGG
+    category: ml
+    implies: [cnn]
   - id: rnn
     display: recurrent neural networks
     category: ml
-    aliases: [rnn, lstm, gru, sequence models]
+    aliases: [rnn]
     implies: [deep_learning]
+  - id: lstm
+    display: LSTM
+    category: ml
+    implies: [rnn]
+  - id: gru
+    display: GRU
+    category: ml
+    implies: [rnn]
   - id: generative_models
     display: generative models
     category: ml
-    aliases: [gan, gans, diffusion, diffusion models, stable diffusion, vae]
     implies: [deep_learning]
+  - id: gans
+    display: GANs
+    category: ml
+    aliases: [gan, generative adversarial networks]
+    implies: [generative_models]
+  - id: diffusion_models
+    display: diffusion models
+    category: ml
+    implies: [generative_models]
+  - id: stable_diffusion
+    display: Stable Diffusion
+    category: ml
+    implies: [diffusion_models]
+  - id: vae
+    display: VAEs
+    category: ml
+    aliases: [vae, variational autoencoder, variational autoencoders]
+    implies: [generative_models]
   - id: reinforcement_learning
     display: reinforcement learning
     category: ml
-    aliases: [rl, q learning, policy gradient, ppo]
+    aliases: [rl]
     implies: [machine_learning]
+  - id: q_learning
+    display: Q-learning
+    category: ml
+    implies: [reinforcement_learning]
+  - id: policy_gradient
+    display: policy gradient methods
+    category: ml
+    aliases: [policy gradient]
+    implies: [reinforcement_learning]
+  - id: ppo
+    display: PPO
+    category: ml
+    aliases: [proximal policy optimization]
+    implies: [reinforcement_learning]
   - id: recommendation_systems
     display: recommendation systems
     category: ml
-    aliases: [recsys, recommender systems, collaborative filtering, ranking models]
+    aliases: [recsys, recommender systems]
     implies: [machine_learning]
+  - id: collaborative_filtering
+    display: collaborative filtering
+    category: ml
+    implies: [recommendation_systems]
+  - id: learning_to_rank
+    display: learning to rank
+    category: ml
+    aliases: [ranking models]
+    implies: [machine_learning, search]
   - id: time_series
     display: time series modeling
     category: ml
-    aliases: [forecasting, time series analysis, arima, prophet]
+    aliases: [forecasting, time series analysis]
     implies: [statistics, machine_learning]
+  - id: arima
+    display: ARIMA
+    category: ml
+    implies: [time_series]
+  - id: prophet
+    display: Prophet
+    category: ml
+    implies: [time_series]
+    common_word: true
   - id: mlops
     display: MLOps
     category: ml
-    aliases: [ml ops, model monitoring, model registry, feature store, mlflow, weights and biases, wandb]
+    aliases: [ml ops]
     implies: [machine_learning, ci_cd]
+  - id: mlflow
+    display: MLflow
+    category: ml
+    implies: [mlops]
+  - id: weights_and_biases
+    display: "Weights & Biases"
+    category: ml
+    aliases: [wandb, "w&b"]
+    implies: [mlops]
+  - id: feature_store
+    display: feature stores
+    category: ml
+    aliases: [feature store]
+    implies: [mlops]
+  - id: model_monitoring
+    display: model monitoring
+    category: ml
+    implies: [mlops]
+  - id: model_registry
+    display: model registry
+    category: ml
+    implies: [mlops]
   - id: model_deployment
     display: model deployment
     category: ml
-    aliases: [model serving, inference api, onnx, triton, tensorrt, quantization]
+    aliases: [model serving, inference api]
     implies: [mlops]
+  - id: onnx
+    display: ONNX
+    category: ml
+    implies: [model_deployment]
+  - id: triton
+    display: Triton Inference Server
+    category: ml
+    aliases: [triton]
+    implies: [model_deployment]
+    common_word: true
+  - id: tensorrt
+    display: TensorRT
+    category: ml
+    implies: [model_deployment]
+  - id: quantization
+    display: quantization
+    category: ml
+    aliases: [model quantization]
+    implies: [deep_learning]
   - id: feature_engineering
     display: feature engineering
     category: ml
@@ -730,18 +1434,45 @@ skills:
   - id: statistics
     display: statistics
     category: ml
-    aliases: [statistical analysis, probability, hypothesis testing, a b testing, ab testing]
+    aliases: [statistical analysis]
+  - id: hypothesis_testing
+    display: hypothesis testing
+    category: ml
+    implies: [statistics]
+  - id: ab_testing
+    display: A/B testing
+    category: ml
+    aliases: [a b testing, ab testing]
+    implies: [statistics]
   - id: jupyter
     display: Jupyter
     category: tooling
-    aliases: [jupyter notebook, notebooks, colab, google colab]
+    aliases: [jupyter notebook]
     implies: [python]
-
+  - id: google_colab
+    display: Google Colab
+    category: ml
+    aliases: [colab]
+    implies: [python]
   # ------------------------------------------------------------------- infra
   - id: docker
     display: Docker
     category: infra
-    aliases: [containers, containerization, dockerfile, docker compose, podman]
+    aliases: [dockerfile]
+    implies: [containers]
+  - id: containers
+    display: containers
+    category: infra
+    aliases: [containerization, containerized, containerised]
+  - id: podman
+    display: Podman
+    category: infra
+    implies: [containers]
+  - id: docker_compose
+    display: Docker Compose
+    category: infra
+    aliases: [docker-compose]
+    implies: [docker]
   - id: slurm
     display: SLURM
     category: infra
@@ -749,13 +1480,45 @@ skills:
   - id: kubernetes
     display: Kubernetes
     category: infra
-    aliases: [k8s, kubectl, eks, gke, aks, openshift]
-    implies: [docker, container_orchestration]
+    aliases: [k8s, kubectl]
+    implies: [containers, container_orchestration]
+  - id: aws_eks
+    display: Amazon EKS
+    category: infra
+    aliases: [eks, aws eks]
+    implies: [kubernetes, aws]
+  - id: gke
+    display: GKE
+    category: infra
+    aliases: [google kubernetes engine, gke autopilot]
+    implies: [kubernetes, gcp]
+  - id: aks
+    display: AKS
+    category: infra
+    aliases: [azure kubernetes service]
+    implies: [kubernetes, azure]
+  - id: openshift
+    display: OpenShift
+    category: infra
+    implies: [kubernetes]
   - id: container_orchestration
     display: container orchestration
     category: infra
-    aliases: [ecs, nomad, docker swarm]
-    implies: [docker]
+    implies: [containers]
+  - id: aws_ecs
+    display: Amazon ECS
+    category: infra
+    aliases: [ecs, aws ecs]
+    implies: [container_orchestration, aws]
+  - id: nomad
+    display: Nomad
+    category: infra
+    implies: [container_orchestration]
+    common_word: true
+  - id: docker_swarm
+    display: Docker Swarm
+    category: infra
+    implies: [container_orchestration, docker]
   - id: helm
     display: Helm
     category: infra
@@ -763,23 +1526,87 @@ skills:
   - id: aws
     display: AWS
     category: infra
-    aliases: [amazon web services, ec2, s3, rds, cloudwatch, iam, vpc, cloudfront, route53, sns]
+    aliases: [amazon web services]
     implies: [cloud_architecture]
+  - id: aws_ec2
+    display: Amazon EC2
+    category: infra
+    aliases: [ec2, aws ec2]
+    implies: [aws]
+  - id: aws_s3
+    display: Amazon S3
+    category: infra
+    aliases: [s3, aws s3]
+    implies: [aws]
+  - id: aws_rds
+    display: Amazon RDS
+    category: infra
+    aliases: [rds, aws rds]
+    implies: [aws, relational_databases]
+  - id: cloudwatch
+    display: CloudWatch
+    category: infra
+    aliases: [aws cloudwatch]
+    implies: [aws, monitoring]
+  - id: aws_iam
+    display: AWS IAM
+    category: infra
+    aliases: [amazon iam]
+    implies: [aws, authorization]
+  - id: aws_vpc
+    display: Amazon VPC
+    category: infra
+    aliases: [aws vpc]
+    implies: [aws, networking]
+  - id: cloudfront
+    display: CloudFront
+    category: infra
+    aliases: [aws cloudfront]
+    implies: [aws, cdn]
+  - id: route53
+    display: Route 53
+    category: infra
+    aliases: [route53]
+    implies: [aws, dns]
+  - id: aws_sns
+    display: Amazon SNS
+    category: infra
+    aliases: [sns, aws sns]
+    implies: [aws, message_queue]
   - id: lambda_functions
     display: AWS Lambda
     category: infra
-    aliases: [lambda, aws lambda, cloud functions, azure functions]
+    aliases: [lambda, aws lambda]
     implies: [aws, serverless]
+    common_word: true
+  - id: gcp_cloud_functions
+    display: Google Cloud Functions
+    category: infra
+    aliases: [cloud functions]
+    implies: [gcp, serverless]
+  - id: azure_functions
+    display: Azure Functions
+    category: infra
+    implies: [azure, serverless]
   - id: gcp
     display: Google Cloud
     category: infra
-    aliases: [google cloud platform, gcp, cloud run, gke autopilot]
+    aliases: [google cloud platform, gcp]
     implies: [cloud_architecture]
+  - id: cloud_run
+    display: Cloud Run
+    category: infra
+    aliases: [google cloud run]
+    implies: [gcp, containers, serverless]
   - id: azure
     display: Azure
     category: infra
-    aliases: [microsoft azure, azure devops]
+    aliases: [microsoft azure]
     implies: [cloud_architecture]
+  - id: azure_devops
+    display: Azure DevOps
+    category: infra
+    implies: [azure, ci_cd]
   - id: cloud_architecture
     display: cloud architecture
     category: infra
@@ -788,11 +1615,45 @@ skills:
   - id: terraform
     display: Terraform
     category: infra
-    aliases: [infrastructure as code, iac, opentofu, pulumi, cloudformation]
+    implies: [infrastructure_as_code]
+  - id: infrastructure_as_code
+    display: infrastructure as code
+    category: infra
+    aliases: [iac]
+  - id: opentofu
+    display: OpenTofu
+    category: infra
+    implies: [infrastructure_as_code]
+  - id: pulumi
+    display: Pulumi
+    category: infra
+    implies: [infrastructure_as_code]
+  - id: cloudformation
+    display: CloudFormation
+    category: infra
+    aliases: [aws cloudformation]
+    implies: [infrastructure_as_code, aws]
   - id: ansible
     display: Ansible
     category: infra
-    aliases: [chef, puppet, saltstack, configuration management]
+    implies: [configuration_management]
+  - id: configuration_management
+    display: configuration management
+    category: infra
+  - id: chef
+    display: Chef
+    category: infra
+    implies: [configuration_management]
+    common_word: true
+  - id: puppet
+    display: Puppet
+    category: infra
+    implies: [configuration_management]
+    common_word: true
+  - id: saltstack
+    display: SaltStack
+    category: infra
+    implies: [configuration_management]
   - id: ci_cd
     display: CI/CD
     category: infra
@@ -809,92 +1670,338 @@ skills:
   - id: gitlab_ci
     display: GitLab CI
     category: infra
-    aliases: [gitlab ci cd, circleci, travis ci, teamcity, argo cd, argocd]
+    aliases: [gitlab ci cd]
     implies: [ci_cd]
+  - id: circleci
+    display: CircleCI
+    category: infra
+    implies: [ci_cd]
+  - id: travis_ci
+    display: Travis CI
+    category: infra
+    implies: [ci_cd]
+  - id: teamcity
+    display: TeamCity
+    category: infra
+    implies: [ci_cd]
+  - id: argo_cd
+    display: Argo CD
+    category: infra
+    aliases: [argocd]
+    implies: [ci_cd, kubernetes]
   - id: nginx
     display: nginx
     category: infra
-    aliases: [apache httpd, haproxy, envoy, reverse proxy]
-    implies: [load_balancing]
+    implies: [reverse_proxy, load_balancing]
+  - id: reverse_proxy
+    display: reverse proxies
+    category: infra
+    aliases: [reverse proxy]
+    implies: [networking]
+  - id: apache_httpd
+    display: Apache HTTP Server
+    category: infra
+    aliases: [apache httpd, httpd]
+    implies: [reverse_proxy]
+  - id: haproxy
+    display: HAProxy
+    category: infra
+    implies: [reverse_proxy, load_balancing]
+  - id: envoy
+    display: Envoy
+    category: infra
+    aliases: [envoy proxy]
+    implies: [reverse_proxy, load_balancing]
+    common_word: true
   - id: linux
     display: Linux
     category: infra
-    aliases: [unix, ubuntu, debian, centos, rhel, linux administration]
+    aliases: [linux administration]
+  - id: unix
+    display: Unix
+    category: infra
+  - id: ubuntu
+    display: Ubuntu
+    category: infra
+    implies: [linux]
+  - id: debian
+    display: Debian
+    category: infra
+    implies: [linux]
+  - id: centos
+    display: CentOS
+    category: infra
+    implies: [linux]
+  - id: rhel
+    display: Red Hat Enterprise Linux
+    category: infra
+    aliases: [rhel]
+    implies: [linux]
   - id: observability
     display: observability
     category: infra
-    aliases: [monitoring, telemetry, opentelemetry, otel, tracing, distributed tracing, logging, metrics]
+    aliases: [telemetry]
+  - id: monitoring
+    display: monitoring
+    category: infra
+    implies: [observability]
+  - id: logging
+    display: logging
+    category: infra
+    implies: [observability]
+  - id: distributed_tracing
+    display: distributed tracing
+    category: infra
+    aliases: [tracing]
+    implies: [observability]
+  - id: opentelemetry
+    display: OpenTelemetry
+    category: infra
+    aliases: [otel]
+    implies: [observability]
   - id: prometheus
     display: Prometheus
     category: infra
-    aliases: [grafana, promql]
-    implies: [observability]
+    aliases: [promql]
+    implies: [monitoring]
+  - id: grafana
+    display: Grafana
+    category: infra
+    implies: [monitoring]
   - id: datadog
     display: Datadog
     category: infra
-    aliases: [new relic, splunk, sentry, elk stack, elk]
-    implies: [observability]
+    implies: [monitoring]
+  - id: new_relic
+    display: New Relic
+    category: infra
+    implies: [monitoring]
+  - id: splunk
+    display: Splunk
+    category: infra
+    implies: [logging]
+  - id: sentry
+    display: Sentry
+    category: infra
+    implies: [monitoring]
+    common_word: true
+  - id: elk_stack
+    display: ELK Stack
+    category: infra
+    aliases: [elk, elastic stack]
+    implies: [logging]
   - id: load_balancing
     display: load balancing
     category: infra
-    aliases: [horizontal scaling, autoscaling, auto scaling]
+    aliases: [load balancer, load balancers]
+    implies: [scalability]
+  - id: autoscaling
+    display: autoscaling
+    category: infra
+    aliases: [auto scaling]
+    implies: [scalability]
+  - id: horizontal_scaling
+    display: horizontal scaling
+    category: infra
     implies: [scalability]
   - id: caching
     display: caching
     category: infra
-    aliases: [cache invalidation, cdn, content delivery network, edge caching]
+    aliases: [cache invalidation, edge caching]
     implies: [performance_optimization]
+  - id: cdn
+    display: CDNs
+    category: infra
+    aliases: [cdn, content delivery network, content delivery networks]
+    implies: [caching]
   - id: sre
     display: site reliability engineering
     category: infra
-    aliases: [sre, on call, oncall, incident response, postmortem, slo, sli]
+    aliases: [sre, on call, oncall, incident response, postmortem]
     implies: [reliability, observability]
+  - id: service_level_objectives
+    display: SLOs
+    category: infra
+    aliases: [slo, sli, slis, service level objectives]
+    implies: [reliability]
   - id: secrets_management
     display: secrets management
     category: infra
-    aliases: [vault, hashicorp vault, kms, key management, secret manager]
+    aliases: [secret manager]
+    implies: [security_practices]
+  - id: hashicorp_vault
+    display: HashiCorp Vault
+    category: infra
+    aliases: [vault]
+    implies: [secrets_management]
+    common_word: true
+  - id: key_management
+    display: key management
+    category: infra
+    aliases: [kms]
     implies: [security_practices]
   - id: networking
     display: networking
     category: infra
-    aliases: [tcp ip, dns, http, https, tls, ssl, firewall, load balancer configuration]
-
+    aliases: [firewall, load balancer configuration]
+  - id: tcp_ip
+    display: TCP/IP
+    category: infra
+    aliases: [tcp ip, tcp]
+    implies: [networking]
+  - id: dns
+    display: DNS
+    category: infra
+    implies: [networking]
+  - id: http
+    display: HTTP
+    category: infra
+    aliases: [https]
+    implies: [networking]
+  - id: tls
+    display: TLS
+    category: infra
+    aliases: [ssl, tls ssl]
+    implies: [networking]
   # ----------------------------------------------------------------- tooling
   - id: git
     display: Git
     category: tooling
-    aliases: [version control, source control, git flow, rebase]
+    aliases: [git flow, rebase]
+    implies: [version_control]
+  - id: version_control
+    display: version control
+    category: tooling
+    aliases: [source control]
   - id: github
     display: GitHub
     category: tooling
-    aliases: [pull requests, pull request]
     implies: [git]
   - id: gitlab
     display: GitLab
     category: tooling
-    aliases: [bitbucket]
+    implies: [git]
+  - id: bitbucket
+    display: Bitbucket
+    category: tooling
     implies: [git]
   - id: jira
     display: Jira
     category: tooling
-    aliases: [confluence, linear, asana, trello, azure boards]
+  - id: confluence
+    display: Confluence
+    category: tooling
+    implies: [technical_writing]
+    common_word: true
+  - id: asana
+    display: Asana
+    category: tooling
+  - id: trello
+    display: Trello
+    category: tooling
+  - id: azure_boards
+    display: Azure Boards
+    category: tooling
+    implies: [azure]
   - id: figma
     display: Figma
     category: tooling
-    aliases: [sketch, adobe xd, design handoff]
+  - id: sketch_app
+    display: Sketch
+    category: tooling
+    aliases: [sketch app]
+    common_word: true
+  - id: adobe_xd
+    display: Adobe XD
+    category: tooling
   - id: postman
     display: Postman
     category: tooling
-    aliases: [insomnia, curl, http client]
     implies: [rest_api]
+    common_word: true
+  - id: insomnia
+    display: Insomnia
+    category: tooling
+    implies: [rest_api]
+    common_word: true
+  - id: curl
+    display: curl
+    category: tooling
+    implies: [http]
   - id: package_management
     display: package management
     category: tooling
-    aliases: [npm, yarn, pnpm, pip, poetry, uv, conda, maven, gradle, nuget]
+  - id: npm
+    display: npm
+    category: tooling
+    implies: [package_management, nodejs]
+  - id: yarn
+    display: Yarn
+    category: tooling
+    implies: [package_management, nodejs]
+    common_word: true
+  - id: pnpm
+    display: pnpm
+    category: tooling
+    implies: [package_management, nodejs]
+  - id: pip
+    display: pip
+    category: tooling
+    implies: [package_management, python]
+  - id: poetry
+    display: Poetry
+    category: tooling
+    implies: [package_management, python]
+    common_word: true
+  - id: uv
+    display: uv
+    category: tooling
+    implies: [package_management, python]
+  - id: conda
+    display: Conda
+    category: tooling
+    implies: [package_management, python]
+  - id: maven
+    display: Maven
+    category: tooling
+    implies: [package_management, build_tools, java]
+    common_word: true
+  - id: gradle
+    display: Gradle
+    category: tooling
+    implies: [package_management, build_tools]
+  - id: nuget
+    display: NuGet
+    category: tooling
+    implies: [package_management, dotnet]
   - id: build_tools
     display: build tooling
     category: tooling
-    aliases: [make, makefile, bazel, cmake, turborepo, nx, monorepo]
+  - id: gnu_make
+    display: GNU Make
+    category: tooling
+    aliases: [makefile, makefiles]
+    implies: [build_tools]
+  - id: bazel
+    display: Bazel
+    category: tooling
+    implies: [build_tools]
+  - id: cmake
+    display: CMake
+    category: tooling
+    implies: [build_tools]
+  - id: turborepo
+    display: Turborepo
+    category: tooling
+    implies: [build_tools, monorepos]
+  - id: nx
+    display: Nx
+    category: tooling
+    implies: [build_tools, monorepos]
+  - id: monorepos
+    display: monorepos
+    category: tooling
+    aliases: [monorepo]
   - id: pytest
     display: pytest
     category: tooling
@@ -902,33 +2009,105 @@ skills:
   - id: junit
     display: JUnit
     category: tooling
-    aliases: [testng, mockito]
+    implies: [java, unit_testing]
+  - id: testng
+    display: TestNG
+    category: tooling
+    implies: [java, unit_testing]
+  - id: mockito
+    display: Mockito
+    category: tooling
     implies: [java, unit_testing]
   - id: jest
     display: Jest
     category: tooling
-    aliases: [vitest, mocha, chai, react testing library, rtl]
     implies: [javascript, unit_testing]
+  - id: vitest
+    display: Vitest
+    category: tooling
+    implies: [javascript, unit_testing]
+  - id: mocha
+    display: Mocha
+    category: tooling
+    implies: [javascript, unit_testing]
+    common_word: true
+  - id: chai
+    display: Chai
+    category: tooling
+    implies: [javascript, unit_testing]
+    common_word: true
+  - id: react_testing_library
+    display: React Testing Library
+    category: tooling
+    aliases: [rtl]
+    implies: [react, unit_testing]
   - id: playwright
     display: Playwright
     category: tooling
-    aliases: [puppeteer]
     implies: [e2e_testing, browser_automation]
+    common_word: true
+  - id: puppeteer
+    display: Puppeteer
+    category: tooling
+    implies: [browser_automation]
+    common_word: true
   - id: selenium
     display: Selenium
     category: tooling
-    aliases: [webdriver, cypress]
-    implies: [e2e_testing, browser_automation]
+    implies: [e2e_testing, browser_automation, webdriver]
+    common_word: true
+  - id: webdriver
+    display: WebDriver
+    category: tooling
+    implies: [browser_automation]
+  - id: cypress
+    display: Cypress
+    category: tooling
+    implies: [e2e_testing, javascript]
+    common_word: true
   - id: browser_automation
     display: browser automation
     category: tooling
-    aliases: [headless browser, chrome devtools protocol, cdp]
+    aliases: [headless browser]
+  - id: cdp
+    display: Chrome DevTools Protocol
+    category: tooling
+    aliases: [cdp]
+    implies: [browser_automation]
   - id: static_analysis
     display: static analysis
     category: tooling
-    aliases: [linting, eslint, prettier, ruff, mypy, pylint, sonarqube, semgrep, type checking]
+    aliases: [linting, type checking]
     implies: [code_quality]
-
+  - id: eslint
+    display: ESLint
+    category: tooling
+    implies: [static_analysis, javascript]
+  - id: prettier
+    display: Prettier
+    category: tooling
+    implies: [code_quality]
+    common_word: true
+  - id: ruff
+    display: Ruff
+    category: tooling
+    implies: [static_analysis, python]
+  - id: mypy
+    display: mypy
+    category: tooling
+    implies: [static_analysis, python]
+  - id: pylint
+    display: Pylint
+    category: tooling
+    implies: [static_analysis, python]
+  - id: sonarqube
+    display: SonarQube
+    category: tooling
+    implies: [static_analysis]
+  - id: semgrep
+    display: Semgrep
+    category: tooling
+    implies: [static_analysis]
   # ---------------------------------------------------------------- practice
   - id: unit_testing
     display: unit testing
@@ -953,12 +2132,17 @@ skills:
   - id: tdd
     display: test-driven development
     category: practice
-    aliases: [tdd, test driven development, bdd]
+    aliases: [tdd, test driven development]
+    implies: [testing]
+  - id: bdd
+    display: BDD
+    category: practice
+    aliases: [behavior driven development, behaviour driven development]
     implies: [testing]
   - id: code_review
     display: code review
     category: practice
-    aliases: [peer review, reviewing pull requests]
+    aliases: [peer review, reviewing pull requests, pull requests, pull request]
     implies: [code_quality, collaboration]
   - id: code_quality
     display: code quality
@@ -967,7 +2151,6 @@ skills:
   - id: refactoring
     display: refactoring
     category: practice
-    aliases: [legacy code, migration, modernization]
     implies: [code_quality]
   - id: debugging
     display: debugging
@@ -976,12 +2159,20 @@ skills:
   - id: performance_optimization
     display: performance optimization
     category: practice
-    aliases: [performance tuning, latency reduction, optimization, benchmarking]
+    aliases: [performance tuning, latency reduction, benchmarking]
   - id: agile
     display: Agile
     category: practice
-    aliases: [scrum, kanban, sprint planning, standup, retrospective, agile methodologies]
+    aliases: [sprint planning, standup, retrospective, agile methodologies]
     implies: [collaboration]
+  - id: scrum
+    display: Scrum
+    category: practice
+    implies: [agile]
+  - id: kanban
+    display: Kanban
+    category: practice
+    implies: [agile]
   - id: collaboration
     display: cross-functional collaboration
     category: practice
@@ -1006,8 +2197,12 @@ skills:
   - id: design_patterns
     display: design patterns
     category: practice
-    aliases: [solid principles, solid, dependency injection, gang of four]
+    aliases: [solid principles, gang of four]
     implies: [oop]
+  - id: dependency_injection
+    display: dependency injection
+    category: practice
+    implies: [design_patterns]
   - id: oop
     display: object-oriented programming
     category: practice
@@ -1019,7 +2214,15 @@ skills:
   - id: concurrency
     display: concurrency
     category: practice
-    aliases: [multithreading, threading, async, asyncio, parallelism, async await, goroutines]
+    aliases: [multithreading, threading, async, parallelism, async await]
+  - id: asyncio
+    display: asyncio
+    category: practice
+    implies: [concurrency, python]
+  - id: goroutines
+    display: goroutines
+    category: practice
+    implies: [concurrency, golang]
   - id: algorithms
     display: algorithms
     category: practice
@@ -1032,17 +2235,41 @@ skills:
   - id: accessibility
     display: accessibility
     category: practice
-    aliases: [a11y, wcag, aria, screen reader, section 508, keyboard navigation]
+    aliases: [a11y, aria, screen reader, keyboard navigation]
     implies: [frontend_quality]
+  - id: wcag
+    display: WCAG
+    category: practice
+    implies: [accessibility]
+  - id: section_508
+    display: Section 508
+    category: practice
+    aliases: [section 508]
+    implies: [accessibility]
   - id: frontend_quality
     display: frontend quality
     category: practice
-    aliases: [core web vitals, lighthouse, web performance]
+    aliases: [core web vitals, web performance]
     implies: [code_quality]
+  - id: lighthouse
+    display: Lighthouse
+    category: tooling
+    implies: [frontend_quality]
+    common_word: true
   - id: security_practices
     display: secure development
     category: practice
-    aliases: [security, application security, appsec, owasp, secure coding, penetration testing, pentest]
+    aliases: [security, application security, appsec, secure coding]
+  - id: owasp
+    display: OWASP
+    category: practice
+    aliases: [owasp top 10]
+    implies: [security_practices]
+  - id: penetration_testing
+    display: penetration testing
+    category: practice
+    aliases: [pentest, pentesting]
+    implies: [security_practices]
   - id: threat_modeling
     display: threat modeling
     category: practice
@@ -1056,7 +2283,6 @@ skills:
     display: product thinking
     category: practice
     aliases: [user research, customer focus, product sense, requirements gathering]
-
   # ------------------------------------------------------------------ domain
   - id: distributed_systems
     display: distributed systems
@@ -1066,7 +2292,7 @@ skills:
   - id: scalability
     display: scalability
     category: domain
-    aliases: [high availability, high throughput, scaling]
+    aliases: [high availability, high throughput]
     implies: [system_design]
   - id: reliability
     display: reliability
@@ -1080,11 +2306,21 @@ skills:
   - id: search
     display: search
     category: domain
-    aliases: [information retrieval, ranking, indexing pipeline, relevance]
+    aliases: [information retrieval, indexing pipeline]
   - id: payments
     display: payments
     category: domain
-    aliases: [stripe, billing, pci dss, checkout, transactions]
+    aliases: [payment processing, payment systems]
+  - id: stripe
+    display: Stripe
+    category: domain
+    aliases: [stripe api]
+    implies: [payments]
+  - id: pci_dss
+    display: PCI DSS
+    category: domain
+    aliases: [pci dss, pci compliance]
+    implies: [payments, compliance]
   - id: fintech
     display: fintech
     category: domain
@@ -1096,7 +2332,15 @@ skills:
   - id: healthcare_it
     display: healthcare technology
     category: domain
-    aliases: [hipaa, ehr, health tech, healthtech, fhir]
+    aliases: [ehr, health tech, healthtech]
+  - id: hipaa
+    display: HIPAA
+    category: domain
+    implies: [healthcare_it, compliance]
+  - id: fhir
+    display: FHIR
+    category: domain
+    implies: [healthcare_it]
   - id: advertising
     display: advertising technology
     category: domain
@@ -1104,11 +2348,27 @@ skills:
   - id: gaming
     display: game development
     category: domain
-    aliases: [unity, unreal engine, game engine, gamedev]
+    aliases: [game engine, gamedev]
+  - id: unity
+    display: Unity
+    category: domain
+    aliases: [unity3d]
+    implies: [gaming, csharp]
+    common_word: true
+  - id: unreal_engine
+    display: Unreal Engine
+    category: domain
+    aliases: [unreal]
+    implies: [gaming, cpp]
   - id: robotics
     display: robotics
     category: domain
-    aliases: [ros, robot operating system, motion planning, slam]
+    aliases: [motion planning, slam]
+  - id: ros
+    display: ROS
+    category: domain
+    aliases: [robot operating system, ros2, ros 2]
+    implies: [robotics]
   - id: autonomous_vehicles
     display: autonomous vehicles
     category: domain
@@ -1117,11 +2377,24 @@ skills:
   - id: embedded_systems
     display: embedded systems
     category: domain
-    aliases: [firmware, rtos, microcontroller, arduino, raspberry pi, iot, internet of things]
+    aliases: [firmware, rtos, microcontroller, iot, internet of things]
+  - id: arduino
+    display: Arduino
+    category: domain
+    implies: [embedded_systems]
+  - id: raspberry_pi
+    display: Raspberry Pi
+    category: domain
+    aliases: [raspberry pi]
+    implies: [embedded_systems]
   - id: blockchain
     display: blockchain
     category: domain
-    aliases: [web3, smart contracts, ethereum, defi]
+    aliases: [web3, smart contracts, defi]
+  - id: ethereum
+    display: Ethereum
+    category: domain
+    implies: [blockchain]
   - id: ar_vr
     display: AR/VR
     category: domain
@@ -1133,11 +2406,19 @@ skills:
   - id: geospatial
     display: geospatial
     category: domain
-    aliases: [gis, mapping, postgis, geolocation]
+    aliases: [gis, geolocation]
+  - id: postgis
+    display: PostGIS
+    category: domain
+    implies: [geospatial, postgresql]
   - id: compilers
     display: compilers
     category: domain
-    aliases: [parsing, interpreters, llvm, language design, abstract syntax tree]
+    aliases: [interpreters, language design, abstract syntax tree]
+  - id: llvm
+    display: LLVM
+    category: domain
+    implies: [compilers]
   - id: operating_systems
     display: operating systems
     category: domain
@@ -1145,7 +2426,15 @@ skills:
   - id: computer_graphics
     display: computer graphics
     category: domain
-    aliases: [rendering, shaders, opengl, vulkan, ray tracing]
+    aliases: [shaders, ray tracing]
+  - id: opengl
+    display: OpenGL
+    category: domain
+    implies: [computer_graphics]
+  - id: vulkan
+    display: Vulkan
+    category: domain
+    implies: [computer_graphics]
   - id: databases_internals
     display: database internals
     category: domain
@@ -1154,7 +2443,25 @@ skills:
   - id: compliance
     display: regulatory compliance
     category: domain
-    aliases: [gdpr, ccpa, soc 2, soc2, iso 27001, audit trail]
+    aliases: [audit trail]
+  - id: gdpr
+    display: GDPR
+    category: domain
+    implies: [compliance]
+  - id: ccpa
+    display: CCPA
+    category: domain
+    implies: [compliance]
+  - id: soc2
+    display: SOC 2
+    category: domain
+    aliases: [soc2]
+    implies: [compliance]
+  - id: iso_27001
+    display: ISO 27001
+    category: domain
+    aliases: [iso27001]
+    implies: [compliance]
   - id: supply_chain
     display: supply chain
     category: domain
@@ -1163,3 +2470,82 @@ skills:
     display: education technology
     category: domain
     aliases: [edtech, lms, learning management]
+
+# Alternatives to each other, for matching only: a JD asking for one is partly met by
+# another (RESUME_ENGINE section 7, the sibling score). Never an alias, and never
+# evidence on a resume: a Redis fact does not back "Memcached".
+sibling_groups:
+  - [bash, zsh, powershell]
+  - [server_side_rendering, static_site_generation]
+  - [angular, angularjs]
+  - [nextjs, nuxt, sveltekit, remix, astro]
+  - [redux, zustand, mobx, recoil, jotai, react_context]
+  - [react_query, swr]
+  - [sass, less]
+  - [styled_components, emotion, stitches]
+  - [mui, chakra_ui, shadcn_ui, ant_design, radix_ui]
+  - [tailwind, bootstrap]
+  - [d3, chartjs, recharts, plotly]
+  - [ios_development, android_development]
+  - [react_native, flutter]
+  - [django, flask, fastapi]
+  - [rest_api, graphql, grpc]
+  - [websockets, server_sent_events]
+  - [saml, openid_connect]
+  - [rabbitmq, aws_sqs, nats, kafka]
+  - [celery, sidekiq, bullmq]
+  - [redis, memcached, valkey]
+  - [microservices, service_oriented_architecture]
+  - [postgresql, mysql, mariadb, sqlserver, oracle_db, sqlite]
+  - [cassandra, scylladb]
+  - [elasticsearch, opensearch]
+  - [snowflake, bigquery, redshift, databricks]
+  - [flink, spark]
+  - [airflow, dagster, prefect, luigi]
+  - [hibernate, entity_framework, typeorm, sqlalchemy, prisma]
+  - [tableau, power_bi, looker, apache_superset]
+  - [pytorch, tensorflow]
+  - [xgboost, lightgbm, catboost]
+  - [gpt, llama, claude_models, mistral]
+  - [langchain, langgraph]
+  - [pinecone, weaviate, qdrant, chroma, pgvector, milvus]
+  - [spacy, nltk]
+  - [resnet, efficientnet, vgg]
+  - [lstm, gru]
+  - [gans, diffusion_models, vae]
+  - [mlflow, weights_and_biases]
+  - [triton, vllm]
+  - [jupyter, google_colab]
+  - [docker, podman]
+  - [aws_eks, gke, aks, openshift]
+  - [kubernetes, aws_ecs, nomad, docker_swarm]
+  - [aws, gcp, azure]
+  - [lambda_functions, gcp_cloud_functions, azure_functions]
+  - [terraform, opentofu, pulumi, cloudformation]
+  - [ansible, chef, puppet, saltstack]
+  - [github_actions, gitlab_ci, circleci, travis_ci, teamcity, jenkins, azure_devops]
+  - [nginx, apache_httpd, haproxy, envoy]
+  - [ubuntu, debian, centos, rhel]
+  - [linux, unix]
+  - [datadog, new_relic, prometheus, grafana]
+  - [splunk, elk_stack]
+  - [github, gitlab, bitbucket]
+  - [jira, asana, trello, azure_boards]
+  - [figma, sketch_app, adobe_xd]
+  - [postman, insomnia]
+  - [npm, yarn, pnpm]
+  - [pip, poetry, uv, conda]
+  - [maven, gradle]
+  - [bazel, cmake, gnu_make]
+  - [turborepo, nx]
+  - [junit, testng]
+  - [jest, vitest, mocha]
+  - [jest, pytest, junit]
+  - [playwright, selenium, cypress, puppeteer]
+  - [ruff, pylint]
+  - [sonarqube, semgrep]
+  - [tdd, bdd]
+  - [scrum, kanban]
+  - [unity, unreal_engine]
+  - [arduino, raspberry_pi]
+  - [opengl, vulkan, webgl]
