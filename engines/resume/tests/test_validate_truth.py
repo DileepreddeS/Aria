@@ -24,7 +24,7 @@ from aria_resume.schemas import Bullet
 from aria_resume.validate import Finding
 from aria_resume.validate.truth import check_bullet_text, check_truth, check_written
 
-from aria_core.schemas.snapshot import CandidateSnapshot
+from aria_core.schemas.snapshot import CandidateSnapshot, SnapshotSkill
 from aria_core.taxonomy.model import SkillTaxonomy
 
 Judge = Callable[..., list[Finding]]
@@ -56,9 +56,9 @@ class TestTheFactsOwnWordsPass:
         text = "Built 15+ React screens and cut p95 API latency by 30% with Redis caching"
         assert judge(text, ids.screens, ids.latency) == []
 
-    def test_a_technology_the_cited_skill_implies(self, judge: Judge, ids: SimpleNamespace) -> None:
-        # PostgreSQL implies SQL in the taxonomy (§9 6b: "or their taxonomy implications").
-        assert judge("Shipped 8 full-stack applications with Node.js and SQL", ids.apps) == []
+    def test_another_spelling_of_the_cited_skill(self, judge: Judge, ids: SimpleNamespace) -> None:
+        # The fact says PostgreSQL; Postgres is the same skill (an alias), so the same claim.
+        assert judge("Shipped 8 full-stack applications with Node.js and Postgres", ids.apps) == []
 
 
 class TestCitations:
@@ -145,6 +145,52 @@ class TestTechnology:
     def test_implication_runs_one_way(self, judge: Judge, ids: SimpleNamespace) -> None:
         # React implies JavaScript; JavaScript does not imply Next.js.
         assert "unbacked_technology" in _checks(judge("Built 15+ Next.js screens", ids.screens))
+
+    @pytest.mark.parametrize(
+        ("text", "fact"),
+        [
+            # PostgreSQL implies SQL, React implies JavaScript: true of the technology,
+            # and allowed on the skills line, but in a bullet a claim about what was built.
+            ("Shipped 8 full-stack applications with Node.js and SQL", "apps"),
+            ("Built 15+ JavaScript screens for the checkout platform", "screens"),
+        ],
+    )
+    def test_an_implied_skill_is_never_named_in_a_bullet(
+        self, judge: Judge, ids: SimpleNamespace, text: str, fact: str
+    ) -> None:
+        assert _checks(judge(text, getattr(ids, fact))) == {"unbacked_technology"}
+
+    def test_a_stored_tag_is_read_again_through_its_spelling(
+        self, snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy, ids: SimpleNamespace
+    ) -> None:
+        # Tagged before taxonomy 2026.10.3, when Memcached was filed under redis: the
+        # stored id says redis, the candidate's spelling says Memcached.
+        old = snapshot.facts[0].model_copy(
+            update={
+                "text": "Cut p95 API latency by 30% with a cache",
+                "skills": (SnapshotSkill(canonical="redis", surface_form="Memcached"),),
+            }
+        )
+        retagged = snapshot.model_copy(update={"facts": (old, *snapshot.facts[1:])})
+        assert (
+            check_bullet_text("Cut p95 API latency by 30% with Memcached", (ids.latency,), retagged, taxonomy)
+            == []
+        )
+        findings = check_bullet_text(
+            "Cut p95 API latency by 30% with Redis", (ids.latency,), retagged, taxonomy
+        )
+        assert _checks(findings) == {"unbacked_technology"}
+
+    def test_a_stored_tag_whose_spelling_names_nothing_backs_nothing(
+        self, snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy, ids: SimpleNamespace
+    ) -> None:
+        # 2026.10.2 read "checkout" as payments; the word names no skill now.
+        old = snapshot.facts[1].model_copy(
+            update={"skills": (SnapshotSkill(canonical="payments", surface_form="checkout"),)}
+        )
+        retagged = snapshot.model_copy(update={"facts": (snapshot.facts[0], old, *snapshot.facts[2:])})
+        findings = check_bullet_text("Built 15+ payments screens", (ids.screens,), retagged, taxonomy)
+        assert "unbacked_technology" in _checks(findings)
 
 
 class TestNamesAndScope:
@@ -250,6 +296,9 @@ class TestTheWholeDocument:
             ("Software engineer working in React and Kubernetes.", "unbacked_technology"),
             # TypeScript is declared but no fact uses it: a summary names evidenced skills.
             ("Software engineer working in TypeScript.", "unbacked_technology"),
+            # JavaScript only by implication from React: the skills line may list it, the
+            # summary may not name it.
+            ("Software engineer working in JavaScript.", "unbacked_technology"),
             ("Software engineer who cut latency by 45%.", "unbacked_number"),
             ("Software engineer who led company-wide platform work.", "unbacked_scope"),
         ],
@@ -277,11 +326,28 @@ class TestTheWholeDocument:
         assert [finding.check for finding in findings] == ["unverified_skill", "unverified_skill"]
         assert {"Rust", "Kubernetes"} == {finding.detail.split("'")[1] for finding in findings}
 
-    def test_an_implied_skill_is_not_listed(
+    def test_an_allowed_implication_may_be_listed(
         self, snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy
     ) -> None:
-        # React implies JavaScript for matching; the candidate has not listed JavaScript.
-        line = DocumentSection(kind=SectionKind.SKILLS, lines=("Languages: Python, JavaScript",))
+        # React -> JavaScript and PostgreSQL -> SQL are on implied_skills.yaml: one step,
+        # and true of the technology.
+        line = DocumentSection(kind=SectionKind.SKILLS, lines=("Languages: Python, JavaScript, SQL",))
+        assert check_truth(_document(line), snapshot, taxonomy) == []
+
+    @pytest.mark.parametrize(
+        "listed",
+        [
+            # RAG implies LLMs in the taxonomy, one step, but it is an inference about the
+            # candidate rather than a fact about RAG: not on the list.
+            "AI: LLMs",
+            # RAG -> embeddings -> deep learning: two steps, never.
+            "AI: deep learning",
+        ],
+    )
+    def test_an_implication_off_the_list_is_not_listed(
+        self, snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy, listed: str
+    ) -> None:
+        line = DocumentSection(kind=SectionKind.SKILLS, lines=(listed,))
         assert _checks(check_truth(_document(line), snapshot, taxonomy)) == {"unverified_skill"}
 
     def test_a_skills_term_the_taxonomy_does_not_know_is_refused(

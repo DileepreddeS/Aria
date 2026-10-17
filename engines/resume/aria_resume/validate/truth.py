@@ -7,9 +7,10 @@ be found in them:
   and "15+" is not "15". A qualifier in front ("over 30%") is part of the claim. Counts
   written as words ("five engineers", "doubled") are numbers too;
 - **months and years**: a year is a number, a month a name the fact must use;
-- **technologies** tagged by the taxonomy, by spelling: as the cited facts write them,
-  or the display name of a skill they use or imply (Next.js implies React; not the
-  other way round). Never a sibling product the taxonomy files under the same id;
+- **technologies** the taxonomy tags, by id: a skill the cited facts name, in any
+  spelling of it ("Postgres" for a PostgreSQL fact). Never a sibling (a Redis fact does
+  not back "Memcached") and never an implied skill (a PostgreSQL fact does not put
+  "SQL" in a bullet), which reads as a claim about what was built;
 - **names** of the candidate's other employers, clients, titles, projects, schools and
   awards. The cited facts' own role, project or degree may be named;
 - **scope**: leading, owning or mentoring, a company-wide or global reach, doing it
@@ -18,8 +19,15 @@ be found in them:
 The facts' own words therefore always pass, which the repair loop relies on: its last
 resort is the fact text itself (§9). The summary cites no single fact, so it is judged
 against all of them, and its years are recomputed from the snapshot: full-time months,
-truncated (aria_core.graph.months), per skill when the clause names one. The skills
-lines may list only skills the candidate declared or a fact uses.
+truncated (aria_core.graph.months), per skill when the clause names one; it names no
+implied skill either. The skills lines may list skills the candidate declared or a fact
+names, and an implication of those only where implied_skills.yaml allows it: one step,
+and a fact about the technology rather than an inference about the candidate
+(DECISIONS 2026-10-17).
+
+A fact's stored tags are read again through their spelling with the taxonomy in hand,
+so a tag stored before taxonomy 2026.10.3 filed Memcached under Redis backs Memcached,
+and one whose spelling no longer names a skill ("checkout") backs nothing.
 
 Entailment beyond these (a bullet that rearranges true words into a false sentence) is
 the NLI model's job (§9), a later step. So are entry headers, which the planner produces.
@@ -34,10 +42,11 @@ from collections.abc import Iterable, Sequence
 from aria_core.graph.months import months_to_years
 from aria_core.importer.skills import resolve_terms, split_skill_terms, tag_skills
 from aria_core.schemas.snapshot import CandidateSnapshot, SnapshotFact
-from aria_core.taxonomy.model import SkillTaxonomy, normalise
+from aria_core.taxonomy.model import SkillTaxonomy
 from aria_resume.document import ResumeDocument, SectionKind
 from aria_resume.schemas import Bullet
 from aria_resume.validate import Finding
+from aria_resume.validate.implied import ImpliedSkills, load_implied_skills
 from aria_resume.validate.text import (
     WORD_VALUES,
     month_mentions,
@@ -114,27 +123,17 @@ def _cited(
     return found, missing
 
 
-def _allowed_terms(facts: Sequence[SnapshotFact], taxonomy: SkillTaxonomy) -> set[str]:
-    """The technology names a line citing ``facts`` may use, normalised.
-
-    Spellings, not canonical ids: the taxonomy groups sibling products under one id for
-    matching (Memcached under Redis, MariaDB under MySQL), so an id match would let a
-    Redis fact back "Memcached". Allowed are the facts' own spellings and the display
-    name of each skill they use or imply ("SQL" for a PostgreSQL fact).
-    """
-    terms = {normalise(skill.surface_form) for fact in facts for skill in fact.skills}
-    direct = {skill.canonical for fact in facts for skill in fact.skills}
+def _held(facts: Sequence[SnapshotFact], taxonomy: SkillTaxonomy) -> set[str]:
+    """The skills ``facts`` name, as taxonomy ids: their tags, read again through the
+    candidate's spelling, and what the taxonomy finds in their text."""
+    held: set[str] = set()
     for fact in facts:
-        tagged = tag_skills(fact.text, taxonomy).skills
-        terms |= {normalise(skill.surface_form) for skill in tagged}
-        direct |= {skill.canonical for skill in tagged}
-    implied = set(direct)
-    for canonical in direct:
-        if canonical in taxonomy:
-            implied |= taxonomy.implications(canonical)
-    return terms | {
-        normalise(taxonomy.get(canonical).display) for canonical in implied if canonical in taxonomy
-    }
+        for skill in fact.skills:
+            canonical = taxonomy.resolve(skill.surface_form)
+            if canonical is not None:
+                held.add(canonical)
+        held |= {skill.canonical for skill in tag_skills(fact.text, taxonomy).skills}
+    return held
 
 
 def _names(snapshot: CandidateSnapshot, facts: Sequence[SnapshotFact]) -> tuple[set[str], set[str]]:
@@ -195,9 +194,9 @@ def _backed(
     if any(month not in source_months for month in month_mentions(text)):
         findings.append(Finding("unbacked_date", f"{label}: names a month no cited fact names"))
 
-    allowed = _allowed_terms(facts, taxonomy)
+    held = _held(facts, taxonomy)
     for skill in tag_skills(text, taxonomy).skills:
-        if normalise(skill.surface_form) not in allowed:
+        if skill.canonical not in held:
             findings.append(
                 Finding("unbacked_technology", f"{label}: {skill.surface_form!r} is in no cited fact")
             )
@@ -268,10 +267,13 @@ def _summary(line: str, snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy) ->
     return findings + _backed(line, snapshot.facts, snapshot, taxonomy, label=label, skip=skip)
 
 
-def _skills_line(line: str, snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy) -> list[Finding]:
+def _skills_line(
+    line: str, snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy, implied: ImpliedSkills
+) -> list[Finding]:
     listed = line.split(":", 1)[1] if ":" in line else line
-    verified = {skill.canonical for skill in snapshot.declared_skills}
-    verified |= {skill.canonical for fact in snapshot.facts for skill in fact.skills}
+    declared = {taxonomy.resolve(skill.surface_form) for skill in snapshot.declared_skills}
+    held = {canonical for canonical in declared if canonical} | _held(snapshot.facts, taxonomy)
+    verified = implied.listable(held)
     findings = resolve_terms(taxonomy, split_skill_terms(listed))
     problems = [
         Finding(
@@ -289,16 +291,21 @@ def _skills_line(line: str, snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy
 
 
 def check_truth(
-    document: ResumeDocument, snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy
+    document: ResumeDocument,
+    snapshot: CandidateSnapshot,
+    taxonomy: SkillTaxonomy,
+    *,
+    implied: ImpliedSkills | None = None,
 ) -> list[Finding]:
     """Every line of the page that makes a claim, against the snapshot."""
+    implied = implied or load_implied_skills(taxonomy)
     findings: list[Finding] = []
     for section in document.sections:
         for line in section.lines:
             if section.kind is SectionKind.SUMMARY:
                 findings += _summary(line, snapshot, taxonomy)
             elif section.kind is SectionKind.SKILLS:
-                findings += _skills_line(line, snapshot, taxonomy)
+                findings += _skills_line(line, snapshot, taxonomy, implied)
         for entry in section.entries:
             for bullet in entry.bullets:
                 findings += check_bullet_text(bullet.text, bullet.fact_ids, snapshot, taxonomy)
@@ -335,9 +342,9 @@ def check_written(
             findings.append(
                 Finding("metric_not_declared", f"{label} prints {mention.bare!r} without declaring it")
             )
-    allowed = _allowed_terms(facts, taxonomy)
+    held = _held(facts, taxonomy)
     for term in bullet.tech_used:
-        if normalise(term) not in allowed:
+        if taxonomy.resolve(term) not in held:
             findings.append(
                 Finding("tech_not_allowed", f"{label} declares {term!r}, which is not on its allowed list")
             )

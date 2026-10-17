@@ -417,7 +417,8 @@ The gap report and the fit decision come straight from this. The screener (outsi
 
 ### Stage 5b — Writer (LLM, strict)
 For each bullet slot, the model receives **only**: the chosen Fact texts + their metrics + allowed tech
-terms (fact tech + taxonomy aliases) + the target requirement + style rules. It returns:
+terms (the skills the facts name, in their taxonomy spellings; no implied skills, §9 6b) + the target
+requirement + style rules. It returns:
 ```python
 class Bullet(BaseModel):
     text: str
@@ -427,7 +428,9 @@ class Bullet(BaseModel):
     requirement_ids: list[str]
 ```
 Summary: 2 lines built from the top evidence (identity + years + strongest proof, then 3–4 must-have skills
-that have evidence). Skills section: candidate's verified skills only, reordered so JD must-haves come first,
+that have evidence, never by implication). Skills section: candidate's verified skills only (declared, or
+named by an approved fact, plus the allowlisted one-step implications of those, §9 6b), reordered so JD
+must-haves come first,
 using the JD's surface forms (e.g. "PostgreSQL" rather than "Postgres" if the JD says so).
 
 ## 9. Stage 6 — Validators
@@ -451,7 +454,12 @@ All validators are code first, LLM only where noted. Each returns pass/fail plus
 
 **6b Truth check (the most important)**
 - Every `metrics_used` string exists exactly in the cited facts, and no other number appears in the bullet.
-- Every technology mentioned is in the cited facts' skills or their taxonomy implications.
+- Every technology mentioned is a skill the cited facts name, in any spelling the taxonomy holds for it
+  ("Postgres" for a PostgreSQL fact). Never a sibling. **An implied skill is a keyword, never a claim:** it
+  may appear only where the page lists what is known, the skills line, and never where the page asserts:
+  a bullet asserts what was built, the summary what the candidate is. The skills line may list an implied
+  skill only where `validate/implied_skills.yaml` allows it: one step, a direct taxonomy edge, and a fact about the technology rather than an inference about the candidate (Next.js → React,
+  PostgreSQL → SQL, Kubernetes → containers; never RAG → statistics). DECISIONS 2026-10-17.
 - No employers, titles, dates, team sizes or scopes beyond the cited facts.
 - **NLI entailment:** a local DeBERTa-v3 NLI model checks that the cited facts *entail* the bullet
   (same technique as SI-RAG's self-verification). Contradiction or neutral beyond a threshold → fail.
