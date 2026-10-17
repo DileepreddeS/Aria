@@ -30,8 +30,9 @@ Other parts of ARIA call it only through its public API (section 10).
 7. **One page.** Always, for candidates with under ~8 years of experience.
 8. **ATS-safe layout.** Single column, standard section headings, real text (no images of text), no tables
    for layout, contact info in the body (not the header/footer), embedded standard fonts.
-9. **Design:** black body text, blue clickable links (email, LinkedIn, GitHub, portfolio), 10.5–11 pt body,
-   12–14 pt name, 0.5–0.7" margins. Output is PDF. DOCX export is optional.
+9. **Design:** black text throughout, clickable links (email, LinkedIn, GitHub, portfolio) as PDF link
+   annotations over the plain contact line, never coloured or styled there (§10; DECISIONS 2026-10-16),
+   10.5–11 pt body, 12–14 pt name, 0.5–0.7" margins. Output is PDF. DOCX export is optional.
 10. **Every resume is unique to its job,** and reproducible: the same inputs and versions produce the same output.
 
 ---

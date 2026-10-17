@@ -1,0 +1,91 @@
+# The recruiter check's voice rules (RESUME_ENGINE §1 rules 4-5, §9 6c).
+#
+# Versioned: the version travels into every resume's artifacts, so a resume can be judged
+# by the rules that built it. Change a list, change the version. Matching is by whole word
+# or phrase, case-insensitive; each inflection that should match is listed, because a
+# stemmer would also catch words nobody meant to ban.
+version: "2026.10.1"
+
+# A bullet opens with one of these (§1 rule 4, the default candidate voice). Multi-word
+# verbs match as a phrase.
+allowed_verbs:
+  - built
+  - shipped
+  - wired
+  - added
+  - trained
+  - led
+  - set up
+  - sped up
+  - improved
+  - containerized
+  - designed
+  - cut
+  - migrated
+  - automated
+
+# A fourth bullet opening with the same verb fails (DECISIONS 2026-10-16).
+max_bullets_per_verb: 3
+
+# At least this share of bullets carries a number.
+min_quantified_share: 0.6
+
+# AI voice (§1 rule 5): anywhere on the page, a failure.
+banned:
+  - leverage
+  - leveraged
+  - leverages
+  - leveraging
+  - spearhead
+  - spearheaded
+  - spearheading
+  - cutting-edge
+  - synergy
+  - synergies
+  - robust
+  - seamless
+  - seamlessly
+  - utilize
+  - utilized
+  - utilizes
+  - utilizing
+  - facilitate
+  - facilitated
+  - facilitates
+  - facilitating
+  - innovative
+  - streamlined
+  - orchestrated
+  - championed
+  - transformative
+  - impactful
+  - holistic
+  - paradigm
+  - dynamic
+  - proactive
+  - revolutionized
+  - best-in-class
+  - world-class
+  - game-changing
+  - passionate
+  - results-driven
+  - detail-oriented
+
+# A bullet that opens with one of these says what the job was, not what was done.
+weak_openings:
+  - responsible for
+  - worked on
+  - helped
+  - assisted
+  - involved in
+  - participated in
+  - tasked with
+
+# Phrases that say nothing (§9 6c). Allowed only where a cited fact says them itself.
+vague_phrases:
+  - cloud-native solutions
+  - modern web systems
+  - digital solutions
+  - scalable solutions
+  - end-to-end solutions
+  - various technologies
