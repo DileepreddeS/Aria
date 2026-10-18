@@ -1,0 +1,29 @@
+Software Engineer, Backend (New Grad)
+Larkspur Analytics
+Location: Portland, OR (Hybrid, 3 days in office)
+
+About Larkspur
+Larkspur builds forecasting tools for regional grocers. We are a team of 40 engineers.
+
+What you'll do
+- Build REST APIs in Node and Python that serve forecasts to store managers
+- Design PostgreSQL schemas and tune slow queries
+- Own on-call for the services you ship, with a mentor
+
+Requirements:
+- BS in Computer Science or a related field, or equivalent experience
+- 1+ years of professional software engineering experience
+- Experience with Python or Go
+- 2+ years of SQL, ideally Postgres
+- Familiarity with Docker and Kubernetes
+
+Nice to have
+- Experience with Kafka or RabbitMQ
+- MariaDB in production
+- Exposure to Zorblang or other niche DSLs
+
+Benefits
+- Health, dental and vision from day one
+- 401(k) match
+
+Larkspur is unable to sponsor or take over sponsorship of an employment visa at this time. Applicants must be authorized to work in the United States.

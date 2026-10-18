@@ -1,0 +1,12 @@
+Corvane Labs is hiring an AI Engineer to build retrieval systems for legal research. You will join a small team in Austin, TX and work on-site five days a week.
+
+In this role you will:
+Build RAG pipelines over millions of court documents. Evaluate retrieval quality with offline benchmarks and ship improvements weekly. Work with lawyers to turn their feedback into labelled data.
+
+Who you are:
+You have 2-4 years of experience shipping machine learning systems to production. You are fluent in Python and have used PyTorch or Hugging Face transformers. You have worked with a vector database such as Pinecone, Qdrant or pgvector. A Master's degree in Computer Science, Statistics or a related field is preferred but not required.
+
+Bonus points:
+Experience fine-tuning LLMs with LoRA. Familiarity with LangGraph.
+
+We sponsor H-1B visas for this role.
