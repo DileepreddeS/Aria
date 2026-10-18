@@ -450,3 +450,31 @@ class TestTheSeedNamesEachProductOnce:
     def test_a_name_written_as_a_name_is_still_found(self) -> None:
         found = tag_skills("Deployed on AWS Lambda with Celery", load_default_taxonomy()).skills
         assert {"lambda_functions", "celery"} <= {skill.canonical for skill in found}
+
+
+class TestHyphenatedWords:
+    """A word that names nothing whole is read as its parts (DECISIONS 2026-10-18)."""
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("Built a React-based dashboard", [("react", "React")]),
+            ("Shipped HIPAA-regulated products", [("hipaa", "HIPAA")]),
+            ("Wrote Go-based services", [("golang", "Go")]),
+            ("Ran machine-learning-based ranking", [("machine_learning", "machine learning")]),
+        ],
+    )
+    def test_a_skill_inside_a_hyphenated_word(self, text: str, expected: list[tuple[str, str]]) -> None:
+        found = tag_skills(text, load_default_taxonomy()).skills
+        assert [(skill.canonical, skill.surface_form) for skill in found] == expected
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [("Used scikit-learn", "scikit_learn"), ("Wrote T-SQL procedures", "sqlserver")],
+    )
+    def test_a_word_that_resolves_whole_is_read_whole(self, text: str, expected: str) -> None:
+        assert [skill.canonical for skill in tag_skills(text, load_default_taxonomy()).skills] == [expected]
+
+    @pytest.mark.parametrize("text", ["a go-to tool", "end-to-end tests", "a well-known issue"])
+    def test_ordinary_hyphenated_words_name_nothing(self, text: str) -> None:
+        assert tag_skills(text, load_default_taxonomy()).skills == ()

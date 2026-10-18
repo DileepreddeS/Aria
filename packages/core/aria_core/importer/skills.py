@@ -210,17 +210,36 @@ def _written_as_a_name(surface: str) -> bool:
 
 
 def tag_skills(text: str, taxonomy: SkillTaxonomy, *, source_line: int | None = None) -> SkillFindings:
-    """Skills named in prose. Used to attach evidence to a fact.
+    """Skills named in prose. Used to attach evidence to a fact, and by the truth check
+    to see what a resume line claims.
 
     Scans word n-grams longest-first so "machine learning" resolves as one skill
     rather than as "learning". Unknown terms are not reported: prose is full of words
     that are not skills, and a list of them would be noise rather than a taxonomy gap.
+
+    A hyphenated word that names nothing whole ("React-based", "HIPAA-regulated") is
+    read again as its parts, so it names React or HIPAA in the resume's own spelling.
+    Without this, "a React-based dashboard" claimed React and nothing saw the claim: the
+    truth check passes what the tagger cannot see (DECISIONS 2026-10-18). A word that
+    resolves whole ("on-call", "scikit-learn") is read whole first.
     """
-    words = [word for word in re.split(r"[\s,;:()\[\]/|]+", text) if word]
     found: list[ResolvedSkill] = []
     seen: set[str] = set()
-    index = 0
+    _scan([word for word in re.split(r"[\s,;:()\[\]/|]+", text) if word], taxonomy, source_line, found, seen)
+    return SkillFindings(tuple(found))
 
+
+_HYPHEN_BETWEEN_LETTERS = re.compile(r"(?<=[A-Za-z0-9])-(?=[A-Za-z])")
+
+
+def _scan(
+    words: list[str],
+    taxonomy: SkillTaxonomy,
+    source_line: int | None,
+    found: list[ResolvedSkill],
+    seen: set[str],
+) -> None:
+    index = 0
     while index < len(words):
         for size in range(min(_MAX_TERM_WORDS, len(words) - index), 0, -1):
             chunk = words[index : index + size]
@@ -243,6 +262,7 @@ def tag_skills(text: str, taxonomy: SkillTaxonomy, *, source_line: int | None = 
             index += size
             break
         else:
+            parts = _HYPHEN_BETWEEN_LETTERS.split(words[index].strip(".,;:"))
+            if len(parts) > 1:
+                _scan([part for part in parts if part], taxonomy, source_line, found, seen)
             index += 1
-
-    return SkillFindings(tuple(found))

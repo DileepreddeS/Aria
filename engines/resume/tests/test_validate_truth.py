@@ -130,6 +130,18 @@ class TestTechnology:
         assert [finding.check for finding in findings] == ["unbacked_technology"]
         assert "Kubernetes" in findings[0].detail
 
+    def test_a_hyphenated_technology_no_cited_fact_uses(self, judge: Judge, ids: SimpleNamespace) -> None:
+        # "React-based" claims React. The tagger once read it as one unknown word, so the
+        # check passed a technology claim it never verified (DECISIONS 2026-10-18).
+        findings = judge(
+            "Cut p95 API latency by 30% with Redis caching behind a React-based dashboard", ids.latency
+        )
+        assert [finding.check for finding in findings] == ["unbacked_technology"]
+        assert "'React'" in findings[0].detail
+
+    def test_a_hyphenated_technology_the_cited_fact_uses(self, judge: Judge, ids: SimpleNamespace) -> None:
+        assert judge("Built 15+ React-based screens for the checkout platform", ids.screens) == []
+
     def test_a_technology_another_fact_uses(self, judge: Judge, ids: SimpleNamespace) -> None:
         assert "unbacked_technology" in _checks(judge("Built 15+ React screens backed by Redis", ids.screens))
 
