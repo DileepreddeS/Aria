@@ -44,6 +44,7 @@ from aria_core.importer.skills import resolve_terms, split_skill_terms, tag_skil
 from aria_core.schemas.snapshot import CandidateSnapshot, SnapshotFact
 from aria_core.taxonomy.model import SkillTaxonomy
 from aria_resume.document import ResumeDocument, SectionKind
+from aria_resume.evidence import skills_named
 from aria_resume.schemas import Bullet
 from aria_resume.validate import Finding
 from aria_resume.validate.implied import ImpliedSkills, load_implied_skills
@@ -123,19 +124,6 @@ def _cited(
     return found, missing
 
 
-def _held(facts: Sequence[SnapshotFact], taxonomy: SkillTaxonomy) -> set[str]:
-    """The skills ``facts`` name, as taxonomy ids: their tags, read again through the
-    candidate's spelling, and what the taxonomy finds in their text."""
-    held: set[str] = set()
-    for fact in facts:
-        for skill in fact.skills:
-            canonical = taxonomy.resolve(skill.surface_form)
-            if canonical is not None:
-                held.add(canonical)
-        held |= {skill.canonical for skill in tag_skills(fact.text, taxonomy).skills}
-    return held
-
-
 def _names(snapshot: CandidateSnapshot, facts: Sequence[SnapshotFact]) -> tuple[set[str], set[str]]:
     """Every name the candidate's graph holds, and those the cited facts may use."""
     every: set[str] = set()
@@ -194,7 +182,7 @@ def _backed(
     if any(month not in source_months for month in month_mentions(text)):
         findings.append(Finding("unbacked_date", f"{label}: names a month no cited fact names"))
 
-    held = _held(facts, taxonomy)
+    held = skills_named(facts, taxonomy)
     for skill in tag_skills(text, taxonomy).skills:
         if skill.canonical not in held:
             findings.append(
@@ -272,7 +260,7 @@ def _skills_line(
 ) -> list[Finding]:
     listed = line.split(":", 1)[1] if ":" in line else line
     declared = {taxonomy.resolve(skill.surface_form) for skill in snapshot.declared_skills}
-    held = {canonical for canonical in declared if canonical} | _held(snapshot.facts, taxonomy)
+    held = {canonical for canonical in declared if canonical} | skills_named(snapshot.facts, taxonomy)
     verified = implied.listable(held)
     findings = resolve_terms(taxonomy, split_skill_terms(listed))
     problems = [
@@ -342,7 +330,7 @@ def check_written(
             findings.append(
                 Finding("metric_not_declared", f"{label} prints {mention.bare!r} without declaring it")
             )
-    held = _held(facts, taxonomy)
+    held = skills_named(facts, taxonomy)
     for term in bullet.tech_used:
         if taxonomy.resolve(term) not in held:
             findings.append(

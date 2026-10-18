@@ -20,12 +20,18 @@ from aria_core.sensitivity import Sensitivity
 
 __all__ = [
     "Bullet",
+    "EvidenceMap",
+    "FitDecision",
+    "Gap",
     "JDSection",
     "NormalizedJD",
     "ParsedJD",
     "RawRequirement",
     "Requirement",
     "RequirementKind",
+    "RoleType",
+    "ScoreBreakdown",
+    "ScoredFact",
     "Seniority",
     "WorkMode",
 ]
@@ -150,3 +156,74 @@ class NormalizedJD(AriaMessage):
     #: review and for the matcher's text similarity, never dropped.
     unplaced: tuple[RawRequirement, ...] = ()
     taxonomy_version: Annotated[str, Sensitivity.S0]
+
+
+class RoleType(StrEnum):
+    """The role template a posting calls for (RESUME_ENGINE \u00a77, \u00a78 5a)."""
+
+    FRONTEND = "frontend"
+    BACKEND = "backend"
+    FULLSTACK = "fullstack"
+    AI = "ai"
+    ML_RESEARCH = "ml_research"
+    DATA = "data"
+    DEVOPS = "devops"
+    SWE = "swe"
+
+
+class FitDecision(StrEnum):
+    STRONG = "strong"
+    OK = "ok"
+    WEAK = "weak"
+    NO_FIT = "no_fit"
+
+
+class ScoreBreakdown(AriaMessage):
+    """The five parts of a (requirement, fact) score (RESUME_ENGINE \u00a77), each 0 to 1."""
+
+    skill_match: Annotated[float, Sensitivity.S0] = Field(ge=0.0, le=1.0)
+    semantic_sim: Annotated[float, Sensitivity.S0] = Field(ge=0.0, le=1.0)
+    metric_strength: Annotated[float, Sensitivity.S0] = Field(ge=0.0, le=1.0)
+    recency: Annotated[float, Sensitivity.S0] = Field(ge=0.0, le=1.0)
+    context_fit: Annotated[float, Sensitivity.S0] = Field(ge=0.0, le=1.0)
+
+
+class ScoredFact(AriaMessage):
+    fact_id: Annotated[uuid.UUID, Sensitivity.S0]
+    score: Annotated[float, Sensitivity.S0] = Field(ge=0.0, le=1.0)
+    breakdown: ScoreBreakdown
+    #: How the fact meets the skill: "exact", "implied", "sibling" or "none".
+    match: Annotated[str, Sensitivity.S0]
+
+
+class Gap(AriaMessage):
+    """A requirement the evidence meets weakly or not at all, said so the candidate can act."""
+
+    requirement_id: Annotated[str, Sensitivity.S0]
+    #: The posting's own spelling of what is missing.
+    label: Annotated[str, Sensitivity.S0]
+    must_have: Annotated[bool, Sensitivity.S0]
+    best_score: Annotated[float, Sensitivity.S0] = Field(ge=0.0, le=1.0)
+    #: The closest approved fact, when there is one.
+    closest_fact_id: Annotated[uuid.UUID | None, Sensitivity.S0] = None
+    #: What to prepare: never a claim to add, always something to be ready to discuss.
+    suggestion: Annotated[str, Sensitivity.S1]
+
+
+class EvidenceMap(AriaMessage):
+    """Stage 4's answer: which approved facts prove which requirements, and how well."""
+
+    #: The best three facts for each requirement, with every score's parts.
+    per_requirement: dict[str, tuple[ScoredFact, ...]]
+    #: Weighted share of must-haves with evidence at or above the strong threshold; a
+    #: group of alternatives counts once, met by any member.
+    coverage: Annotated[float, Sensitivity.S0] = Field(ge=0.0, le=1.0)
+    strong: Annotated[tuple[str, ...], Sensitivity.S0] = ()
+    light_gaps: tuple[Gap, ...] = ()
+    missing: tuple[Gap, ...] = ()
+    #: Years and degree requirements are met by the profile, not by a fact: why, in words.
+    profile_checks: Annotated[dict[str, str], Sensitivity.S1] = Field(default_factory=dict)
+    role_type: Annotated[RoleType, Sensitivity.S0]
+    fit_decision: Annotated[FitDecision, Sensitivity.S0]
+    #: The embedding model's id, so a map can be explained with the model that made it.
+    embedder: Annotated[str, Sensitivity.S0]

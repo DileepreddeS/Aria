@@ -40,7 +40,7 @@ from aria_resume.schemas import (
     RequirementKind,
 )
 
-__all__ = ["MUST_HAVE", "PREFERRED", "RESPONSIBILITY_IMPLIED", "normalize"]
+__all__ = ["DEGREE_ORDER", "MUST_HAVE", "PREFERRED", "RESPONSIBILITY_IMPLIED", "degree_levels", "normalize"]
 
 MUST_HAVE = 1.0
 PREFERRED = 0.5
@@ -65,6 +65,14 @@ _DEGREE_LEVELS = (
     ("master", re.compile(r"\b(?:M\.?S\.?|MSc|MEng|master'?s|graduate degree)\b", re.IGNORECASE)),
     ("phd", re.compile(r"\b(?:Ph\.?D\.?|doctorate)\b", re.IGNORECASE)),
 )
+
+#: Lowest first: a requirement is met by its level or any above it.
+DEGREE_ORDER = tuple(level for level, _ in _DEGREE_LEVELS)
+
+
+def degree_levels(text: str) -> list[str]:
+    """The degree levels a line names, lowest first ("BS/MS" is bachelor, then master)."""
+    return [level for level, pattern in _DEGREE_LEVELS if pattern.search(text.replace("\u2019", "'"))]
 
 
 @dataclass
@@ -145,9 +153,7 @@ class _Collector:
         skill_years = max((mention.low for mention in mentions if not mention.general), default=None)
 
         if item.section is not JDSection.RESPONSIBILITIES:
-            levels = [
-                level for level, pattern in _DEGREE_LEVELS if pattern.search(text.replace("\u2019", "'"))
-            ]
+            levels = degree_levels(text)
             if levels:
                 placed = True
                 self.add(RequirementKind.EDUCATION, levels[0], text, weight=weight, must_have=must_have)
