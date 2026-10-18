@@ -139,6 +139,20 @@ class TestTheLayoutCheckFindsProblems:
         findings = check_layout(_print(document), document)
         assert [finding.check for finding in findings] == ["one_page"]
 
+    def test_the_bundled_font_is_the_one_printed(self) -> None:
+        assert not [f for f in check_layout(_printed(), _document()) if f.check == "font_substituted"]
+
+    def test_a_page_set_in_a_stand_in_font_is_refused(self) -> None:
+        # If Carlito fails to load, Chromium prints in a system font (Arial on Windows),
+        # wider than the line budget measured, and still embeds it.
+        import re
+
+        document = _document()
+        html = re.sub(r"@font-face \{[^}]*\}", "", render_html(document))
+        findings = check_layout(add_links(asyncio.run(ChromiumPrinter().print_pdf(html)), document), document)
+        assert "font_substituted" in {finding.check for finding in findings}
+        assert "fonts_embedded" not in {finding.check for finding in findings}
+
     def test_a_missing_link(self) -> None:
         writer = PdfWriter(clone_from=PdfReader(io.BytesIO(_printed())))
         del writer.pages[0]["/Annots"]

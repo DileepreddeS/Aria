@@ -1,0 +1,17 @@
+# Role template: devops (outside the 30-JD gate) (RESUME_ENGINE section 8, 5a).
+# Versioned: the version travels into each resume's artifacts.
+version: "2026.10.1"
+role: devops
+# Summary only when the writer (5b) writes one from evidence; never a template sentence,
+# which is the AI voice RESUME_ENGINE section 1 bans (DECISIONS 2026-10-18).
+summary: model_only
+section_order: [experience, projects, skills, education]
+# Roles print reverse-chronologically; the most recent gets the most room.
+recent_role_bullets: [3, 5]
+older_role_bullets: [2, 3]
+project_bullets: [2, 2]
+max_projects: 2
+# Skills lines: these categories, in this order, each on its own line.
+skills:
+  categories: [infra, language, tooling, backend, data]
+  max_terms_per_line: 10

@@ -11,8 +11,8 @@ version: "2026.10.1"
 models:
   embedding:
     # Snowflake arctic-embed-s: Apache-2.0. Built on intfloat/e5-small-unsupervised (MIT,
-    # no supervised fine-tuning); its documented training data names no MS MARCO (DECISIONS
-    # 2026-10-18). Commit of 2024-12-04.
+    # no supervised fine-tuning); MS MARCO is not among its named training sets, though most of
+    # its pretraining is unitemised web-search data (DECISIONS 2026-10-18). Commit of 2024-12-04.
     repo: Snowflake/snowflake-arctic-embed-s
     commit: e596f507467533e48a2e17c007f0e1dacc837b33
     licence: Apache-2.0

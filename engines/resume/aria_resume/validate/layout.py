@@ -67,6 +67,17 @@ def check_layout(pdf: bytes, document: ResumeDocument) -> list[Finding]:
         for name, font in fonts.get_object().items() if fonts is not None else ():
             if not _embedded(font):
                 findings.append(Finding("fonts_embedded", f"font {name} on page {number} is not embedded"))
+            # The bundled font, not a stand-in: if Carlito fails to load, Chromium prints in a
+            # system font (Arial on Windows) that is wider than the line budget measured, and
+            # still embeds it, so "embedded" alone would pass a page set in the wrong font.
+            base = str(font.get_object().get("/BaseFont", "")).split("+")[-1]
+            if not base.startswith("Carlito"):
+                findings.append(
+                    Finding(
+                        "font_substituted",
+                        f"page {number} is set in {base or 'an unnamed font'}, not Carlito",
+                    )
+                )
 
     expected = [item for item in document.contact if item.url is not None]
     links = _links(reader)

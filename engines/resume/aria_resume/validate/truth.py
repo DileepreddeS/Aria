@@ -30,7 +30,12 @@ so a tag stored before taxonomy 2026.10.3 filed Memcached under Redis backs Memc
 and one whose spelling no longer names a skill ("checkout") backs nothing.
 
 Entailment beyond these (a bullet that rearranges true words into a false sentence) is
-the NLI model's job (§9), a later step. So are entry headers, which the planner produces.
+the NLI model's job (§9), a later step.
+
+Every role, project and degree on the page names its source in the snapshot, prints exactly
+the header :mod:`aria_resume.compose.headers` computes for it (employer, title, months,
+client and place), and holds only bullets whose facts hang off it: an approved bullet from
+one role under another's header is a claim about the wrong job.
 """
 
 from __future__ import annotations
@@ -43,7 +48,8 @@ from aria_core.graph.months import months_to_years
 from aria_core.importer.skills import resolve_terms, split_skill_terms, tag_skills
 from aria_core.schemas.snapshot import CandidateSnapshot, SnapshotFact
 from aria_core.taxonomy.model import SkillTaxonomy
-from aria_resume.document import ResumeDocument, SectionKind
+from aria_resume.compose.headers import Header, degree_header, project_header, role_header
+from aria_resume.document import DocumentEntry, ResumeDocument, SectionKind
 from aria_resume.evidence import skills_named
 from aria_resume.schemas import Bullet
 from aria_resume.validate import Finding
@@ -56,7 +62,7 @@ from aria_resume.validate.text import (
     phrase_spans,
 )
 
-__all__ = ["check_bullet_text", "check_truth", "check_written"]
+__all__ = ["check_bullet_text", "check_headers", "check_truth", "check_written"]
 
 #: Claims of scope, by kind. A word of a kind needs some word of the same kind in the
 #: cited facts: "led" is backed by "leading", not by "built".
@@ -278,6 +284,69 @@ def _skills_line(
     return problems
 
 
+_ENTRY_SECTIONS = {
+    SectionKind.EXPERIENCE: "role",
+    SectionKind.PROJECTS: "project",
+    SectionKind.EDUCATION: "degree",
+}
+
+
+def _expected(kind: SectionKind, source: object, snapshot: CandidateSnapshot) -> tuple[Header | None, str]:
+    """The header the snapshot gives this entry's source, and which fact field anchors to it."""
+    if kind is SectionKind.EXPERIENCE:
+        role = next((item for item in snapshot.experiences if item.experience_id == source), None)
+        return (role_header(role) if role else None), "experience_id"
+    if kind is SectionKind.PROJECTS:
+        project = next((item for item in snapshot.projects if item.project_id == source), None)
+        return (project_header(project) if project else None), "project_id"
+    degree = next((item for item in snapshot.education if item.education_id == source), None)
+    return (degree_header(degree) if degree else None), "education_id"
+
+
+def _entry(kind: SectionKind, entry: DocumentEntry, snapshot: CandidateSnapshot) -> list[Finding]:
+    label = f"the {_ENTRY_SECTIONS[kind]} {entry.title!r}"
+    if entry.source_id is None:
+        return [Finding("unsourced_entry", f"{label} names no approved {_ENTRY_SECTIONS[kind]} it prints")]
+    expected, anchor = _expected(kind, entry.source_id, snapshot)
+    if expected is None:
+        return [
+            Finding("unknown_entry", f"{label} prints {entry.source_id}, which the snapshot does not hold")
+        ]
+    findings = []
+    printed = (entry.title, entry.detail, entry.dates, entry.subline)
+    wanted = (expected.title, expected.detail, expected.dates, expected.subline)
+    for part, shown, true in zip(("name", "detail", "dates", "second line"), printed, wanted, strict=True):
+        if shown != true:
+            findings.append(
+                Finding("header_mismatch", f"{label}: its {part} reads {shown!r}; the snapshot says {true!r}")
+            )
+    for bullet in entry.bullets:
+        for fact_id in bullet.fact_ids:
+            try:
+                fact = snapshot.fact(fact_id)
+            except KeyError:
+                continue  # check_bullet_text reports it
+            if getattr(fact, anchor) != entry.source_id:
+                findings.append(
+                    Finding(
+                        "bullet_elsewhere",
+                        f"{label} holds {bullet.text!r}, whose fact {fact_id} is about another entry",
+                    )
+                )
+    return findings
+
+
+def check_headers(document: ResumeDocument, snapshot: CandidateSnapshot) -> list[Finding]:
+    """Every entry is an approved role, project or degree, printed as the snapshot has it."""
+    return [
+        finding
+        for section in document.sections
+        if section.kind in _ENTRY_SECTIONS
+        for entry in section.entries
+        for finding in _entry(section.kind, entry, snapshot)
+    ]
+
+
 def check_truth(
     document: ResumeDocument,
     snapshot: CandidateSnapshot,
@@ -287,7 +356,7 @@ def check_truth(
 ) -> list[Finding]:
     """Every line of the page that makes a claim, against the snapshot."""
     implied = implied or load_implied_skills(taxonomy)
-    findings: list[Finding] = []
+    findings: list[Finding] = check_headers(document, snapshot)
     for section in document.sections:
         for line in section.lines:
             if section.kind is SectionKind.SUMMARY:

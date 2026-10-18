@@ -17,18 +17,23 @@ from pydantic import Field
 
 from aria_core.schemas.base import AriaMessage
 from aria_core.sensitivity import Sensitivity
+from aria_resume.document import SectionKind
 
 __all__ = [
     "Bullet",
+    "BulletSlot",
     "EvidenceMap",
     "FitDecision",
     "Gap",
     "JDSection",
     "NormalizedJD",
     "ParsedJD",
+    "PlannedEntry",
+    "PlannedSection",
     "RawRequirement",
     "Requirement",
     "RequirementKind",
+    "ResumePlan",
     "RoleType",
     "ScoreBreakdown",
     "ScoredFact",
@@ -227,3 +232,49 @@ class EvidenceMap(AriaMessage):
     fit_decision: Annotated[FitDecision, Sensitivity.S0]
     #: The embedding model's id, so a map can be explained with the model that made it.
     embedder: Annotated[str, Sensitivity.S0]
+
+
+class BulletSlot(AriaMessage):
+    """One bullet the planner keeps room for: which facts it says, and which requirements it serves."""
+
+    fact_ids: Annotated[tuple[uuid.UUID, ...], Sensitivity.S0] = Field(min_length=1)
+    requirement_ids: Annotated[tuple[str, ...], Sensitivity.S0] = ()
+    #: Requirement weight the bullet carries: sum of weight x score over what its facts prove.
+    value: Annotated[float, Sensitivity.S0] = Field(ge=0.0)
+    #: The best evidence for a must-have: removed only after every other bullet.
+    mandatory: Annotated[bool, Sensitivity.S0] = False
+    #: Printed lines, estimated from the fact's own text (the writer may change it; the page
+    #: is checked again after rendering).
+    lines: Annotated[int, Sensitivity.S0] = Field(ge=1)
+
+
+class PlannedEntry(AriaMessage):
+    kind: Annotated[SectionKind, Sensitivity.S0]
+    #: The approved role, project or degree: its header is looked up, never written.
+    source_id: Annotated[uuid.UUID, Sensitivity.S0]
+    bullets: tuple[BulletSlot, ...] = ()
+    #: A role that cannot hold two bullets keeps its employer, title and months, so the page
+    #: shows no gap in employment (DECISIONS 2026-10-18).
+    header_only: Annotated[bool, Sensitivity.S0] = False
+
+
+class PlannedSection(AriaMessage):
+    kind: Annotated[SectionKind, Sensitivity.S0]
+    entries: tuple[PlannedEntry, ...] = ()
+    #: For the skills section: "Languages: Python, Go", in the posting's spelling.
+    lines: Annotated[tuple[str, ...], Sensitivity.S1] = ()
+
+
+class ResumePlan(AriaMessage):
+    """Stage 5a's output (RESUME_ENGINE \u00a78): the page before a word of it is written."""
+
+    role_type: Annotated[RoleType, Sensitivity.S0]
+    template_version: Annotated[str, Sensitivity.S0]
+    sections: tuple[PlannedSection, ...]
+    #: canonical skill -> the spelling to print: the posting's when it names the same skill.
+    surface_forms: Annotated[dict[str, str], Sensitivity.S0] = Field(default_factory=dict)
+    #: Estimated height in points, against the page's usable height.
+    estimated_height: Annotated[float, Sensitivity.S0]
+    usable_height: Annotated[float, Sensitivity.S0]
+    #: Facts the budget left out, lowest value first, so a reviewer can see what was cut.
+    dropped: Annotated[tuple[uuid.UUID, ...], Sensitivity.S0] = ()

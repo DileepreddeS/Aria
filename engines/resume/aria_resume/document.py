@@ -83,6 +83,10 @@ class DocumentEntry(AriaMessage):
     #: A second plain line: location, client, coursework, a project's stack.
     subline: Annotated[str | None, Sensitivity.S1] = Field(default=None, max_length=300)
     bullets: tuple[DocumentBullet, ...] = ()
+    #: The approved role, project or degree this entry prints. The truth check (6b) requires
+    #: the header to be exactly what the snapshot says of it, and every bullet's facts to
+    #: hang off it. None only for a hand-built page that is not checked against a snapshot.
+    source_id: Annotated[uuid.UUID | None, Sensitivity.S0] = None
 
 
 class DocumentSection(AriaMessage):

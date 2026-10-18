@@ -13,6 +13,7 @@ from collections.abc import Callable
 from types import SimpleNamespace
 
 import pytest
+from aria_resume.compose.headers import role_header
 from aria_resume.document import (
     DocumentBullet,
     DocumentEntry,
@@ -22,7 +23,7 @@ from aria_resume.document import (
 )
 from aria_resume.schemas import Bullet
 from aria_resume.validate import Finding
-from aria_resume.validate.truth import check_bullet_text, check_truth, check_written
+from aria_resume.validate.truth import check_bullet_text, check_headers, check_truth, check_written
 
 from aria_core.schemas.snapshot import CandidateSnapshot, SnapshotSkill
 from aria_core.taxonomy.model import SkillTaxonomy
@@ -258,6 +259,22 @@ def _document(*sections: DocumentSection) -> ResumeDocument:
     return ResumeDocument(name="Jordan A. Rivera", sections=sections)
 
 
+def _nordvale(snapshot: CandidateSnapshot, *bullets: DocumentBullet, **changes: object) -> DocumentEntry:
+    """Nordvale's entry exactly as the snapshot has it, unless ``changes`` say otherwise."""
+    role = snapshot.experiences[0]
+    header = role_header(role)
+    values: dict[str, object] = {
+        "title": header.title,
+        "detail": header.detail,
+        "dates": header.dates,
+        "subline": header.subline,
+        "bullets": bullets,
+        "source_id": role.experience_id,
+    }
+    values.update(changes)
+    return DocumentEntry.model_validate(values)
+
+
 def _summary(*lines: str) -> DocumentSection:
     return DocumentSection(kind=SectionKind.SUMMARY, lines=lines)
 
@@ -266,12 +283,10 @@ class TestTheWholeDocument:
     def test_every_bullet_on_the_page_is_checked(
         self, snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy, ids: SimpleNamespace
     ) -> None:
-        entry = DocumentEntry(
-            title="Nordvale Consulting",
-            bullets=(
-                DocumentBullet(text="Built 15+ React screens", fact_ids=(ids.screens,)),
-                DocumentBullet(text="Built 40 React screens", fact_ids=(ids.screens,)),
-            ),
+        entry = _nordvale(
+            snapshot,
+            DocumentBullet(text="Built 15+ React screens", fact_ids=(ids.screens,)),
+            DocumentBullet(text="Built 40 React screens", fact_ids=(ids.screens,)),
         )
         document = _document(DocumentSection(kind=SectionKind.EXPERIENCE, entries=(entry,)))
         findings = check_truth(document, snapshot, taxonomy)
@@ -367,6 +382,82 @@ class TestTheWholeDocument:
     ) -> None:
         line = DocumentSection(kind=SectionKind.SKILLS, lines=("Languages: Python, Zorblang",))
         assert _checks(check_truth(_document(line), snapshot, taxonomy)) == {"unverified_skill"}
+
+
+class TestHeaders:
+    def _check(
+        self, snapshot: CandidateSnapshot, entry: DocumentEntry, kind: SectionKind = SectionKind.EXPERIENCE
+    ) -> list[Finding]:
+        return check_headers(_document(DocumentSection(kind=kind, entries=(entry,))), snapshot)
+
+    def test_the_snapshot_s_own_header_passes(self, snapshot: CandidateSnapshot) -> None:
+        header = role_header(snapshot.experiences[0])
+        assert (header.title, header.detail, header.dates) == (
+            "Nordvale Consulting",
+            "Software Engineer",
+            "Feb 2024 \u2013 Jul 2025",
+        )
+        assert self._check(snapshot, _nordvale(snapshot)) == []
+
+    @pytest.mark.parametrize(
+        ("changes", "part"),
+        [
+            ({"detail": "Senior Software Engineer"}, "detail"),
+            ({"title": "Nordvale Global"}, "name"),
+            ({"dates": "Feb 2023 \u2013 Jul 2025"}, "dates"),
+            ({"subline": "Remote"}, "second line"),
+        ],
+    )
+    def test_a_header_the_snapshot_does_not_say(
+        self, snapshot: CandidateSnapshot, changes: dict[str, object], part: str
+    ) -> None:
+        findings = self._check(snapshot, _nordvale(snapshot, **changes))
+        assert [finding.check for finding in findings] == ["header_mismatch"]
+        assert f"its {part} reads" in findings[0].detail
+
+    def test_the_whole_page_check_includes_the_headers(
+        self, snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy
+    ) -> None:
+        entry = _nordvale(snapshot, detail="Staff Engineer")
+        findings = check_truth(
+            _document(DocumentSection(kind=SectionKind.EXPERIENCE, entries=(entry,))), snapshot, taxonomy
+        )
+        assert [finding.check for finding in findings] == ["header_mismatch"]
+
+    def test_a_bullet_from_another_role(self, snapshot: CandidateSnapshot, ids: SimpleNamespace) -> None:
+        # Brightfold's fact, true, under Nordvale's header: a claim about the wrong job.
+        bullet = DocumentBullet(
+            text="Shipped 8 full-stack applications with Node.js and PostgreSQL", fact_ids=(ids.apps,)
+        )
+        assert [finding.check for finding in self._check(snapshot, _nordvale(snapshot, bullet))] == [
+            "bullet_elsewhere"
+        ]
+
+    def test_an_entry_that_names_no_source(self, snapshot: CandidateSnapshot) -> None:
+        assert [f.check for f in self._check(snapshot, _nordvale(snapshot, source_id=None))] == [
+            "unsourced_entry"
+        ]
+
+    def test_an_entry_whose_source_the_snapshot_does_not_hold(self, snapshot: CandidateSnapshot) -> None:
+        stranger = _nordvale(snapshot, source_id=uuid.UUID(int=4040))
+        assert [finding.check for finding in self._check(snapshot, stranger)] == ["unknown_entry"]
+
+    def test_a_role_printed_as_a_project_is_unknown(self, snapshot: CandidateSnapshot) -> None:
+        assert [f.check for f in self._check(snapshot, _nordvale(snapshot), SectionKind.PROJECTS)] == [
+            "unknown_entry"
+        ]
+
+    def test_a_client_is_on_the_second_line_and_the_employer_stays_the_employer(
+        self, snapshot: CandidateSnapshot
+    ) -> None:
+        role = snapshot.experiences[0].model_copy(
+            update={"client": "Carvana", "location_city": "Portland", "location_region": "OR"}
+        )
+        header = role_header(role)
+        assert (header.title, header.subline) == (
+            "Nordvale Consulting",
+            "Client: Carvana \u00b7 Portland, OR",
+        )
 
 
 class TestTheWritersDeclarations:
