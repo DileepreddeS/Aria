@@ -208,7 +208,7 @@ def match(
     facts: list[SnapshotFact] = list(snapshot.facts)
     named = {fact.fact_id: skills_named([fact], taxonomy) for fact in facts}
     fact_vectors = dict(
-        zip((fact.fact_id for fact in facts), embedder.embed([f.text for f in facts]), strict=True)
+        zip((fact.fact_id for fact in facts), embedder.embed_documents([f.text for f in facts]), strict=True)
     )
     scored_kinds = (
         RequirementKind.SKILL,
@@ -220,7 +220,7 @@ def match(
     requirement_vectors = dict(
         zip(
             (r.id for r in ranked_requirements),
-            embedder.embed([" ".join(r.surface_forms) for r in ranked_requirements]),
+            embedder.embed_queries([" ".join(r.surface_forms) for r in ranked_requirements]),
             strict=True,
         )
     )

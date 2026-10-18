@@ -1,5 +1,5 @@
 # CI task definitions. Local development on Windows uses ./tasks.ps1.
-.PHONY: install lint typecheck test secrets sast audit control-chars pii parser-image browsers ci
+.PHONY: install lint typecheck test secrets sast audit control-chars pii parser-image browsers models ci
 
 install:
 	uv sync --all-packages --frozen
@@ -31,6 +31,11 @@ parser-image:
 browsers:
 	uv run playwright install --with-deps chromium
 
+# The local model weights models.lock pins: commit URLs, SHA-256 checked, nothing at runtime.
+# Needs the ml group (uv sync --group ml). CI's unit tests never run it; an eval job does.
+models:
+	uv run python infra/tools/fetch_models.py
+
 control-chars:
 	uv run python infra/checks/no_control_characters.py
 
@@ -48,8 +53,10 @@ sast:
 
 # Known vulnerabilities, then the 14-day rule for every pinned file (DECISIONS
 # 2026-10-12): a release younger than that is refused unless it fixes a CVE.
+# The whole lock is audited, every group included, not the installed environment:
+# CI never installs the optional ml group, and its packages are audited all the same.
 audit:
-	uv run pip-audit
+	@tmp=$$(mktemp) && uv export --frozen --all-packages --all-groups --no-emit-workspace -q -o "$$tmp" 		&& uv run pip-audit --require-hashes --disable-pip -r "$$tmp"; status=$$?; rm -f "$$tmp"; exit $$status
 	uv run python infra/checks/dependency_age.py
 
 ci: lint typecheck control-chars pii test

@@ -1,0 +1,30 @@
+# Local model weights the Resume Engine may load (docs/vetting/2026-10-18-ml-group.md,
+# DECISIONS 2026-10-18). Reviewed like a dependency bump: a new commit and new SHA-256s, with
+# the 14-day rule applied to the commit's date.
+#
+# Only `./tasks.ps1 models` (or `make models`) downloads, from
+# https://huggingface.co/<repo>/resolve/<commit>/<path>: a commit, never a branch. A file whose
+# SHA-256 differs is deleted. At runtime the files are opened by path and checked against these
+# hashes again; nothing downloads, and HF_HUB_OFFLINE=1 is set as a second lock.
+version: "2026.10.1"
+
+models:
+  embedding:
+    # Snowflake arctic-embed-s: Apache-2.0. Built on intfloat/e5-small-unsupervised (MIT,
+    # no supervised fine-tuning); its documented training data names no MS MARCO (DECISIONS
+    # 2026-10-18). Commit of 2024-12-04.
+    repo: Snowflake/snowflake-arctic-embed-s
+    commit: e596f507467533e48a2e17c007f0e1dacc837b33
+    licence: Apache-2.0
+    pooling: cls
+    dimensions: 384
+    max_tokens: 512
+    # Prefixed to queries (requirements) only, never to passages (facts), per the model card.
+    query_prefix: "Represent this sentence for searching relevant passages: "
+    files:
+      onnx/model.onnx:
+        sha256: 579c1f1778a0993eb0d2a1403340ffb491c769247fb46acc4f5cf8ac5b89c1e1
+        size: 133093492
+      tokenizer.json:
+        sha256: 91f1def9b9391fdabe028cd3f3fcc4efd34e5d1f08c3bf2de513ebb5911a1854
+        size: 711649

@@ -38,6 +38,12 @@ FORBIDDEN: dict[str, str] = {
     "httpx": "a network client: the engine makes no requests of its own",
     "requests": "a network client: the engine makes no requests of its own",
     "aiohttp": "a network client: the engine makes no requests of its own",
+    "urllib.request": "a network client: only infra/tools/fetch_models.py downloads model weights",
+    "huggingface_hub": "the Hub client: weights are files opened by path, never fetched (models.lock)",
+    "hf_xet": "the Hub's storage client: weights are files opened by path, never fetched",
+    "transformers": "a model loader that downloads at first use; the engine runs ONNX by path",
+    "sentence_transformers": "a model loader that downloads at first use; the engine runs ONNX by path",
+    "torch": "not a dependency (docs/vetting/2026-10-18-ml-group.md, option B)",
 }
 
 #: The parser is imported only for its geometric reader, which the ATS check (6a) uses to

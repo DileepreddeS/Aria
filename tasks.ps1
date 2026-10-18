@@ -5,7 +5,7 @@
     Usage:  ./tasks.ps1 <task>
     Tasks:  setup, up, down, kms-init, keys-init, migrate, anchor, test, test-db, lint,
             fmt, typecheck, control-chars, pii, secrets, audit, check, gateway, api, seed-me,
-            parser-image, browsers
+            parser-image, browsers, models
 
     CI uses the Makefile. This file is for local development on Windows.
 #>
@@ -95,7 +95,17 @@ switch ($Task) {
         Invoke-Step "gitleaks" { gitleaks dir . --redact --verbose }
     }
     "audit" {
-        Invoke-Step "pip-audit" { uv run pip-audit }
+        # The whole lock, every group included (the optional ml group too), not the installed environment.
+        Invoke-Step "pip-audit" {
+            $requirements = New-TemporaryFile
+            try {
+                uv export --frozen --all-packages --all-groups --no-emit-workspace -q -o $requirements
+                if ($LASTEXITCODE -ne 0) { throw "uv export failed" }
+                uv run pip-audit --require-hashes --disable-pip -r $requirements
+            } finally {
+                Remove-Item $requirements -ErrorAction SilentlyContinue
+            }
+        }
         Invoke-Step "dependency age (14 days, CVE fixes exempt)" { uv run python infra/checks/dependency_age.py }
     }
     "check" {
@@ -124,6 +134,12 @@ switch ($Task) {
         # or to aria_core: the API compares the image's fingerprint with the checkout
         # and will not start on a stale one.
         Invoke-Step "build the document parser image" { uv run python -m aria_document_parser.image build }
+    }
+    "models" {
+        # The local model weights engines/resume/aria_resume/models.lock pins, fetched from a
+        # commit URL and checked against their SHA-256; nothing downloads at runtime
+        # (docs/vetting/2026-10-18-ml-group.md). The ml group runs them: uv sync --group ml.
+        Invoke-Step "fetch the pinned model weights" { uv run python infra/tools/fetch_models.py }
     }
     "browsers" {
         # Resumes are printed through Playwright's Chromium, downloaded into the user's

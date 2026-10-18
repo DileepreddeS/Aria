@@ -1,9 +1,9 @@
 """Sentence embeddings for the matcher's ``semantic_sim``, behind an interface.
 
 The real model runs locally (RESUME_ENGINE §7: candidate data is not sent to a third
-party for matching) and is optional: its packages and weights are vetted in
-docs/vetting/2026-10-18-ml-group.md and added only once approved. Until then, and in CI
-always, :class:`WordHashEmbedder` stands in: deterministic, dependency-free, and good
+party for matching) and is optional: :class:`aria_resume.match.onnx_embedder.OnnxEmbedder`,
+in the ml group (docs/vetting/2026-10-18-ml-group.md). In CI, and wherever the weights are
+not installed, :class:`WordHashEmbedder` stands in: deterministic, dependency-free, and good
 enough to test that the matcher uses similarity, not to judge how well it does.
 """
 
@@ -24,8 +24,13 @@ class Embedder(Protocol):
     #: Recorded on every EvidenceMap, so a map can be explained with the model that made it.
     model_id: str
 
-    def embed(self, texts: Sequence[str]) -> list[Vector]:
-        """One unit-length vector per text, in order."""
+    def embed_queries(self, texts: Sequence[str]) -> list[Vector]:
+        """One unit-length vector per query (a requirement), in order. Retrieval models
+        prefix queries differently from the passages they are matched against."""
+        ...
+
+    def embed_documents(self, texts: Sequence[str]) -> list[Vector]:
+        """One unit-length vector per passage (a fact), in order."""
         ...
 
 
@@ -56,6 +61,12 @@ class WordHashEmbedder:
 
     def _bucket(self, word: str) -> int:
         return int.from_bytes(hashlib.blake2b(word.encode(), digest_size=4).digest(), "big") % self.dimensions
+
+    def embed_queries(self, texts: Sequence[str]) -> list[Vector]:
+        return self.embed(texts)
+
+    def embed_documents(self, texts: Sequence[str]) -> list[Vector]:
+        return self.embed(texts)
 
     def embed(self, texts: Sequence[str]) -> list[Vector]:
         vectors: list[Vector] = []
