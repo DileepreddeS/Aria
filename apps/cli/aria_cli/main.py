@@ -183,6 +183,44 @@ def _cmd_withdraw(client: AriaClient, args: argparse.Namespace) -> int:
     return 0
 
 
+def _edges(edges: list[dict[str, Any]]) -> str:
+    return ", ".join(f"{edge['skill']} ({edge['surface_form']})" for edge in edges)
+
+
+def _cmd_retag(client: AriaClient, args: argparse.Namespace) -> int:
+    """Show every skill-edge change, ask, and write exactly what was shown."""
+    preview = client.retag_preview()
+    print(
+        f"re-tagging with taxonomy {preview['taxonomy_version']}: skill edges only;"
+        " no fact's text or approval changes"
+    )
+    for fact in preview["facts"]:
+        print(f"\n  fact {fact['fact_id']}  ({fact['status']})")
+        print(f"    {_truncate(fact['text'])}")
+        if fact["removed"]:
+            print(f"    - {_edges(fact['removed'])}")
+        if fact["added"]:
+            print(f"    + {_edges(fact['added'])}")
+    for entry in preview["declared"]:
+        if entry["left_because"]:
+            print(f"\n  declared {entry['surface_form']!r}: left as {entry['old']} ({entry['left_because']})")
+        else:
+            print(f"\n  declared {entry['surface_form']!r}: {entry['old']} -> {entry['new']}")
+    if not preview["changes"]:
+        print("\n  nothing to change")
+        return 0
+    try:
+        answer = input(f"\napply these {preview['changes']} change(s)? [y/N] ")
+    except EOFError:
+        answer = ""
+    if answer.strip().lower() not in ("y", "yes"):
+        print("nothing changed")
+        return 1
+    done = client.retag(preview["fingerprint"])
+    print(f"re-tagged: {done['changes']} change(s) written")
+    return 0
+
+
 def _cmd_review(client: AriaClient, args: argparse.Namespace) -> int:
     result = client.review(args.upload_id)
     print(f"upload {result['upload_id']} reviewed at {result['reviewed_at']}")
@@ -407,6 +445,12 @@ def build_parser() -> argparse.ArgumentParser:
     withdraw.add_argument("upload_id")
     withdraw.add_argument("--yes", action="store_true", help="do not ask before deleting")
     withdraw.set_defaults(handler=_cmd_withdraw)
+
+    # No --yes: every change is shown and confirmed (DECISIONS 2026-10-17).
+    retag = subparsers.add_parser(
+        "retag", help="re-tag skill edges with the current taxonomy (shows every change and asks first)"
+    )
+    retag.set_defaults(handler=_cmd_retag)
 
     review = subparsers.add_parser(
         "review", help="record that you checked a flagged upload's lines and they are right"

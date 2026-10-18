@@ -38,6 +38,11 @@ __all__ = [
     "QuestionOut",
     "ReconsiderQuestionResponse",
     "RejectRequest",
+    "RetagDeclared",
+    "RetagEdge",
+    "RetagFact",
+    "RetagRequest",
+    "RetagResponse",
     "ReviewResponse",
     "UploadResponse",
     "WithdrawalResponse",
@@ -120,6 +125,48 @@ class ReconsiderQuestionResponse(Body):
     #: so the question was deleted and the next import asks it afresh.
     outcome: str
     detail: str
+
+
+class RetagEdge(Body):
+    skill: str
+    #: The candidate's own spelling, which decides the skill.
+    surface_form: str
+
+
+class RetagFact(Body):
+    """One fact whose skill edges change. Its text and status are shown, never changed."""
+
+    fact_id: uuid.UUID
+    status: str
+    text: str
+    removed: list[RetagEdge]
+    added: list[RetagEdge]
+
+
+class RetagDeclared(Body):
+    declared_id: uuid.UUID
+    surface_form: str
+    old: str
+    #: The skill its spelling names now; None when it names none.
+    new: str | None
+    #: Set when it is left as it is, and why.
+    left_because: str | None = None
+
+
+class RetagResponse(Body):
+    """Re-tagging the graph's skill edges with the current taxonomy: preview, or done."""
+
+    taxonomy_version: str
+    #: What the candidate confirms: applying refuses unless the plan still has it.
+    fingerprint: str
+    applied: bool = False
+    changes: int
+    facts: list[RetagFact]
+    declared: list[RetagDeclared]
+
+
+class RetagRequest(Body):
+    fingerprint: str = Field(min_length=64, max_length=64)
 
 
 class WithdrawalResponse(Body):

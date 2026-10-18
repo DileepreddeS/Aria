@@ -1280,3 +1280,48 @@ class TestReviewingAFlaggedUpload:
 
     async def test_an_unknown_upload_is_a_404(self, client: httpx.AsyncClient) -> None:
         assert (await client.post(f"/uploads/{new_id()}/review")).status_code == 404
+
+
+class TestRetag:
+    """GET /graph/retag shows; POST writes exactly what was shown (DECISIONS 2026-10-17)."""
+
+    async def _old_fact(self, engine: AsyncEngine, tenant: TenantId, candidate: uuid.UUID) -> uuid.UUID:
+        from aria_core.graph.facts import create_draft_fact
+        from aria_core.graph.status import GraphSource
+
+        async with tenant_transaction(engine, tenant) as session:
+            # Tagged as taxonomy 2026.10.2 did: RabbitMQ filed under message queues.
+            return await create_draft_fact(
+                session,
+                tenant_id=tenant,
+                candidate_id=candidate,
+                text="Wired RabbitMQ between 5 core services",
+                source=GraphSource.RESUME_IMPORT,
+                skills=[("message_queue", "RabbitMQ")],
+            )
+
+    async def test_preview_then_apply(
+        self, client: httpx.AsyncClient, engine: AsyncEngine, tenant_a: TenantId, candidate_id: uuid.UUID
+    ) -> None:
+        fact_id = await self._old_fact(engine, tenant_a, candidate_id)
+        preview = (await client.get("/graph/retag")).json()
+        assert preview["applied"] is False
+        (fact,) = preview["facts"]
+        assert fact["fact_id"] == str(fact_id)
+        assert fact["removed"] == [{"skill": "message_queue", "surface_form": "RabbitMQ"}]
+        assert fact["added"] == [{"skill": "rabbitmq", "surface_form": "RabbitMQ"}]
+        assert (await client.get("/graph/retag")).json()["fingerprint"] == preview["fingerprint"]
+
+        done = await client.post("/graph/retag", json={"fingerprint": preview["fingerprint"]})
+        assert done.status_code == 200, done.text
+        assert done.json()["applied"] is True
+        assert (await client.get("/graph/retag")).json()["facts"] == []
+
+    async def test_a_fingerprint_that_no_longer_matches_is_a_conflict(
+        self, client: httpx.AsyncClient, engine: AsyncEngine, tenant_a: TenantId, candidate_id: uuid.UUID
+    ) -> None:
+        await self._old_fact(engine, tenant_a, candidate_id)
+        refused = await client.post("/graph/retag", json={"fingerprint": "0" * 64})
+        assert refused.status_code == 409
+        assert "nothing was written" in refused.json()["detail"]
+        assert len((await client.get("/graph/retag")).json()["facts"]) == 1

@@ -663,3 +663,76 @@ class TestWhereTheTokenComesFrom:
         monkeypatch.setattr("aria_cli.main._from_env_file", lambda: ("", ""))
         parser = build_parser()
         assert parser.parse_args(["health"]).url == DEFAULT_URL
+
+
+class TestRetag:
+    FINGERPRINT = "a" * 64
+    PREVIEW: ClassVar[dict[str, Any]] = {
+        "taxonomy_version": "2026.10.3",
+        "fingerprint": FINGERPRINT,
+        "applied": False,
+        "changes": 3,
+        "facts": [
+            {
+                "fact_id": FACT_ID,
+                "status": "approved",
+                "text": "Wired RabbitMQ async messaging between 5 core services",
+                "removed": [{"skill": "message_queue", "surface_form": "RabbitMQ"}],
+                "added": [{"skill": "rabbitmq", "surface_form": "RabbitMQ"}],
+            }
+        ],
+        "declared": [
+            {
+                "declared_id": str(uuid.uuid4()),
+                "surface_form": "S3",
+                "old": "aws",
+                "new": "aws_s3",
+                "left_because": None,
+            }
+        ],
+    }
+
+    def _recorder(self) -> Recorder:
+        return Recorder(
+            {
+                ("GET", "/graph/retag"): self.PREVIEW,
+                ("POST", "/graph/retag"): {**self.PREVIEW, "applied": True},
+            }
+        )
+
+    def test_every_change_is_shown_and_no_means_nothing_is_written(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        recorder = self._recorder()
+        monkeypatch.setattr("builtins.input", lambda _prompt: "n")
+        assert run(recorder, ["retag"], monkeypatch) == 1
+        out = capsys.readouterr().out
+        assert "no fact's text or approval changes" in out
+        assert "- message_queue (RabbitMQ)" in out and "+ rabbitmq (RabbitMQ)" in out
+        assert "declared 'S3': aws -> aws_s3" in out
+        assert "nothing changed" in out
+        assert [request.method for request in recorder.seen] == ["GET"]
+
+    def test_yes_writes_exactly_what_was_shown(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        recorder = self._recorder()
+        monkeypatch.setattr("builtins.input", lambda _prompt: "y")
+        assert run(recorder, ["retag"], monkeypatch) == 0
+        assert "3 change(s) written" in capsys.readouterr().out
+        assert [request.method for request in recorder.seen] == ["GET", "POST"]
+        assert json.loads(recorder.seen[1].content) == {"fingerprint": self.FINGERPRINT}
+
+    def test_no_terminal_to_ask_is_a_no(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        recorder = self._recorder()
+
+        def closed(_prompt: str) -> str:
+            raise EOFError
+
+        monkeypatch.setattr("builtins.input", closed)
+        assert run(recorder, ["retag"], monkeypatch) == 1
+        assert [request.method for request in recorder.seen] == ["GET"]
+
+    def test_there_is_no_flag_to_skip_the_question(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        with pytest.raises(SystemExit):
+            run(self._recorder(), ["retag", "--yes"], monkeypatch)

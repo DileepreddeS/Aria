@@ -114,6 +114,12 @@ class AriaClient:
     def review(self, upload_id: uuid.UUID | str) -> dict[str, Any]:
         return dict(self._request("POST", f"/uploads/{upload_id}/review", json={}))
 
+    def retag_preview(self) -> dict[str, Any]:
+        return dict(self._request("GET", "/graph/retag"))
+
+    def retag(self, fingerprint: str) -> dict[str, Any]:
+        return dict(self._request("POST", "/graph/retag", json={"fingerprint": fingerprint}))
+
     def lines(self, upload_id: uuid.UUID | str) -> dict[str, Any]:
         return dict(self._request("GET", f"/uploads/{upload_id}/lines"))
 

@@ -75,6 +75,7 @@ class AuditAction(StrEnum):
     GRAPH_IMPORT_REFUSED = "graph.import_refused"
     #: A superseded upload's drafts and open questions deleted at the candidate's request.
     GRAPH_WITHDRAWN = "graph.withdrawn"
+    GRAPH_RETAGGED = "graph.retagged"
     GRAPH_ENTITY_APPROVED = "graph_entity.approved"
     GRAPH_ENTITY_REJECTED = "graph_entity.rejected"
     GRAPH_ENTITY_RECONSIDERED = "graph_entity.reconsidered"

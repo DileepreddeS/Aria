@@ -200,7 +200,9 @@ async def facts_for_deduplication(
     The status comes back with every row rather than being filtered here, because the
     caller's job is to treat the states differently. It is a read path, so it is named
     in ``test_architecture_verified_only.py`` — nothing may use it to put text on a
-    resume, which is what :func:`approved_facts` is for.
+    resume, which is what :func:`approved_facts` is for. Re-tagging
+    (:mod:`aria_core.graph.retag`) reads it too: it changes the skill edges of every
+    fact, whatever its state, and never puts text anywhere.
     """
     rows = (
         await session.execute(
