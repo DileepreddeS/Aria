@@ -280,3 +280,71 @@ def test_the_heading_vocabulary_folds_case_and_punctuation() -> None:
     assert section_for_heading("Work Experience:") is SectionKind.EXPERIENCE
     assert section_for_heading("SKILLS & TOOLS") is SectionKind.SKILLS
     assert section_for_heading("Berufserfahrung") is None
+
+
+class TestTheNameOfAnEntryInCapitals:
+    """An employer or project written in capitals under a real heading (S0-24).
+
+    The Resume Engine's own page printed "VERA-RAG" bold under PROJECTS; read as a heading,
+    it took its bullets with it into an unknown section.
+    """
+
+    def _page(self, *, rules: bool, project_rule: bool = False) -> list[LineClass]:
+        return _kinds(
+            _line("EXPERIENCE", top=100.0, bold=True, rule_below=rules),
+            _line("Nordvale Consulting - Software Engineer", top=114.0, bold=True),
+            _line("Built 15+ React screens", top=128.0, marker="\u2022"),
+            _line("PROJECTS", top=150.0, bold=True, rule_below=rules),
+            _line("VERA-RAG", top=164.0, bold=True, rule_below=project_rule),
+            _line("Built a closed-loop RAG system", top=178.0, marker="\u2022"),
+            *FILLER,
+        )
+
+    def test_unlike_the_page_s_headings_it_is_an_entry(self) -> None:
+        kinds = self._page(rules=True)
+        assert kinds[3] is LineClass.SECTION_HEADER
+        assert kinds[4] is LineClass.ENTRY_HEADER
+
+    def test_like_the_page_s_headings_it_is_still_a_heading(self) -> None:
+        # The same rule beneath it as every known heading: the page's own style says heading.
+        assert self._page(rules=True, project_rule=True)[4] is LineClass.SECTION_HEADER
+
+    def test_with_no_style_to_compare_capitals_still_make_a_heading(self) -> None:
+        # Known headings without rules or size: nothing sets an unknown capitals line apart.
+        assert self._page(rules=False)[4] is LineClass.SECTION_HEADER
+
+
+class TestANameAlone:
+    def test_a_bold_name_over_a_bullet_is_an_entry(self) -> None:
+        kinds = _kinds(
+            _line("PROJECTS", top=100.0, bold=True, rule_below=True),
+            _line("Vera Retrieval", top=114.0, bold=True),
+            _line("Built a closed-loop RAG system", top=128.0, marker="\u2022"),
+            *FILLER,
+        )
+        assert kinds[1] is LineClass.ENTRY_HEADER
+
+    def test_a_label_over_a_bullet_is_not(self) -> None:
+        kinds = _kinds(
+            _line("Nordvale Consulting - Software Engineer", top=100.0, bold=True),
+            _line("Key achievements:", top=114.0, bold=True),
+            _line("Built 15+ React screens", top=128.0, marker="\u2022"),
+            *FILLER,
+        )
+        assert kinds[1] is not LineClass.ENTRY_HEADER
+
+    def test_a_bold_line_with_no_bullet_beneath_is_not(self) -> None:
+        kinds = _kinds(
+            _line("Vera Retrieval", top=100.0, bold=True),
+            _line("A plain line follows", top=114.0),
+            *FILLER,
+        )
+        assert kinds[0] is not LineClass.ENTRY_HEADER
+
+    def test_a_regular_weight_line_over_a_bullet_is_not(self) -> None:
+        kinds = _kinds(
+            _line("Vera Retrieval", top=100.0),
+            _line("Built a closed-loop RAG system", top=114.0, marker="\u2022"),
+            *FILLER,
+        )
+        assert kinds[0] is not LineClass.ENTRY_HEADER

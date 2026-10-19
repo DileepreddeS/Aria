@@ -139,6 +139,28 @@ def _section_header(line: LayoutLine, body: float) -> tuple[bool, SectionKind | 
     return True, known or SectionKind.UNKNOWN, certain
 
 
+def _heading_style(lines: list[LayoutLine], body: float) -> tuple[bool, bool]:
+    """(a rule below, a larger size): what every heading the vocabulary knows has in common.
+
+    A page sets its headings one way. When every known heading carries a rule beneath it, or
+    is set larger than the body, an all-capitals line that does not is something else: an
+    employer or a project written in capitals ("VERA-RAG", "IBM") under a real heading,
+    which read as a heading would take its bullets with it. With no known heading on the
+    page, nothing is required beyond the rule above.
+    """
+    known = [
+        line
+        for line in lines
+        if _section_header(line, body)[0] and section_for_heading(line.text) is not None
+    ]
+    if not known:
+        return False, False
+    return (
+        all(line.rule_below for line in known),
+        all(line.font_size > body * HEADER_SIZE_RATIO for line in known),
+    )
+
+
 def leading_segments(line: LayoutLine) -> int:
     """How many segments, from the left, touch one another: the header's own phrase.
 
@@ -180,11 +202,28 @@ def _entry_header(line: LayoutLine, band: float) -> tuple[bool, str, bool]:
     return True, date_text, line.weight_source is not WeightSource.GLYPH_DENSITY
 
 
+#: A name alone: a project or employer with no title, no separator and no dates.
+_MAX_NAME_WORDS = 8
+
+
+def _name_alone(line: LayoutLine, following: LayoutLine | None) -> bool:
+    """A short line wholly in bold, directly followed by a bullet: an entry's name with nothing
+    after it ("**VERA-RAG**" over its bullets). Not a label ("Key achievements:") and not a
+    sentence. Without the bullet beneath, a bold line is left alone."""
+    if following is None or not following.marker or line.marker or not line.segments:
+        return False
+    if not (line.bold and all(segment.bold is not False for segment in line.segments)):
+        return False
+    text = line.text.strip()
+    return len(text.split()) <= _MAX_NAME_WORDS and not text.endswith((":", ".", ",", ";"))
+
+
 def classify(document: LayoutDocument) -> list[ClassifiedLine]:
     """Every line of the document, in reading order, with what it is."""
     lines = list(document.lines)
     body = _body_size(lines)
     bands = _content_band(lines)
+    needs_rule, needs_size = _heading_style(lines, body)
     result: list[ClassifiedLine] = []
     named = False
     in_opening = True
@@ -201,6 +240,16 @@ def classify(document: LayoutDocument) -> list[ClassifiedLine]:
             continue
 
         heading, section, certain = _section_header(line, body)
+        if (
+            heading
+            and section is SectionKind.UNKNOWN
+            and (
+                (needs_rule and not line.rule_below)
+                or (needs_size and line.font_size <= body * HEADER_SIZE_RATIO)
+            )
+        ):
+            # Unlike every heading this page names, so not one (see _heading_style).
+            heading = False
         if heading:
             in_opening = False
             result.append(ClassifiedLine(line, LineClass.SECTION_HEADER, section=section, certain=certain))
@@ -221,6 +270,8 @@ def classify(document: LayoutDocument) -> list[ClassifiedLine]:
                 continue
 
         header, date_text, certain = _entry_header(line, bands[(line.page, line.column)])
+        if not header and _name_alone(line, lines[position + 1] if position + 1 < len(lines) else None):
+            header, date_text, certain = True, "", line.weight_source is not WeightSource.GLYPH_DENSITY
         if header:
             result.append(ClassifiedLine(line, LineClass.ENTRY_HEADER, date_text=date_text, certain=certain))
             continue

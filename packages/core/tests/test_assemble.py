@@ -181,3 +181,18 @@ def test_text_before_the_first_entry_of_a_section_is_reported_not_guessed_at() -
     assert [(item.first_line, item.reason) for item in plan.unparsed] == [
         (4, "not part of any entry in its section")
     ]
+
+
+def test_a_project_named_in_capitals_is_a_project_with_its_bullets() -> None:
+    # Every heading on the page carries a rule; the project's name, in capitals, does not.
+    # Read as a heading it took its bullet into an unknown section (S0-24).
+    plan = _plan(
+        *HEADER,
+        _line("PROJECTS", top=90.0, bold=True, rule_below=True),
+        _line("VERA-RAG", top=110.0, bold=True),
+        _line("Built a closed-loop RAG system with hybrid retrieval", top=124.0, marker="*"),
+    )
+    (project,) = plan.projects
+    assert project.name == "VERA-RAG"
+    assert len(project.facts) == 1
+    assert plan.unparsed == ()
