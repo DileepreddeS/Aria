@@ -5,7 +5,7 @@
     Usage:  ./tasks.ps1 <task>
     Tasks:  setup, up, down, kms-init, keys-init, migrate, anchor, test, test-db, lint,
             fmt, typecheck, control-chars, pii, secrets, audit, check, gateway, api, seed-me,
-            parser-image, browsers, models
+            parser-image, browsers, models, eval
 
     CI uses the Makefile. This file is for local development on Windows.
 #>
@@ -84,6 +84,7 @@ switch ($Task) {
         Invoke-Step "mypy (api)" { uv run mypy apps/api }
         Invoke-Step "mypy (cli)" { uv run mypy apps/cli }
         Invoke-Step "mypy (resume)" { uv run mypy engines/resume }
+        Invoke-Step "mypy (evals)" { uv run mypy evals }
     }
     "control-chars" {
         Invoke-Step "no stray control characters" { uv run python infra/checks/no_control_characters.py }
@@ -140,6 +141,11 @@ switch ($Task) {
         # commit URL and checked against their SHA-256; nothing downloads at runtime
         # (docs/vetting/2026-10-18-ml-group.md). The ml group runs them: uv sync --group ml.
         Invoke-Step "fetch the pinned model weights" { uv run python infra/tools/fetch_models.py }
+    }
+    "eval" {
+        # The synthetic resume eval in CI's configuration; extra arguments pass through
+        # (--models to use the local weights, --update-baseline to rewrite the baseline on purpose).
+        Invoke-Step "resume eval (synthetic)" { uv run python -m evals.run resume-synthetic @Rest }
     }
     "browsers" {
         # Resumes are printed through Playwright's Chromium, downloaded into the user's

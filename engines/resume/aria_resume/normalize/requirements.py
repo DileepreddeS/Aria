@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from itertools import pairwise
 
 from aria_core.importer.skills import tag_skills
 from aria_core.taxonomy.model import SkillCategory, SkillTaxonomy
@@ -55,6 +56,16 @@ _SOFTENS_LINE = re.compile(
 _SOFTENS_REST = re.compile(r"\b(?:ideally|preferably|bonus if|a plus if)\b", re.IGNORECASE)
 _EXAMPLES = re.compile(r"\b(?:such as|like|e\.g\.|for example|including)\b", re.IGNORECASE)
 _ALTERNATIVE = re.compile(r"\bor\b|/", re.IGNORECASE)
+#: Where one requirement in a line ends and the next begins: "fluent in Python *and* have used
+#: PyTorch or Hugging Face" is two, and only the second has alternatives.
+_CLAUSE = re.compile(r"\band\b|;", re.IGNORECASE)
+#: The field a degree is in: "in Computer Science, Statistics or a related field". A field of
+#: study is not a skill the posting asks for.
+_DEGREE_FIELD = re.compile(
+    r"\b(?:degree|B\.?S\.?|B\.?A\.?|BSc|M\.?S\.?|MSc|Ph\.?D\.?|bachelor'?s|master'?s)\s+(?:degree\s+)?in\s+"
+    r"(?P<field>[^.;]*?)(?=\s+(?:is|are|or equivalent|preferred|required)\b|[.;]|$)",
+    re.IGNORECASE,
+)
 
 _DEGREE_LEVELS = (
     ("associate", re.compile(r"\bassociate'?s\b", re.IGNORECASE)),
@@ -160,17 +171,30 @@ class _Collector:
 
         softened = _SOFTENS_REST.search(text)
         examples = _EXAMPLES.search(text)
-        skills = list(tag_skills(text, self.taxonomy).skills)
+        fields = [match.span("field") for match in _DEGREE_FIELD.finditer(text.replace("\u2019", "'"))]
+        skills = [
+            skill
+            for skill in tag_skills(text, self.taxonomy).skills
+            if not any(start <= text.find(skill.surface_form) < end for start, end in fields)
+        ]
         before_examples = [s for s in skills if not examples or text.find(s.surface_form) < examples.start()]
         after_examples = [s for s in skills if s not in before_examples]
-        # Alternatives among the skills named before any "such as"; the examples after it
-        # are alternatives to each other, the concept before it stands.
-        main_group = (
-            self.new_group()
-            if len(before_examples) > 1
-            and _ALTERNATIVE.search(text[: examples.start() if examples else len(text)])
-            else None
-        )
+        # Alternatives within one clause, among the skills named before any "such as"; the
+        # examples after it are alternatives to each other, the concept before it stands.
+        cut = examples.start() if examples else len(text)
+        bounds = [0, *(match.end() for match in _CLAUSE.finditer(text[:cut])), cut]
+        clause_groups: dict[int, str] = {}
+        for index, (start, end) in enumerate(pairwise(bounds)):
+            members = [s for s in before_examples if start <= text.find(s.surface_form) < end]
+            if len(members) > 1 and _ALTERNATIVE.search(text[start:end]):
+                clause_groups[index] = self.new_group()
+
+        def clause_group(position: int) -> str | None:
+            for index, (start, end) in enumerate(pairwise(bounds)):
+                if start <= position < end:
+                    return clause_groups.get(index)
+            return None
+
         example_group = self.new_group() if len(after_examples) > 1 else None
         for skill in skills:
             placed = True
@@ -184,7 +208,9 @@ class _Collector:
                 must_have=must_have and not soft_here,
                 # A general floor is not this skill's; only years the line puts on skills.
                 min_years=skill_years,
-                group=example_group if skill in after_examples else main_group,
+                group=example_group
+                if skill in after_examples
+                else clause_group(text.find(skill.surface_form)),
                 # A responsibility implies a skill; it does not say the skill stands alone.
                 grouping=item.section is not JDSection.RESPONSIBILITIES,
             )

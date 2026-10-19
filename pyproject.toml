@@ -126,6 +126,7 @@ testpaths = [
     "apps/api/tests",
     "apps/cli/tests",
     "engines/resume/tests",
+    "evals/tests",
 ]
 asyncio_mode = "auto"
 # importlib import mode: each workspace member has its own tests directory, and the

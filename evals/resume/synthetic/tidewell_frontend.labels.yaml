@@ -1,0 +1,18 @@
+# Labels for tidewell_frontend.txt, written from the posting text (2026-10-19).
+# A failing check is never fixed by editing a label: a label changes only after re-reading
+# the posting, with the reason recorded beside it (DECISIONS 2026-10-19).
+role_type: frontend
+min_years: 5
+education: null
+work_mode: remote
+sponsorship: false
+citizenship: true
+# The note to AI assistants, and the request for a passport and bank details.
+suspicious: [addressed_to_ai, asks_for_documents]
+# Qualifications: React and TypeScript; one of Zustand, MobX or Redux.
+must_have:
+  - react
+  - typescript
+  - zustand|mobx|redux
+# Next.js and WCAG (duties); HIPAA, Playwright or Cypress (preferred).
+skills: [react, typescript, zustand, mobx, redux, nextjs, wcag, hipaa, playwright, cypress]

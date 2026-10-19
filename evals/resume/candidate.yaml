@@ -1,0 +1,77 @@
+# The synthetic candidate the resume evals build for: Jordan A. Rivera, the repository's
+# synthetic identity (CLAUDE.md). Shaped as a CandidateSnapshot: approved rows only, as the
+# engine receives them in production. Three years full-time over two roles, one project, one
+# degree in progress.
+candidate_id: 00000000-0000-0000-0000-000000000009
+taken_at: "2026-10-19T00:00:00Z"
+as_of: "2026-10-01"
+taxonomy_version: "2026.10.4"
+contact:
+  full_name: Jordan A. Rivera
+  email: jordan.rivera@example.com
+  phone: (555) 014-2288
+  location_city: Portland
+  location_region: OR
+  linkedin_url: https://www.linkedin.com/in/jordan-rivera-example
+  github_url: https://github.com/jordan-rivera-example
+experiences:
+  - experience_id: 00000000-0000-0000-0000-000000000001
+    employer: Nordvale Consulting
+    title: Software Engineer
+    kind: professional
+    location_city: Portland
+    location_region: OR
+    start_month: "2024-02-01"
+    end_month: "2025-07-01"
+  - experience_id: 00000000-0000-0000-0000-000000000002
+    employer: Brightfold Systems
+    title: Associate Software Engineer
+    kind: professional
+    start_month: "2022-07-01"
+    end_month: "2023-12-01"
+projects:
+  - project_id: 00000000-0000-0000-0000-000000000003
+    name: VERA-RAG
+    kind: personal
+education:
+  - education_id: 00000000-0000-0000-0000-000000000007
+    school: Cascadia State University
+    degree: M.S.
+    field_of_study: Computer Science
+    end_month: "2026-12-01"
+facts:
+  - fact_id: 00000000-0000-0000-0000-000000000065
+    text: Cut p95 API latency by 30% with Redis caching
+    experience_id: 00000000-0000-0000-0000-000000000001
+    skills: [{canonical: redis, surface_form: Redis}]
+    metrics: [{exact_value: "30%"}]
+  - fact_id: 00000000-0000-0000-0000-000000000066
+    text: Built 15+ React screens for the checkout platform
+    experience_id: 00000000-0000-0000-0000-000000000001
+    skills: [{canonical: react, surface_form: React}]
+    metrics: [{exact_value: "15+"}]
+  - fact_id: 00000000-0000-0000-0000-00000000006a
+    text: Designed cloud-native solutions for the checkout platform on AWS
+    experience_id: 00000000-0000-0000-0000-000000000001
+    skills: [{canonical: aws, surface_form: AWS}]
+  - fact_id: 00000000-0000-0000-0000-000000000067
+    text: Shipped 8 full-stack applications with Node.js and PostgreSQL
+    experience_id: 00000000-0000-0000-0000-000000000002
+    skills: [{canonical: nodejs, surface_form: Node.js}, {canonical: postgresql, surface_form: PostgreSQL}]
+    metrics: [{exact_value: "8"}]
+  - fact_id: 00000000-0000-0000-0000-000000000068
+    text: Led three engineers moving the billing service to Python 3.12 in March 2023
+    experience_id: 00000000-0000-0000-0000-000000000002
+    skills: [{canonical: python, surface_form: Python}]
+  - fact_id: 00000000-0000-0000-0000-000000000069
+    text: Built a closed-loop RAG system with hybrid retrieval
+    project_id: 00000000-0000-0000-0000-000000000003
+    skills: [{canonical: rag, surface_form: RAG}]
+declared_skills:
+  - {canonical: typescript, surface_form: TypeScript}
+  - {canonical: sql, surface_form: SQL}
+skill_years:
+  - {canonical: python, full_time_months: 6, fact_count: 1}
+  - {canonical: react, full_time_months: 18, fact_count: 1}
+  - {canonical: redis, full_time_months: 18, fact_count: 1}
+full_time_months: 36

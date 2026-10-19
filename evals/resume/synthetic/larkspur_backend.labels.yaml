@@ -1,0 +1,21 @@
+# Labels for larkspur_backend.txt, written from the posting text (2026-10-19).
+# A failing check is never fixed by editing a label: a label changes only after re-reading
+# the posting, with the reason recorded beside it (DECISIONS 2026-10-19).
+role_type: backend
+min_years: 1
+education: bachelor
+work_mode: hybrid
+sponsorship: true
+citizenship: false
+suspicious: []
+# Must-haves from the Requirements list. "a|b" is a group of alternatives ("Python or Go").
+# SQL is required; "ideally Postgres" makes Postgres a preference, not a must-have.
+must_have:
+  - python|golang
+  - sql
+  - docker
+  - kubernetes
+# Every skill the posting names in its requirements, preferences and duties, at any weight:
+# Postgres (ideally; and the schemas duty), Kafka or RabbitMQ and MariaDB (nice to have),
+# Node and REST APIs (the first duty), on-call (the third duty). Zorblang is unknown.
+skills: [python, golang, sql, postgresql, docker, kubernetes, kafka, rabbitmq, mariadb, nodejs, rest_api, sre]

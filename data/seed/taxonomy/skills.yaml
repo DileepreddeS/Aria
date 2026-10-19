@@ -25,7 +25,7 @@
 #
 # Bump `version` on every change: it is recorded in each resume's artifacts, so a
 # resume can be explained with the taxonomy that produced it.
-version: "2026.10.3"
+version: "2026.10.4"
 
 skills:
   # ----------------------------------------------------------------- languages
@@ -1046,7 +1046,8 @@ skills:
   - id: huggingface
     display: Hugging Face
     category: ml
-    aliases: [hugging face, hf transformers]
+    # "Hugging Face transformers" is this library by its full name, not the architecture.
+    aliases: [hugging face, hf transformers, hugging face transformers, huggingface transformers]
     implies: [transformers, python]
   - id: llm
     display: large language models

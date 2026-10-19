@@ -374,7 +374,14 @@ class TestTheSeedNamesEachProductOnce:
 
     @pytest.mark.parametrize(
         ("term", "expected"),
-        [("Postgres", "postgresql"), ("k8s", "kubernetes"), ("golang", "golang"), ("ReactJS", "react")],
+        [
+            ("Postgres", "postgresql"),
+            ("k8s", "kubernetes"),
+            ("golang", "golang"),
+            ("ReactJS", "react"),
+            # The library by its full name (taxonomy 2026.10.4), not the architecture.
+            ("Hugging Face transformers", "huggingface"),
+        ],
     )
     def test_a_spelling_is_still_an_alias(self, term: str, expected: str) -> None:
         assert load_default_taxonomy().resolve(term) == expected

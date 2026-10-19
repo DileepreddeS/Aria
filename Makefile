@@ -1,5 +1,5 @@
 # CI task definitions. Local development on Windows uses ./tasks.ps1.
-.PHONY: install lint typecheck test secrets sast audit control-chars pii parser-image browsers models ci
+.PHONY: install lint typecheck test eval secrets sast audit control-chars pii parser-image browsers models ci
 
 install:
 	uv sync --all-packages --frozen
@@ -17,9 +17,15 @@ typecheck:
 	uv run mypy apps/api
 	uv run mypy apps/cli
 	uv run mypy engines/resume
+	uv run mypy evals
 
 test:
 	uv run pytest
+
+# The resume eval on the synthetic postings, in the CI configuration (the fake embedder): its
+# gates fail the run, and so does any difference from the committed baseline. Needs Chromium.
+eval:
+	uv run python -m evals.run resume-synthetic
 
 # The container uploads are parsed in. The docker-marked tests need it, and in CI a
 # missing image fails them rather than skipping them.

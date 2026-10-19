@@ -1,0 +1,24 @@
+# Labels for corvane_ai.txt, written from the posting text (2026-10-19).
+# A failing check is never fixed by editing a label: a label changes only after re-reading
+# the posting, with the reason recorded beside it (DECISIONS 2026-10-19).
+role_type: ai
+min_years: 2
+# "A Master's degree ... is preferred but not required": the level the posting names.
+education: master
+work_mode: onsite
+sponsorship: true
+citizenship: false
+suspicious: []
+# Who you are: machine learning systems; Python, and one of PyTorch or Hugging Face's
+# transformers library; a vector database, with Pinecone, Qdrant or pgvector as examples.
+must_have:
+  - machine_learning
+  - python
+  - pytorch|huggingface
+  - vector_database
+  - pinecone|qdrant|pgvector
+# RAG (the first duty); fine-tuning LLMs with LoRA and LangGraph (bonus points). "Hugging Face
+# transformers" names the Hugging Face library, not the transformers architecture; Statistics
+# is the field of the preferred degree, not a skill asked for.
+skills:
+  [rag, machine_learning, python, pytorch, huggingface, vector_database, pinecone, qdrant, pgvector, fine_tuning, llm, lora, langgraph]

@@ -1,0 +1,63 @@
+{
+  "configuration": {
+    "embedder": "fake:word-hash-256",
+    "implied_skills": "2026.10.1",
+    "render_template": "1",
+    "style": "2026.10.1",
+    "taxonomy": "2026.10.4",
+    "templates": "ai@2026.10.1, backend@2026.10.1, frontend@2026.10.1"
+  },
+  "note": "The gates run on three synthetic postings: they catch breakage, not subtle regression. Label agreement tests the parser's consistency with labels written by the same author.",
+  "passed": true,
+  "postings": [
+    {
+      "gates": {
+        "ats_findings": 0,
+        "banned_words": 0,
+        "label_mismatches": [],
+        "layout_findings": 0,
+        "one_page": true,
+        "truth_violations": 0
+      },
+      "name": "corvane_ai",
+      "reported": {
+        "coverage": 0.3333,
+        "fit": "weak",
+        "role_type": "ai"
+      }
+    },
+    {
+      "gates": {
+        "ats_findings": 0,
+        "banned_words": 0,
+        "label_mismatches": [],
+        "layout_findings": 0,
+        "one_page": true,
+        "truth_violations": 0
+      },
+      "name": "larkspur_backend",
+      "reported": {
+        "coverage": 0.5,
+        "fit": "ok",
+        "role_type": "backend"
+      }
+    },
+    {
+      "gates": {
+        "ats_findings": 0,
+        "banned_words": 0,
+        "label_mismatches": [],
+        "layout_findings": 0,
+        "one_page": true,
+        "truth_violations": 0
+      },
+      "name": "tidewell_frontend",
+      "reported": {
+        "coverage": 0.25,
+        "fit": "no_fit",
+        "role_type": "frontend"
+      }
+    }
+  ],
+  "suite": "resume-synthetic"
+}

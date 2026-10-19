@@ -176,3 +176,34 @@ class TestSoftening:
     def test_a_slash_is_an_alternative(self, taxonomy: SkillTaxonomy) -> None:
         reqs = _one("Java/Kotlin", taxonomy)
         assert reqs["skill:java"].any_of == reqs["skill:kotlin"].any_of is not None
+
+
+class TestClausesAndDegrees:
+    """Found by the synthetic eval's label check on the Corvane posting (P2-7)."""
+
+    def test_alternatives_stay_within_their_clause(self, taxonomy: SkillTaxonomy) -> None:
+        reqs = _one("You are fluent in Python and have used PyTorch or Hugging Face transformers.", taxonomy)
+        assert reqs["skill:python"].any_of is None
+        assert reqs["skill:pytorch"].any_of == reqs["skill:huggingface"].any_of is not None
+
+    def test_hugging_face_transformers_is_the_library_not_the_architecture(
+        self, taxonomy: SkillTaxonomy
+    ) -> None:
+        reqs = _one("Experience with Hugging Face transformers", taxonomy)
+        assert "skill:huggingface" in reqs and "skill:transformers" not in reqs
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "A Master's degree in Computer Science, Statistics or a related field is preferred.",
+            "BS in Data Science or Statistics",
+        ],
+    )
+    def test_a_degree_s_field_is_not_a_skill(self, taxonomy: SkillTaxonomy, line: str) -> None:
+        reqs = _one(line, taxonomy)
+        assert not [key for key in reqs if key.startswith("skill:")]
+        assert any(key.startswith("education:") for key in reqs)
+
+    def test_a_skill_after_the_degree_clause_still_counts(self, taxonomy: SkillTaxonomy) -> None:
+        reqs = _one("BS in Computer Science; 2+ years of Python", taxonomy)
+        assert reqs["skill:python"].min_years == 2

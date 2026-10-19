@@ -26,6 +26,8 @@ dist/
 
 # ---- local artifacts ----
 artifacts/
+# Each eval run's report; only the baseline beside it is tracked.
+evals/resume/reports/
 *.log
 .coverage
 htmlcov/
