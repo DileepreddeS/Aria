@@ -21,7 +21,7 @@
       },
       "name": "corvane_ai",
       "reported": {
-        "coverage": 0.3333,
+        "coverage": 0.333,
         "fit": "weak",
         "role_type": "ai"
       }

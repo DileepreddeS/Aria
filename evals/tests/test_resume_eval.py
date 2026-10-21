@@ -135,6 +135,14 @@ class TestBaseline:
         assert posting["reported"] == {"role_type": "backend", "fit": "ok", "coverage": 0.5}
         assert posting["gates"]["layout_findings"] == 1 and posting["gates"]["one_page"] is True
 
+    def test_coverage_is_compared_to_three_places(
+        self, paths: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _serve(monkeypatch, _report(failures=[], coverage=1 / 3))
+        run.main(["resume-synthetic", "--update-baseline"])
+        _serve(monkeypatch, _report(failures=[], coverage=1 / 3 + 1e-12))
+        assert run.main(["resume-synthetic"]) == 0
+
     def test_a_moved_number_fails_until_the_baseline_is_updated(
         self, paths: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
     ) -> None:

@@ -167,6 +167,12 @@ class Report:
 BASELINE_REPORTED = ("role_type", "fit", "coverage")
 
 
+def _baseline_value(name: str, value: Any) -> Any:
+    # Coverage to 3 places: a float's last bits can differ between numpy and BLAS builds on
+    # Windows and Linux, even with the same fake embedder.
+    return round(value, 3) if name == "coverage" else value
+
+
 def baseline_view(report: dict[str, Any]) -> dict[str, Any]:
     """What the baseline holds: decisions and counts, nothing measured from the print.
 
@@ -186,7 +192,9 @@ def baseline_view(report: dict[str, Any]) -> dict[str, Any]:
                     name: value if isinstance(value, bool) or name == "label_mismatches" else len(value)
                     for name, value in posting["gates"].items()
                 },
-                "reported": {name: posting["reported"][name] for name in BASELINE_REPORTED},
+                "reported": {
+                    name: _baseline_value(name, posting["reported"][name]) for name in BASELINE_REPORTED
+                },
             }
             for posting in report["postings"]
         ],
