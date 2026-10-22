@@ -17,11 +17,11 @@ sampled resumes "would send".
 | 4 | Stage 1 rules and Stage 2 normalizer | done |
 | 5 | Stage 4 scoring and the local embedding model | done |
 | 6 | Stage 5a planner, line budget, fit-to-page | done |
-| 7 | Eval harness, three synthetic postings, deterministic metrics in CI | in review |
-| 8 | Real provider in the gateway, and the Stage 1 LLM step | |
+| 7 | Eval harness, three synthetic postings, deterministic metrics in CI | done |
+| 8 | Real provider in the gateway, and the Stage 1 LLM step | 8a done; 8b in review |
 | 9 | Stage 5b writer and the repair loop | |
 | 10 | NLI truth check and the 6-second check | |
-| 11 | Public API, migration 0008, API routes, CLI, artifacts | |
+| 11 | Public API, migration 0009, API routes, CLI, artifacts | |
 | 12 | The 30-posting eval: tune, sample 10 for rating, report against "done when" | |
 
 ## Done when, per step from 7 on
@@ -44,6 +44,8 @@ removed only by a recorded decision, never by being forgotten.
 
 - Provider due diligence recorded in DECISIONS before the first call (retention, training,
   data retention, region).
+- 8b: the gateway refuses an unpriced model and caps spend per run and per month from persisted usage,
+  before sending; a test fails if the pinned SDK starts requiring OpenTelemetry.
 - The LLM step reads untrusted posting text only through the quarantined pattern (SECURITY §5);
   its output passes the same schema and the same label gate as the rules.
 

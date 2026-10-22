@@ -30,7 +30,9 @@ class TestTheGatewayAcceptsWhatTheEngineSends:
             inputs={"response_schema": "{}"},
         )
         CompletionRequest(
+            # The tenant and the run are the caller's, added by the client (aria_core.llm_client).
             tenant_id="t",
+            run_id="00000000-0000-4000-8000-000000000000",
             purpose=GatewayPurpose(request.purpose.value),
             model="claude-sonnet-5-5",
             trusted_instructions=request.trusted_instructions,

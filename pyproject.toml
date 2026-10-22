@@ -17,10 +17,10 @@ package = false
 # is old enough (2026-10-22); then one global `exclude-newer = "14 days"` replaces this.
 # A package added before then gets an entry here so the resolver honours the rule too;
 # infra/checks/dependency_age.py is the gate either way.
-exclude-newer-package = { pdfplumber = "14 days", pillow = "14 days", pypdfium2 = "14 days", jinja2 = "14 days", playwright = "14 days", pyee = "14 days", onnxruntime = "14 days", tokenizers = "14 days", huggingface-hub = "14 days", hf-xet = "14 days", numpy = "14 days", protobuf = "14 days", flatbuffers = "14 days", fsspec = "14 days", tqdm = "14 days" }
-# The ml group's packages with native source distributions: a missing wheel fails the
-# install instead of compiling Rust or C from source (docs/vetting/2026-10-18-ml-group.md).
-no-build-package = ["tokenizers", "hf-xet", "numpy", "protobuf"]
+exclude-newer-package = { pdfplumber = "14 days", pillow = "14 days", pypdfium2 = "14 days", jinja2 = "14 days", playwright = "14 days", pyee = "14 days", onnxruntime = "14 days", tokenizers = "14 days", huggingface-hub = "14 days", hf-xet = "14 days", numpy = "14 days", protobuf = "14 days", flatbuffers = "14 days", fsspec = "14 days", tqdm = "14 days", anthropic = "14 days", httpx2 = "14 days", httpcore2 = "14 days", jiter = "14 days", docstring-parser = "14 days", truststore = "14 days" }
+# Packages with native source distributions: a missing wheel fails the install instead of
+# compiling Rust or C from source (docs/vetting/2026-10-18-ml-group.md, 2026-10-20-anthropic-sdk.md).
+no-build-package = ["tokenizers", "hf-xet", "numpy", "protobuf", "jiter"]
 
 [tool.uv.workspace]
 members = [
@@ -138,5 +138,6 @@ markers = [
     "db: needs the local Postgres from infra/docker-compose.yml",
     "docker: needs Docker and the parser image (./tasks.ps1 parser-image)",
     "chromium: needs Playwright's Chromium (uv run playwright install chromium); CI installs it rather than skipping",
+    "live: calls a real, paid model provider; skipped unless ARIA_LIVE_LLM=1 and ARIA_ANTHROPIC_API_KEY are set",
     "models: needs the local model weights (./tasks.ps1 models) and the ml group; skipped where absent, and CI never downloads them",
 ]

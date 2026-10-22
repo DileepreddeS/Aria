@@ -69,7 +69,17 @@ class RefusalReason(StrEnum):
     SENSITIVE_PATTERN = "sensitive_pattern"
     """Free text matched a sensitive pattern (the backstop)."""
     INPUT_NOT_ALLOWED_FOR_PURPOSE = "input_not_allowed_for_purpose"
+    INVALID_RESPONSE_SCHEMA = "invalid_response_schema"
+    """``inputs.response_schema`` is not a JSON object."""
+    MODEL_NOT_PRICED = "model_not_priced"
+    """The price table does not know the model, so the caps could not count it."""
+    SPEND_CAP_RUN = "spend_cap_run"
+    """The request could take the run past its cap."""
+    SPEND_CAP_MONTH = "spend_cap_month"
+    """The request could take the tenant past its monthly cap."""
     PROVIDER_ERROR = "provider_error"
+    MODEL_DECLINED = "model_declined"
+    """The model refused (stop_reason "refusal"). Recorded with its cost; never retried elsewhere."""
 
 
 class CompletionRequest(AriaMessage):
@@ -78,6 +88,9 @@ class CompletionRequest(AriaMessage):
     SCHEMA_VERSION = 1
 
     tenant_id: Annotated[str, Sensitivity.S0]
+    #: The run this request belongs to: one resume build, one eval posting. Its spend is
+    #: capped as a whole (DECISIONS 2026-10-20), so every request must say which run it is.
+    run_id: Annotated[str, Sensitivity.S0] = Field(pattern=r"^[0-9a-fA-F-]{36}$")
     purpose: Annotated[LlmPurpose, Sensitivity.S0]
     model: Annotated[str, Sensitivity.S0] = Field(max_length=120)
     #: Developer-authored. Never built from anything a page, posting or email said.
@@ -112,3 +125,6 @@ class CompletionResponse(AriaMessage):
     completion_tokens: Annotated[int, Sensitivity.S0] = 0
     cost_usd: Annotated[str, Sensitivity.S0] = "0"
     """A decimal string: the wire format should not depend on float formatting."""
+    #: Why the model stopped. "max_tokens" means the text is cut off: a caller that wanted
+    #: JSON will find it invalid and take its own fallback.
+    stop_reason: Annotated[str, Sensitivity.S0] = ""

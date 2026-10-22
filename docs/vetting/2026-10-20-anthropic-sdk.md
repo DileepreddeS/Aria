@@ -51,6 +51,10 @@ The total installed size is about 7.3 MB.
   - **The gateway's tracer provider has no exporter but the console one,** and none at all under
     `otel_exporter=none`. So once the SDK does emit spans, they can't leave the machine.
 
+**`httpx2-jsfetch` 1.0** (2026-08-07, BSD-3-Clause, a 6 KB pure-Python wheel) is in `uv.lock` too, as httpx2's
+dependency on `sys_platform == "emscripten"` (Python in a browser). uv records it because the lock is universal;
+it is never installed on Windows or Linux. It passes the age gate.
+
 **`idna`:** `httpx2` requires `idna>=3.18`. The lock already holds 3.20, so nothing already locked is
 upgraded. Every shared package resolves to the version the lock already has.
 

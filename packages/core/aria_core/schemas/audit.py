@@ -96,6 +96,10 @@ class AuditAction(StrEnum):
     SENSITIVE_FIELD_WRITTEN = "sensitive_field.written"
     DATA_KEY_ROTATED = "data_key.rotated"
     LLM_REQUEST_DISPATCHED = "llm_request.dispatched"
+    #: What a dispatched request came to: its tokens, its cost, or why it failed.
+    LLM_REQUEST_SETTLED = "llm_request.settled"
+    #: A reservation the gateway could not settle, settled by a person on the provider's figures.
+    LLM_REQUEST_RECONCILED = "llm_request.reconciled"
     LLM_REQUEST_REFUSED = "llm_request.refused"
     APPLY_TASK_SIGNED = "apply_task.signed"
     APPLY_TASK_CONSUMED = "apply_task.consumed"

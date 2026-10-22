@@ -96,3 +96,34 @@ def test_every_member_is_checked() -> None:
     """The parametrisation is only as good as the member list it reads."""
     names = {member.relative_to(REPO_ROOT).as_posix() for member in _members()}
     assert {"packages/core", "apps/api", "apps/cli", "services/document_parser"} <= names
+
+
+#: Model-provider SDKs: only the gateway may hold one (CLAUDE.md; DECISIONS 2026-10-20).
+PROVIDER_SDKS = frozenset({"anthropic", "openai", "litellm"})
+
+
+def test_only_the_gateway_uses_a_model_provider_sdk() -> None:
+    """Tests included: a test elsewhere that calls a provider is a call from outside the gateway."""
+    gateway = REPO_ROOT / "services" / "llm_gateway"
+    places: list[str] = []
+    for member in _members():
+        if member == gateway:
+            continue
+        places += [f"{member.name}/pyproject.toml" for sdk in PROVIDER_SDKS & _declared(member)]
+    roots = [member for member in _members() if member != gateway] + [
+        REPO_ROOT / "evals",
+        REPO_ROOT / "infra",
+    ]
+    for root in roots:
+        for path in sorted(root.rglob("*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    names = [alias.name for alias in node.names]
+                elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+                    names = [node.module]
+                else:
+                    continue
+                if any(name.split(".")[0] in PROVIDER_SDKS for name in names):
+                    places.append(f"{path.relative_to(REPO_ROOT).as_posix()}:{node.lineno}")
+    assert not places, f"only services/llm_gateway may use a model provider's SDK: {places}"

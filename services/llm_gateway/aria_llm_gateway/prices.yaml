@@ -1,0 +1,22 @@
+# What each model costs, per million tokens, in USD (docs/vetting/2026-10-20-anthropic-sdk.md).
+#
+# The gateway refuses a request for a model that is not here, before anything is sent:
+# pricing an unknown model at zero would let the spend caps miss exactly the model nobody
+# vetted. Bump `version` on every change; it is recorded with the configuration.
+#
+# Source: https://platform.claude.com/docs/en/about-claude/pricing, read 2026-10-20.
+# Thinking is billed as output. Cache writes are priced at the 1-hour rate, the higher of
+# the two, since the response does not always say which was used.
+version: "2026.10.1"
+
+#: inference_geo multipliers: "us" keeps inference in the US (DECISIONS 2026-10-20).
+geo_multipliers:
+  global: "1"
+  us: "1.1"
+
+models:
+  claude-sonnet-5-5:
+    input: "2"
+    output: "10"
+    cache_write: "4"
+    cache_read: "0.10"

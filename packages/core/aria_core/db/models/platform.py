@@ -245,6 +245,9 @@ class LlmRequest(Base):
     tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
+    #: The run that made the request, for the per-run spend cap. Null only on rows
+    #: written before migration 0008; the gateway refuses a request without one.
+    run_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     purpose: Mapped[str] = mapped_column(String(80), nullable=False)
     provider: Mapped[str] = mapped_column(String(40), nullable=False)
     model: Mapped[str] = mapped_column(String(120), nullable=False)
@@ -258,6 +261,7 @@ class LlmRequest(Base):
 
     __table_args__ = (
         Index("ix_llm_requests_tenant_id_created_at", "tenant_id", "created_at"),
+        Index("ix_llm_requests_tenant_id_run_id", "tenant_id", "run_id"),
         {"comment": "Per-request metadata and cost. Never prompts, completions or untrusted content."},
     )
 
