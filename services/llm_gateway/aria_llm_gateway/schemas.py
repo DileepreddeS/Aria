@@ -19,6 +19,9 @@ from typing import Annotated, Final, Self
 from pydantic import Field, model_validator
 
 from aria_core.schemas.base import AriaMessage
+
+# Defined once, in aria_core, for every caller and the gateway alike.
+from aria_core.schemas.llm import LlmPurpose
 from aria_core.schemas.untrusted import UntrustedContent
 from aria_core.sensitivity import Sensitivity
 
@@ -29,18 +32,6 @@ __all__ = [
     "LlmPurpose",
     "RefusalReason",
 ]
-
-
-class LlmPurpose(StrEnum):
-    """Why a model is being called. Decides what may be sent (data minimisation)."""
-
-    PARSE_JD = "parse_jd"
-    WRITE_BULLET = "write_bullet"
-    SIX_SECOND_CHECK = "six_second_check"
-    CLASSIFY_QUESTION = "classify_question"
-    ANSWER_OPEN_ENDED = "answer_open_ended"
-    SUMMARISE_PAGE = "summarise_page"
-    CLASSIFY_EMAIL = "classify_email"
 
 
 #: The only ``inputs`` keys each purpose may carry. A key outside its purpose's set

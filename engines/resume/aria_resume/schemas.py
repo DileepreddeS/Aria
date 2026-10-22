@@ -123,6 +123,9 @@ class ParsedJD(AriaMessage):
     clearance_or_citizenship: Annotated[str | None, Sensitivity.S0] = None
     #: "<kind>: <quote>" for each instruction unrelated to applying. Never acted on.
     suspicious_instructions: Annotated[tuple[str, ...], Sensitivity.S0] = ()
+    #: How the posting was read: "rules" alone, or what the model step added and refused, or
+    #: why it fell back to the rules ("rules_only: ..."). Said plainly, never hidden.
+    reading_notes: Annotated[tuple[str, ...], Sensitivity.S0] = ()
 
 
 class RequirementKind(StrEnum):

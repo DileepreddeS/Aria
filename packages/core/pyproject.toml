@@ -13,6 +13,9 @@ dependencies = [
     "structlog>=24.4",
     "pyyaml>=6.0",
     "opentelemetry-sdk>=1.29",
+    # aria_core.llm_client, the gateway's HTTP client. Already in the lock through the CLI;
+    # declared here because aria_core now uses it.
+    "httpx>=0.27",
 ]
 
 [build-system]

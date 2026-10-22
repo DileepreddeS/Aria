@@ -26,8 +26,10 @@ from aria_core.audit.log import read_chain
 from aria_core.config import MigrationSettings, Settings
 from aria_core.db.models import LlmRequest, Tenant
 from aria_core.db.session import create_engine, platform_transaction, tenant_transaction
+from aria_core.llm_client import GatewayLlmClient
 from aria_core.schemas.audit import AuditAction, AuditOutcome
 from aria_core.schemas.identity import TenantId, new_id
+from aria_core.schemas.llm import LlmRequest as ModelAsk
 from aria_core.schemas.untrusted import UntrustedContent, UntrustedSourceKind
 from aria_llm_gateway.app import SERVICE_TOKEN_HEADER, create_app
 from aria_llm_gateway.guards import inspect_request, reject_sensitive_fields
@@ -805,3 +807,33 @@ class TestReconciliation:
         await attempt(row.id)  # type: ignore[misc]
         with pytest.raises(NotReconcilable, match="not a reconcilable"):
             await attempt(row.id)  # type: ignore[misc]  # once only
+
+
+@pytest.mark.db
+async def test_the_aria_core_client_speaks_the_gateway_s_language(
+    engine: AsyncEngine, tenant_id: TenantId
+) -> None:
+    """The client callers use, against this app: the request it builds is one the gateway serves."""
+    app = create_app(
+        settings=_settings(), provider=EchoProvider(), engine=engine, provider_settings=_echo_settings()
+    )
+    run = uuid.uuid4()
+    client = GatewayLlmClient(
+        base_url="http://gateway.invalid",
+        service_token=SecretStr(TOKEN),
+        tenant_id=tenant_id,
+        run_id=run,
+        transport=ASGITransport(app=app),
+    )
+    async with app.router.lifespan_context(app):
+        reply = await client.complete(
+            ModelAsk(
+                purpose=LlmPurpose.PARSE_JD,
+                trusted_instructions="Read the posting into the schema.",
+                untrusted_content=(_jd_block(),),
+                inputs={"response_schema": "{}"},
+            )
+        )
+    assert reply.provider == "echo"
+    (row,) = await _rows(engine, tenant_id)
+    assert (row.run_id, row.outcome) == (run, "ok")

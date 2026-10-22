@@ -32,6 +32,7 @@ FORBIDDEN: dict[str, str] = {
     "aria_api": "an app",
     "aria_cli": "an app",
     "aria_llm_gateway": "the gateway is reached through LlmClient, not imported",
+    "aria_core.llm_client": "the gateway's HTTP client: the engine is handed an LlmClient, never builds one",
     "anthropic": "a model provider: only the gateway calls one",
     "openai": "a model provider: only the gateway calls one",
     "litellm": "a model provider: only the gateway calls one",
@@ -51,27 +52,29 @@ FORBIDDEN: dict[str, str] = {
 PARSER_ALLOWED = ("aria_document_parser.pdf", "aria_document_parser.errors")
 
 
-def _imports(source: str) -> list[tuple[str, int]]:
-    found: list[tuple[str, int]] = []
+def _imports(source: str) -> list[tuple[str, int, tuple[str, ...]]]:
+    """``(module, line, names)``: names are what a ``from`` import takes from the module."""
+    found: list[tuple[str, int, tuple[str, ...]]] = []
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.Import):
-            found.extend((alias.name, node.lineno) for alias in node.names)
+            found.extend((alias.name, node.lineno, ()) for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
-            found.append((node.module, node.lineno))
+            found.append((node.module, node.lineno, tuple(alias.name for alias in node.names)))
     return found
 
 
 def _violations(source: str, name: str) -> list[str]:
-    return [
-        f"{name}:{line} imports {module} ({why})"
-        for module, line in _imports(source)
-        for prefix, why in FORBIDDEN.items()
-        if module == prefix or module.startswith(prefix + ".")
-    ] + [
-        f"{name}:{line} imports {module} (the parser beyond its geometric reader)"
-        for module, line in _imports(source)
-        if module.split(".")[0] == "aria_document_parser" and module not in PARSER_ALLOWED
-    ]
+    found: list[str] = []
+    for module, line, names in _imports(source):
+        # "from aria_core import llm_client" names the module in the alias, not in node.module,
+        # so a from-import is checked as the module and as each module.name it could be.
+        candidates = [module, *(f"{module}.{taken}" for taken in names)]
+        for prefix, why in FORBIDDEN.items():
+            if any(c == prefix or c.startswith(prefix + ".") for c in candidates):
+                found.append(f"{name}:{line} imports {module} ({why})")
+        if module.split(".")[0] == "aria_document_parser" and module not in PARSER_ALLOWED:
+            found.append(f"{name}:{line} imports {module} (the parser beyond its geometric reader)")
+    return found
 
 
 def test_there_is_product_code_to_check() -> None:
@@ -91,9 +94,10 @@ def test_the_rule_would_catch_a_violation() -> None:
             "import httpx",
             "import anthropic.types",
             "import aria_core.schemas",
+            "from aria_core import llm_client",
         ]
     )
-    assert len(_violations(probe, "probe.py")) == 3
+    assert len(_violations(probe, "probe.py")) == 4
 
 
 def test_loading_the_whole_engine_loads_no_database_code() -> None:

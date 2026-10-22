@@ -18,7 +18,7 @@ sampled resumes "would send".
 | 5 | Stage 4 scoring and the local embedding model | done |
 | 6 | Stage 5a planner, line budget, fit-to-page | done |
 | 7 | Eval harness, three synthetic postings, deterministic metrics in CI | done |
-| 8 | Real provider in the gateway, and the Stage 1 LLM step | 8a done; 8b in review |
+| 8 | Real provider in the gateway, and the Stage 1 LLM step | 8a, 8b done; 8c in review; 8d next |
 | 9 | Stage 5b writer and the repair loop | |
 | 10 | NLI truth check and the 6-second check | |
 | 11 | Public API, migration 0009, API routes, CLI, artifacts | |
@@ -46,8 +46,10 @@ removed only by a recorded decision, never by being forgotten.
   data retention, region).
 - 8b: the gateway refuses an unpriced model and caps spend per run and per month from persisted usage,
   before sending; a test fails if the pinned SDK starts requiring OpenTelemetry.
-- The LLM step reads untrusted posting text only through the quarantined pattern (SECURITY §5);
-  its output passes the same schema and the same label gate as the rules.
+- 8c: the LLM step reads untrusted posting text only through the quarantined pattern (SECURITY §5),
+  keeps only verbatim quotes, never overrides the rules, and falls back to them on any failure.
+- 8d: its output passes the same label gate as the rules (`evals.run --llm`, reported, never in CI),
+  and a red-team set of injected postings runs in CI against scripted hostile replies.
 
 ### 9. Writer and repair loop
 

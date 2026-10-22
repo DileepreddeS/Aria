@@ -11,11 +11,11 @@ from aria_llm_gateway.schemas import LlmPurpose as GatewayPurpose
 
 
 class TestTheGatewayAcceptsWhatTheEngineSends:
-    @pytest.mark.parametrize("purpose", list(LlmPurpose))
+    @pytest.mark.parametrize("purpose", sorted(PURPOSE_INPUTS))
     def test_every_purpose_is_one_the_gateway_knows(self, purpose: LlmPurpose) -> None:
         assert GatewayPurpose(purpose.value)
 
-    @pytest.mark.parametrize("purpose", list(LlmPurpose))
+    @pytest.mark.parametrize("purpose", sorted(PURPOSE_INPUTS))
     def test_every_input_key_is_one_the_gateway_allows(self, purpose: LlmPurpose) -> None:
         assert PURPOSE_INPUTS[purpose] <= PURPOSE_INPUT_KEYS[GatewayPurpose(purpose.value)]
 
