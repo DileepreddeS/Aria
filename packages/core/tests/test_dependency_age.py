@@ -161,8 +161,31 @@ class TestTheCveException:
         assert failures == []
 
 
+def _recorded(package: str, ghsa: str, cve: str, fixed: str) -> dict[str, Any]:
+    return {
+        "id": ghsa,
+        "aliases": [cve],
+        "affected": [
+            {"package": {"ecosystem": "PyPI", "name": package}, "ranges": [{"events": [{"fixed": fixed}]}]}
+        ],
+    }
+
+
+#: OSV's answer, as recorded on 2026-10-21, for each young pin taken as a CVE fix (DECISIONS
+#: 2026-10-21): one advisory per package whose fixed version is the pinned one. The test runs
+#: offline; the live check in `make audit` asks OSV itself. A pin that moves no longer matches
+#: its record and fails here until the new release is checked and recorded.
+RECORDED_CVE_FIXES: dict[str, list[dict[str, Any]]] = {
+    "pillow": [_recorded("pillow", "GHSA-8g5g-8vmr-9782", "CVE-2026-112403", "13.0.0")],
+    "pypdf": [_recorded("pypdf", "GHSA-5hx5-vpf9-5wcv", "CVE-2026-113786", "6.21.1")],
+    "virtualenv": [_recorded("virtualenv", "GHSA-c978-59m8-c77v", "CVE-2026-113722", "21.14.9")],
+}
+
+
 def test_the_lock_in_this_repository_passes(monkeypatch: pytest.MonkeyPatch) -> None:
     def offline(package: str) -> list[dict[str, Any]]:
+        if package in RECORDED_CVE_FIXES:
+            return RECORDED_CVE_FIXES[package]
         raise AssertionError(f"{package} is young and not grandfathered; the lock breaks the rule")
 
     import tomllib

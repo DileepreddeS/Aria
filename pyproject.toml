@@ -17,7 +17,17 @@ package = false
 # is old enough (2026-10-22); then one global `exclude-newer = "14 days"` replaces this.
 # A package added before then gets an entry here so the resolver honours the rule too;
 # infra/checks/dependency_age.py is the gate either way.
-exclude-newer-package = { pdfplumber = "14 days", pillow = "14 days", pypdfium2 = "14 days", jinja2 = "14 days", playwright = "14 days", pyee = "14 days", onnxruntime = "14 days", tokenizers = "14 days", huggingface-hub = "14 days", hf-xet = "14 days", numpy = "14 days", protobuf = "14 days", flatbuffers = "14 days", fsspec = "14 days", tqdm = "14 days", anthropic = "14 days", httpx2 = "14 days", httpcore2 = "14 days", jiter = "14 days", docstring-parser = "14 days", truststore = "14 days" }
+exclude-newer-package = { pdfplumber = "14 days", pillow = false, pypdfium2 = "14 days", jinja2 = "14 days", playwright = "14 days", pyee = "14 days", onnxruntime = "14 days", tokenizers = "14 days", huggingface-hub = "14 days", hf-xet = "14 days", numpy = "14 days", protobuf = "14 days", flatbuffers = "14 days", fsspec = "14 days", tqdm = "14 days", anthropic = "14 days", httpx2 = "14 days", httpcore2 = "14 days", jiter = "14 days", docstring-parser = "14 days", truststore = "14 days" }
+# pillow is exempt from the 14-day rule while its newest release fixes published CVEs:
+# 13.0.0 (2026-10-16) fixes 28, published from 2026-10-20 on (DECISIONS 2026-10-21). The
+# constraint keeps every resolution on a fixed version. Put pillow back under the rule
+# once 13.0.0 is 14 days old (2026-10-30), unless a newer release is another CVE fix.
+# virtualenv (pre-commit's, dev only) is held at 21.14.9, the release that fixes the four
+# advisories of 2026-10-21; later releases are younger than 14 days and fix nothing listed.
+# Loosen to ">=21.14.9" once 21.14.9 is 14 days old (2026-10-31).
+# pypdf (the parser reads every upload with it) is held at 6.21.1, the release that fixes
+# the five advisories of 2026-10-21. Loosen to ">=6.21.1" once it is 14 days old (2026-10-31).
+constraint-dependencies = ["pillow>=13.0.0", "virtualenv==21.14.9", "pypdf==6.21.1"]
 # Packages with native source distributions: a missing wheel fails the install instead of
 # compiling Rust or C from source (docs/vetting/2026-10-18-ml-group.md, 2026-10-20-anthropic-sdk.md).
 no-build-package = ["tokenizers", "hf-xet", "numpy", "protobuf", "jiter"]
