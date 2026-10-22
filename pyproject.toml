@@ -17,17 +17,17 @@ package = false
 # is old enough (2026-10-22); then one global `exclude-newer = "14 days"` replaces this.
 # A package added before then gets an entry here so the resolver honours the rule too;
 # infra/checks/dependency_age.py is the gate either way.
-exclude-newer-package = { pdfplumber = "14 days", pillow = false, pypdfium2 = "14 days", jinja2 = "14 days", playwright = "14 days", pyee = "14 days", onnxruntime = "14 days", tokenizers = "14 days", huggingface-hub = "14 days", hf-xet = "14 days", numpy = "14 days", protobuf = "14 days", flatbuffers = "14 days", fsspec = "14 days", tqdm = "14 days", anthropic = "14 days", httpx2 = "14 days", httpcore2 = "14 days", jiter = "14 days", docstring-parser = "14 days", truststore = "14 days" }
-# pillow is exempt from the 14-day rule while its newest release fixes published CVEs:
-# 13.0.0 (2026-10-16) fixes 28, published from 2026-10-20 on (DECISIONS 2026-10-21). The
-# constraint keeps every resolution on a fixed version. Put pillow back under the rule
-# once 13.0.0 is 14 days old (2026-10-30), unless a newer release is another CVE fix.
-# virtualenv (pre-commit's, dev only) is held at 21.14.9, the release that fixes the four
-# advisories of 2026-10-21; later releases are younger than 14 days and fix nothing listed.
-# Loosen to ">=21.14.9" once 21.14.9 is 14 days old (2026-10-31).
-# pypdf (the parser reads every upload with it) is held at 6.21.1, the release that fixes
-# the five advisories of 2026-10-21. Loosen to ">=6.21.1" once it is 14 days old (2026-10-31).
-constraint-dependencies = ["pillow>=13.0.0", "virtualenv==21.14.9", "pypdf==6.21.1"]
+exclude-newer-package = { pdfplumber = "14 days", pypdfium2 = "14 days", jinja2 = "14 days", playwright = "14 days", pyee = "14 days", onnxruntime = "14 days", tokenizers = "14 days", huggingface-hub = "14 days", hf-xet = "14 days", numpy = "14 days", protobuf = "14 days", flatbuffers = "14 days", fsspec = "14 days", tqdm = "14 days", anthropic = "14 days", httpx2 = "14 days", httpcore2 = "14 days", jiter = "14 days", docstring-parser = "14 days", truststore = "14 days" }
+# Exact pins for the declared security fixes below ([tool.aria.dependency-age]): each holds
+# one young version that is the fix for a published advisory, so the resolver cannot take
+# any other young release in its place. infra/checks/dependency_age.py requires every exact
+# pin here to have its exemption and every exemption its pin, and fails once one expires.
+constraint-dependencies = [
+    "pillow==13.0.0",
+    "pypdf==6.21.1",
+    "virtualenv==21.14.9",
+    "certifi==2026.10.19",
+]
 # Packages with native source distributions: a missing wheel fails the install instead of
 # compiling Rust or C from source (docs/vetting/2026-10-18-ml-group.md, 2026-10-20-anthropic-sdk.md).
 no-build-package = ["tokenizers", "hf-xet", "numpy", "protobuf", "jiter"]
@@ -151,3 +151,33 @@ markers = [
     "live: calls a real, paid model provider; skipped unless ARIA_LIVE_LLM=1 and ARIA_ANTHROPIC_API_KEY are set",
     "models: needs the local model weights (./tasks.ps1 models) and the ml group; skipped where absent, and CI never downloads them",
 ]
+
+# Declared exceptions to the 14-day rule (DECISIONS 2026-10-22): one per young version that is
+# the fix for a published security advisory, under any OSV id. dependency_age.py checks that
+# OSV lists exactly this version as the advisory's fix, that `expires` is the day the version
+# turns 14 days old (from uv.lock), and that the version is pinned exactly above. It warns for
+# the three days before `expires` and fails after it, until the entry is deleted and the pin
+# loosened to >=.
+[[tool.aria.dependency-age.exemptions]]
+package = "pillow"
+version = "13.0.0"
+advisory = "GHSA-8g5g-8vmr-9782"
+expires = 2026-10-30
+
+[[tool.aria.dependency-age.exemptions]]
+package = "pypdf"
+version = "6.21.1"
+advisory = "GHSA-5hx5-vpf9-5wcv"
+expires = 2026-10-31
+
+[[tool.aria.dependency-age.exemptions]]
+package = "virtualenv"
+version = "21.14.9"
+advisory = "GHSA-c978-59m8-c77v"
+expires = 2026-10-31
+
+[[tool.aria.dependency-age.exemptions]]
+package = "certifi"
+version = "2026.10.19"
+advisory = "GHSA-6q48-6c7w-9gw2"
+expires = 2026-11-03

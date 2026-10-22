@@ -107,7 +107,7 @@ switch ($Task) {
                 Remove-Item $requirements -ErrorAction SilentlyContinue
             }
         }
-        Invoke-Step "dependency age (14 days, CVE fixes exempt)" { uv run python infra/checks/dependency_age.py }
+        Invoke-Step "dependency age (14 days, declared security fixes exempt)" { uv run python infra/checks/dependency_age.py }
     }
     "check" {
         & $PSCommandPath lint

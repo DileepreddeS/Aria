@@ -58,7 +58,8 @@ sast:
 	semgrep --config p/python --config p/security-audit --config .semgrep/aria.yml --error --metrics off
 
 # Known vulnerabilities, then the 14-day rule for every pinned file (DECISIONS
-# 2026-10-12): a release younger than that is refused unless it fixes a CVE.
+# 2026-10-12): a release younger than that is refused unless it is a declared security
+# fix, pinned exactly and confirmed by OSV, until its exemption expires (DECISIONS 2026-10-22).
 # The whole lock is audited, every group included, not the installed environment:
 # CI never installs the optional ml group, and its packages are audited all the same.
 audit:

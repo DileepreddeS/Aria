@@ -27,8 +27,6 @@ repos:
         language: system
         types: [text]
 
-      # A changed lock is a changed dependency: refuse files younger than 14 days
-      # unless they fix a CVE (DECISIONS 2026-10-12).
       # A real person's name, email, phone or handle in a staged file. The denylist
       # lives in private/pii-denylist.txt, never in the repository.
       - id: no-personal-identifiers
@@ -37,11 +35,14 @@ repos:
         language: system
         types: [text]
 
+      # A changed lock is a changed dependency: refuse files younger than 14 days unless
+      # each is a declared security fix (DECISIONS 2026-10-12, 2026-10-22). The exemptions
+      # and exact pins live in pyproject.toml, so a change there is checked too.
       - id: dependency-age
         name: dependency versions at least 14 days old
         entry: uv run python infra/checks/dependency_age.py
         language: system
-        files: ^uv\.lock$
+        files: ^(uv\.lock|pyproject\.toml|infra/checks/dependency_age\.py)$
         pass_filenames: false
 
       - id: gitleaks-system

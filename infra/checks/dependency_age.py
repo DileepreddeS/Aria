@@ -1,4 +1,4 @@
-"""Fail when uv.lock pins a package file younger than 14 days.
+"""Fail when uv.lock pins a package file younger than 14 days, unless it is a declared security fix.
 
 The rule (DECISIONS 2026-10-12): any new or upgraded dependency version must have been
 on PyPI for at least 14 days. A release published days ago is where a compromised
@@ -6,24 +6,32 @@ maintainer account or a poisoned build does its damage before anyone has noticed
 weeks is long enough for most of those to be found and yanked, and short enough that
 ARIA is never far behind.
 
-One exception, taken immediately whatever its age: a release that fixes a published
-CVE. It is not declared by hand. For a young pin the check asks OSV (osv.dev) whether
-that exact version is the fixed version of an advisory carrying a CVE identifier, and
-accepts it only if so — an exception nobody can claim without the advisory existing.
+**One exception, narrow and written down** (DECISIONS 2026-10-22): a release that is the
+fix for a published security advisory, under any OSV id (CVE, GHSA, PYSEC). Each use is
+declared in pyproject.toml, by exact package, exact version and advisory id:
 
-The check reads upload times from uv.lock itself, which records one for every file,
-so it needs no network unless a young file is found. The resolver does the same job
-up front: new packages carry a 14-day entry in [tool.uv] exclude-newer-package, so
-`uv add` and `uv lock` choose old-enough versions to begin with. This is the gate that
-holds when someone overrides that.
+    [[tool.aria.dependency-age.exemptions]]
+    package = "certifi"
+    version = "2026.10.19"
+    advisory = "GHSA-6q48-6c7w-9gw2"
+    expires = 2026-11-03
 
-Pins that predate the rule are listed in GRANDFATHERED by exact version: they were in
-the lock when the rule was made, so they are neither new nor upgraded. Every one of
-them is 14 days old by 2026-10-22, after which the list is empty in effect and should
-be deleted, along with the per-package resolver entries in favour of one global
-`exclude-newer = "14 days"`.
+and holds only while all of these are true:
 
-    python infra/checks/dependency_age.py [--lock uv.lock]
+- OSV says that advisory's fixed version for that package is exactly that version. The
+  exemption is for one version; any other version of the package is checked as usual.
+- The version is pinned exactly (``package==version`` in ``[tool.uv]
+  constraint-dependencies``), and every exact pin there has its exemption. The pin is
+  what stops the resolver taking some other young release under the same cover.
+- ``expires`` is the day the version's newest file turns 14 days old, read from uv.lock,
+  so it cannot be stretched. After it, the exemption is no longer needed and fails the
+  check until it is deleted and its pin loosened. For the three days before, the check
+  warns, so the failure does not land unannounced in the middle of an unrelated commit.
+
+The check reads upload times from uv.lock itself, so it needs no network unless a young
+file is found. Pins that predate the rule are listed in GRANDFATHERED by exact version.
+
+    python infra/checks/dependency_age.py [--lock uv.lock] [--pyproject pyproject.toml]
 """
 
 from __future__ import annotations
@@ -34,12 +42,14 @@ import json
 import sys
 import tomllib
 import urllib.request
-from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 MINIMUM_AGE = dt.timedelta(days=14)
+#: How long before an exemption expires the check starts warning about it.
+WARN_BEFORE = dt.timedelta(days=3)
 OSV_QUERY = "https://api.osv.dev/v1/query"
 
 #: In uv.lock when the rule was made (2026-10-12) and younger than 14 days then.
@@ -82,8 +92,29 @@ class YoungFile:
     age: dt.timedelta
 
 
+@dataclass(frozen=True, slots=True)
+class Exemption:
+    """One declared use of the exception: this package, this version, this advisory, until then."""
+
+    package: str
+    version: str
+    advisory: str
+    expires: dt.date
+
+
+@dataclass
+class Result:
+    failures: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+
 def _uploaded(value: str) -> dt.datetime:
     return dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def _files(package: dict[str, Any]) -> list[dict[str, Any]]:
+    return ([package["sdist"]] if "sdist" in package else []) + list(package.get("wheels", []))
 
 
 def young_files(lock: dict[str, Any], now: dt.datetime) -> list[YoungFile]:
@@ -101,8 +132,7 @@ def young_files(lock: dict[str, Any], now: dt.datetime) -> list[YoungFile]:
             continue  # workspace members and local paths are ours, not downloads
         if (name, version) in GRANDFATHERED:
             continue
-        files = ([package["sdist"]] if "sdist" in package else []) + list(package.get("wheels", []))
-        for file in files:
+        for file in _files(package):
             filename = str(file.get("url", "")).rsplit("/", 1)[-1]
             uploaded = file.get("upload-time")
             if uploaded is None:
@@ -126,13 +156,13 @@ def query_osv(package: str) -> list[dict[str, Any]]:
     return vulns if isinstance(vulns, list) else []
 
 
-def cves_fixed_by(package: str, version: str, advisories: Iterable[dict[str, Any]]) -> list[str]:
-    """CVE ids of advisories for which ``version`` is the fixed version on PyPI."""
-    fixed: list[str] = []
+def advisory_fixes(
+    advisory_id: str, package: str, version: str, advisories: Iterable[dict[str, Any]]
+) -> bool:
+    """True if the named advisory (by id or alias) has exactly ``version`` as its PyPI fix."""
     for advisory in advisories:
-        ids = [str(advisory.get("id", "")), *[str(alias) for alias in advisory.get("aliases", []) or []]]
-        cves = [identifier for identifier in ids if identifier.startswith("CVE-")]
-        if not cves:
+        ids = {str(advisory.get("id", "")), *(str(alias) for alias in advisory.get("aliases", []) or [])}
+        if advisory_id not in ids:
             continue
         for affected in advisory.get("affected", []) or []:
             target = affected.get("package", {})
@@ -140,51 +170,149 @@ def cves_fixed_by(package: str, version: str, advisories: Iterable[dict[str, Any
                 continue
             for range_ in affected.get("ranges", []) or []:
                 if any(event.get("fixed") == version for event in range_.get("events", []) or []):
-                    fixed.extend(cves)
-    return sorted(set(fixed))
+                    return True
+    return False
+
+
+def load_exemptions(pyproject: dict[str, Any]) -> list[Exemption]:
+    declared = pyproject.get("tool", {}).get("aria", {}).get("dependency-age", {}).get("exemptions", [])
+    exemptions = []
+    for entry in declared:
+        missing = {"package", "version", "advisory", "expires"} - set(entry)
+        if missing:
+            raise ValueError(f"an exemption is missing {sorted(missing)}: {entry}")
+        if not isinstance(entry["expires"], dt.date) or isinstance(entry["expires"], dt.datetime):
+            raise ValueError(f"expires must be a TOML date (2026-11-03), not {entry['expires']!r}")
+        exemptions.append(
+            Exemption(str(entry["package"]), str(entry["version"]), str(entry["advisory"]), entry["expires"])
+        )
+    return exemptions
+
+
+def exact_pins(pyproject: dict[str, Any]) -> dict[str, str]:
+    """``package==version`` entries in [tool.uv] constraint-dependencies."""
+    pins: dict[str, str] = {}
+    for constraint in pyproject.get("tool", {}).get("uv", {}).get("constraint-dependencies", []):
+        name, separator, version = str(constraint).partition("==")
+        if separator:
+            pins[name.strip().lower()] = version.strip()
+    return pins
+
+
+def _expiry_from_lock(lock: dict[str, Any], package: str, version: str) -> dt.date | None:
+    for entry in lock.get("package", []):
+        if entry["name"] == package and entry.get("version") == version:
+            times = [_uploaded(str(file["upload-time"])) for file in _files(entry) if "upload-time" in file]
+            return (max(times) + MINIMUM_AGE).date() if times else None
+    return None
+
+
+def check_exemptions(
+    lock: dict[str, Any], exemptions: Sequence[Exemption], pins: dict[str, str], today: dt.date
+) -> Result:
+    """What can be judged without the network: dates, pins, and that each exemption is in use."""
+    result = Result()
+    declared = {(item.package.lower(), item.version) for item in exemptions}
+    for item in exemptions:
+        label = f"exemption {item.package} {item.version} ({item.advisory})"
+        expected = _expiry_from_lock(lock, item.package, item.version)
+        if expected is None:
+            result.failures.append(f"{label} names a version uv.lock does not pin; delete it")
+            continue
+        if item.expires != expected:
+            result.failures.append(
+                f"{label} expires {item.expires}, but the version turns 14 days old on {expected}; "
+                "the date comes from uv.lock and cannot be moved"
+            )
+        if today > item.expires:
+            result.failures.append(
+                f"{label} expired on {item.expires}: the version is old enough now. Delete the exemption "
+                f'and loosen its pin to "{item.package}>={item.version}" in [tool.uv] constraint-dependencies'
+            )
+        elif today >= item.expires - WARN_BEFORE:
+            days = (item.expires - today).days
+            result.warnings.append(
+                f"{label} expires on {item.expires} ({days} day(s)): delete it and loosen its pin by then, "
+                "or this check fails"
+            )
+        if pins.get(item.package.lower()) != item.version:
+            result.failures.append(
+                f'{label} needs the exact pin "{item.package}=={item.version}" in [tool.uv] '
+                "constraint-dependencies, so no other young release can resolve under it"
+            )
+    for package, version in sorted(pins.items()):
+        if (package, version) not in declared:
+            result.failures.append(
+                f"{package}=={version} is pinned exactly with no exemption; an exact pin is only for one"
+            )
+    return result
 
 
 def check(
     lock: dict[str, Any],
     now: dt.datetime,
     advisories_for: Callable[[str], list[dict[str, Any]]] = query_osv,
-) -> tuple[list[str], list[str]]:
-    """``(failures, notes)``. Empty failures means the lock passes."""
-    failures: list[str] = []
-    notes: list[str] = []
+    exemptions: Sequence[Exemption] = (),
+    pins: dict[str, str] | None = None,
+) -> Result:
+    """Every young pin must be a declared, confirmed, unexpired exemption."""
+    result = check_exemptions(lock, exemptions, pins or {}, now.date())
     by_version: dict[tuple[str, str], list[YoungFile]] = {}
     for young in young_files(lock, now):
         by_version.setdefault((young.package, young.version), []).append(young)
 
     for (package, version), files in sorted(by_version.items()):
-        oldest = max(file.age for file in files)
-        cves = cves_fixed_by(package, version, advisories_for(package))
-        if cves:
-            notes.append(
-                f"{package} {version} is {oldest.days} day(s) old and allowed: it fixes {', '.join(cves)}"
+        youngest = min(file.age for file in files)
+        declared = [
+            item for item in exemptions if (item.package.lower(), item.version) == (package.lower(), version)
+        ]
+        if not declared:
+            result.failures.append(
+                f"{package} {version} has {len(files)} file(s) on PyPI for less than {MINIMUM_AGE.days} days "
+                f"(youngest: {files[0].filename}, {youngest.days} day(s)). Pin an older version, or, if "
+                "it is the fix for a published advisory, declare it in [tool.aria.dependency-age] exemptions"
             )
             continue
-        failures.append(
-            f"{package} {version} has {len(files)} file(s) on PyPI for less than {MINIMUM_AGE.days} days "
-            f"(youngest: {files[0].filename}, {min(file.age for file in files).days} day(s)). Pin an older "
-            "version, or wait; only a release that fixes a published CVE is exempt."
+        advisories = advisories_for(package)
+        confirmed = [item for item in declared if advisory_fixes(item.advisory, package, version, advisories)]
+        if not confirmed:
+            result.failures.append(
+                f"{package} {version} is declared as the fix for {', '.join(i.advisory for i in declared)}, "
+                "but OSV does not list that version as its fix"
+            )
+            continue
+        result.notes.append(
+            f"{package} {version} is {youngest.days} day(s) old and allowed until {confirmed[0].expires}: "
+            f"it fixes {confirmed[0].advisory}"
         )
-    return failures, notes
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--lock", type=Path, default=Path("uv.lock"))
+    parser.add_argument("--pyproject", type=Path, default=Path("pyproject.toml"))
     arguments = parser.parse_args(argv)
     lock = tomllib.loads(arguments.lock.read_text(encoding="utf-8"))
-    failures, notes = check(lock, dt.datetime.now(dt.UTC))
-    for note in notes:
+    pyproject = tomllib.loads(arguments.pyproject.read_text(encoding="utf-8"))
+    result = check(
+        lock,
+        dt.datetime.now(dt.UTC),
+        exemptions=load_exemptions(pyproject),
+        pins=exact_pins(pyproject),
+    )
+    for note in result.notes:
         print(f"note: {note}")
-    for failure in failures:
+    for warning in result.warnings:
+        print(f"warning: {warning}", file=sys.stderr)
+    for failure in result.failures:
         print(f"error: {failure}", file=sys.stderr)
-    if not failures:
-        print(f"every pinned file in {arguments.lock} is at least {MINIMUM_AGE.days} days old, or exempt")
-    return 1 if failures else 0
+    if not result.failures:
+        print(
+            f"every pinned file in {arguments.lock} is at least {MINIMUM_AGE.days} days old, "
+            "or a declared fix"
+        )
+    return 1 if result.failures else 0
 
 
 if __name__ == "__main__":
