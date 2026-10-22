@@ -149,7 +149,7 @@ markers = [
     "docker: needs Docker and the parser image (./tasks.ps1 parser-image)",
     "chromium: needs Playwright's Chromium (uv run playwright install chromium); CI installs it rather than skipping",
     "live: calls a real, paid model provider; skipped unless ARIA_LIVE_LLM=1 and ARIA_ANTHROPIC_API_KEY are set",
-    "models: needs the local model weights (./tasks.ps1 models) and the ml group; skipped where absent, and CI never downloads them",
+    "models: needs the local model weights (./tasks.ps1 models) and the ml group; fails without them, skipped only where ARIA_MODELS=absent declares it (CI)",
 ]
 
 # Declared exceptions to the 14-day rule (DECISIONS 2026-10-22): one per young version that is

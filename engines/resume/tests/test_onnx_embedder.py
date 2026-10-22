@@ -1,15 +1,18 @@
-"""The ONNX embedding adapter: its rules on a stand-in backend (CI), the real model where present.
+"""The ONNX embedding adapter: its rules on a stand-in backend (CI), the real model elsewhere.
 
-CI never installs the ml group, so everything the adapter decides (telemetry off before any
-session, the query prefix on queries only, CLS or mean pooling, normalisation, offline) is
-tested on a stand-in. The real model is then held to its publisher's own reference scores,
-printed on its model card by a different implementation (sentence-transformers on PyTorch):
-a pooling, prefix or normalisation error moves them, loudly.
+CI never installs the ml group, and says so (ARIA_MODELS=absent), so everything the
+adapter decides (telemetry off before any session, the query prefix on queries only, CLS or
+mean pooling, normalisation, offline) is tested on a stand-in. The real model is then held
+to its publisher's own reference scores, printed on its model card by a different
+implementation (sentence-transformers on PyTorch): a pooling, prefix or normalisation error
+moves them, loudly. Anywhere that does not declare ARIA_MODELS=absent, a missing ml group or
+missing weights fails those tests rather than skipping them.
 """
 
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import math
 import os
 import sys
@@ -181,15 +184,71 @@ PUBLISHED = {
 }
 
 
+#: Where the real-model tests may be skipped. Only a run that says so: ARIA_MODELS=absent
+#: declares that this run has no local models on purpose (CI and the replay harness, which
+#: never download weights). Anywhere else a missing ml group or missing weights fails, each
+#: with its own cause, so an environment that lost the group (a `uv sync` without
+#: `--group ml`) goes red instead of skipping its way to green (DECISIONS 2026-10-22).
+MODELS_ENV = "ARIA_MODELS"
+
+
+def models_verdict(declared: str | None, has_runtime: bool, has_weights: bool) -> tuple[str, str]:
+    """``("run" | "skip" | "fail", why)`` for the real-model tests."""
+    if declared not in (None, "", "absent"):
+        return (
+            "fail",
+            f"{MODELS_ENV}={declared!r} is not a value this suite knows; use absent or leave it unset",
+        )
+    if declared == "absent":
+        return "skip", f"{MODELS_ENV}=absent: this run has no local models on purpose"
+    if not has_runtime:
+        return "fail", (
+            "the ml group is missing from this environment (uv sync --all-packages --group ml); "
+            f"set {MODELS_ENV}=absent only where that is intended, as CI does"
+        )
+    if not has_weights:
+        return "fail", (
+            "the ml group is installed but the embedding weights are not (./tasks.ps1 models); "
+            f"set {MODELS_ENV}=absent only where that is intended, as CI does"
+        )
+    return "run", ""
+
+
 def _real_model_or_skip() -> tuple[ModelSpec, Path]:
     spec = load_lock()["embedding"]
     directory = model_directory(spec)
-    if not (directory / "onnx" / "model.onnx").is_file():
-        pytest.skip(
-            "the embedding weights are not installed here (./tasks.ps1 models); CI never downloads them"
-        )
-    pytest.importorskip("onnxruntime", reason="the ml group is not installed (uv sync --group ml)")
+    verdict, why = models_verdict(
+        os.environ.get(MODELS_ENV),
+        importlib.util.find_spec("onnxruntime") is not None,
+        (directory / "onnx" / "model.onnx").is_file(),
+    )
+    if verdict == "skip":
+        pytest.skip(why)
+    if verdict == "fail":
+        pytest.fail(why)
     return spec, directory
+
+
+class TestWhenTheRealModelMayBeSkipped:
+    def test_only_a_declared_absence_skips(self) -> None:
+        assert models_verdict("absent", False, False)[0] == "skip"
+        assert models_verdict("absent", True, True)[0] == "skip"
+
+    def test_a_missing_ml_group_fails_and_says_so(self) -> None:
+        verdict, why = models_verdict(None, False, False)
+        assert verdict == "fail" and "ml group is missing" in why
+
+    def test_missing_weights_fail_and_say_so(self) -> None:
+        verdict, why = models_verdict(None, True, False)
+        assert verdict == "fail" and "weights are not" in why
+
+    def test_a_misspelt_declaration_does_not_skip(self) -> None:
+        # Everything present, so the only thing that can fail it is the misspelling itself.
+        assert models_verdict("absnet", True, True)[0] == "fail"
+
+    def test_with_both_present_the_tests_run(self) -> None:
+        assert models_verdict(None, True, True) == ("run", "")
+        assert models_verdict("", True, True) == ("run", "")
 
 
 @pytest.mark.models

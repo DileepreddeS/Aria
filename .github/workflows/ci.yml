@@ -25,6 +25,9 @@ env:
   ARIA_LLM_GATEWAY_SERVICE_TOKEN: ci-only-not-a-real-secret
   ARIA_OTEL_EXPORTER: none
   ARIA_DEV_KMS_KEY_PATH: /tmp/aria/dev-kms-root.key
+  # CI never installs the ml group or downloads model weights, and says so: the real-model
+  # tests skip only where this is declared, and fail anywhere it is not (DECISIONS 2026-10-22).
+  ARIA_MODELS: absent
 
 jobs:
   lint:
