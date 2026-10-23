@@ -26,6 +26,7 @@ from aria_core.schemas.untrusted import UntrustedContent
 from aria_core.sensitivity import Sensitivity
 
 __all__ = [
+    "CANDIDATE_DATA_PURPOSES",
     "PURPOSE_INPUT_KEYS",
     "CompletionRequest",
     "CompletionResponse",
@@ -52,6 +53,13 @@ PURPOSE_INPUT_KEYS: Final[dict[LlmPurpose, frozenset[str]]] = {
 }
 
 
+#: Purposes that carry a candidate's own data (facts, answers, the rendered page): refused for a
+#: tenant that has not opted in (aria_core.tenant_settings, DECISIONS 2026-10-23).
+CANDIDATE_DATA_PURPOSES: Final[frozenset[LlmPurpose]] = frozenset(
+    {LlmPurpose.WRITE_BULLET, LlmPurpose.ANSWER_OPEN_ENDED, LlmPurpose.SIX_SECOND_CHECK}
+)
+
+
 class RefusalReason(StrEnum):
     """Why the gateway would not dispatch. Recorded; never accompanied by the value."""
 
@@ -70,6 +78,8 @@ class RefusalReason(StrEnum):
     """The request could take the tenant past its monthly cap."""
     PROVIDER_ERROR = "provider_error"
     MODEL_DECLINED = "model_declined"
+    MODEL_WRITING_NOT_ENABLED = "model_writing_not_enabled"
+    """The purpose carries candidate data and the tenant has not opted in."""
     """The model refused (stop_reason "refusal"). Recorded with its cost; never retried elsewhere."""
 
 

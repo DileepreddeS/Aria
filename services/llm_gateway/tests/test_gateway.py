@@ -31,6 +31,7 @@ from aria_core.schemas.audit import AuditAction, AuditOutcome
 from aria_core.schemas.identity import TenantId, new_id
 from aria_core.schemas.llm import LlmRequest as ModelAsk
 from aria_core.schemas.untrusted import UntrustedContent, UntrustedSourceKind
+from aria_core.tenant_settings import model_writing_enabled, set_model_writing
 from aria_llm_gateway.app import SERVICE_TOKEN_HEADER, create_app
 from aria_llm_gateway.guards import inspect_request, reject_sensitive_fields
 from aria_llm_gateway.prices import Usage, load_prices
@@ -837,3 +838,63 @@ async def test_the_aria_core_client_speaks_the_gateway_s_language(
     assert reply.provider == "echo"
     (row,) = await _rows(engine, tenant_id)
     assert (row.run_id, row.outcome) == (run, "ok")
+
+
+def _bullet_request(tenant_id: TenantId) -> CompletionRequest:
+    return _request(
+        tenant_id,
+        purpose=LlmPurpose.WRITE_BULLET,
+        trusted_instructions="Write one bullet from the facts.",
+        untrusted_content=(),
+        inputs={"fact_texts": "Cut p95 latency from 900 ms to 210 ms.", "target_requirement": "PostgreSQL"},
+    )
+
+
+@pytest.mark.db
+class TestCandidateDataLeavesOnlyForATenantThatOptedIn:
+    async def test_a_new_tenant_has_not_opted_in(self, engine: AsyncEngine, tenant_id: TenantId) -> None:
+        async with tenant_transaction(engine, tenant_id) as session:
+            assert await model_writing_enabled(session, tenant_id) is False
+
+    async def test_a_bullet_request_is_refused_before_anything_is_sent(
+        self, engine: AsyncEngine, tenant_id: TenantId
+    ) -> None:
+        provider = ScriptedProvider()
+        async with _gateway(engine, provider) as http:
+            response = await _post(http, _bullet_request(tenant_id))
+        assert response.status_code == 403
+        assert response.json()["detail"]["reason"] == RefusalReason.MODEL_WRITING_NOT_ENABLED.value
+        assert provider.calls == 0
+        (row,) = await _rows(engine, tenant_id)
+        assert (row.outcome, row.cost_usd) == ("refused", decimal.Decimal(0))
+
+    async def test_reading_a_posting_needs_no_opt_in(self, engine: AsyncEngine, tenant_id: TenantId) -> None:
+        async with _gateway(engine, ScriptedProvider()) as http:
+            assert (await _post(http, _request(tenant_id))).status_code == 200
+
+    async def test_once_opted_in_it_is_sent_and_the_switch_is_audited(
+        self, engine: AsyncEngine, tenant_id: TenantId
+    ) -> None:
+        await set_model_writing(
+            engine, tenant_id, enabled=True, by="dileep", reason="own data, 30-day retention"
+        )
+        provider = ScriptedProvider()
+        async with _gateway(engine, provider) as http:
+            assert (await _post(http, _bullet_request(tenant_id))).status_code == 200
+        assert provider.calls == 1
+        async with tenant_transaction(engine, tenant_id) as session:
+            events = [
+                e
+                for e in await read_chain(session, tenant_id)
+                if e.action == AuditAction.MODEL_WRITING_CHANGED.value
+            ]
+        (event,) = events
+        assert (event.actor_id, event.payload) == ("dileep", {"before": False, "after": True})
+
+    async def test_switching_it_needs_a_name_and_a_reason(
+        self, engine: AsyncEngine, tenant_id: TenantId
+    ) -> None:
+        with pytest.raises(ValueError, match="name and a reason"):
+            await set_model_writing(engine, tenant_id, enabled=True, by="dileep", reason=" ")
+        async with tenant_transaction(engine, tenant_id) as session:
+            assert await model_writing_enabled(session, tenant_id) is False

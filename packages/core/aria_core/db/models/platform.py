@@ -27,6 +27,7 @@ from typing import Any
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -36,6 +37,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -65,6 +67,9 @@ class Tenant(Base):
 
     id: Mapped[uuid.UUID] = uuid_primary_key()
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    #: Whether this tenant's candidate data may be sent to a model (migration 0009). Off until
+    #: someone turns it on, with an audited reason; the gateway enforces it.
+    model_writing_opt_in: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
     created_at: Mapped[dt.datetime] = created_at_column()
 
 

@@ -52,6 +52,7 @@ from aria_core.schemas.audit import (
     SubjectKind,
 )
 from aria_core.schemas.identity import TenantId
+from aria_core.tenant_settings import model_writing_enabled
 from aria_llm_gateway.guards import Refusal, inspect_request
 from aria_llm_gateway.prices import PriceTable, Usage, load_prices
 from aria_llm_gateway.prompt import assemble
@@ -64,7 +65,13 @@ from aria_llm_gateway.providers import (
     ProviderRejected,
 )
 from aria_llm_gateway.reservations import awaiting_reconciliation
-from aria_llm_gateway.schemas import CompletionRequest, CompletionResponse, LlmPurpose, RefusalReason
+from aria_llm_gateway.schemas import (
+    CANDIDATE_DATA_PURPOSES,
+    CompletionRequest,
+    CompletionResponse,
+    LlmPurpose,
+    RefusalReason,
+)
 from aria_llm_gateway.settings import ProviderSettings, check_sdk_environment
 
 __all__ = ["EFFORT_BY_PURPOSE", "build_provider", "create_app"]
@@ -422,6 +429,18 @@ def create_app(
         tenant_id = TenantId(uuid.UUID(body.tenant_id))
 
         refusal = inspect_request(body)
+        if refusal is None and body.purpose in CANDIDATE_DATA_PURPOSES:
+            # A candidate's own data leaves only for a tenant that opted in (migration 0009).
+            async with tenant_transaction(app_engine, tenant_id) as session:
+                allowed = await model_writing_enabled(session, tenant_id)
+            if not allowed:
+                raise await refuse(
+                    app_engine,
+                    tenant_id,
+                    body,
+                    Refusal(RefusalReason.MODEL_WRITING_NOT_ENABLED, (body.purpose.value,), "tenant"),
+                    status.HTTP_403_FORBIDDEN,
+                )
         if refusal is None and price_table.price(body.model) is None:
             refusal = Refusal(RefusalReason.MODEL_NOT_PRICED, (body.model,), "model")
         schema: dict[str, Any] | None = None

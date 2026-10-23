@@ -101,6 +101,8 @@ class AuditAction(StrEnum):
     #: A reservation the gateway could not settle, settled by a person on the provider's figures.
     LLM_REQUEST_RECONCILED = "llm_request.reconciled"
     LLM_REQUEST_REFUSED = "llm_request.refused"
+    #: A tenant's candidate data allowed, or no longer allowed, to reach a model.
+    MODEL_WRITING_CHANGED = "tenant.model_writing_changed"
     APPLY_TASK_SIGNED = "apply_task.signed"
     APPLY_TASK_CONSUMED = "apply_task.consumed"
     APPLY_TASK_REJECTED = "apply_task.rejected"
