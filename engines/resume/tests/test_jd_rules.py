@@ -24,6 +24,9 @@ class TestHeadings:
             ("## Nice to have", JDSection.PREFERRED),
             ("What you\u2019ll do", JDSection.RESPONSIBILITIES),
             ("About Larkspur", JDSection.ABOUT),
+            # The vocabulary wins over the "About <company>" rule: this is the candidate.
+            ("About you", JDSection.REQUIRED),
+            ("About You:", JDSection.REQUIRED),
             ("Perks", JDSection.BENEFITS),
             ("Our stack:", JDSection.OTHER),
         ],

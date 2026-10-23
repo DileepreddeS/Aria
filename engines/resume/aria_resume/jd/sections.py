@@ -87,10 +87,12 @@ def heading_section(line: str) -> JDSection | None:
     if not stripped or _BULLET.match(stripped) or len(stripped.split()) > 7:
         return None
     words = _words(stripped)
-    if words.startswith("about ") and len(words.split()) <= 3:
-        return JDSection.ABOUT
+    # The vocabulary first: "About you" is about the candidate, so its section is Required,
+    # and the "About <company>" rule below must not shadow it.
     if words in _VOCABULARY:
         return _VOCABULARY[words]
+    if words.startswith("about ") and len(words.split()) <= 3:
+        return JDSection.ABOUT
     # An unknown short line ending in a colon is a heading of a section we do not read.
     if stripped.endswith(":") and not stripped[:-1].strip().endswith((".", ",")):
         return JDSection.OTHER
