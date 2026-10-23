@@ -117,6 +117,28 @@ async def test_an_honest_reading_of_benign_prose_keeps_its_requirements() -> Non
     assert (found, expected) == (8, 9)
 
 
+async def test_the_one_line_lost_is_listed_as_a_taxonomy_gap() -> None:
+    path = BENIGN / "support_engineer_prose.txt"
+    meta = yaml.safe_load(path.with_suffix(".yaml").read_text(encoding="utf-8"))
+    reply = json.dumps(
+        {
+            "title": None,
+            "company": None,
+            "required": meta["requirements"],
+            "preferred": meta["preferred"],
+            "responsibilities": meta["responsibilities"],
+            "suspicious": [],
+        }
+    )
+    parsed = await read_jd_with_model(
+        path.read_text(encoding="utf-8"),
+        TAXONOMY,
+        ScriptedLlm({LlmPurpose.PARSE_JD: [reply]}),
+        source_ref="t",
+    )
+    assert "taxonomy_gap: Experience with Zendesk is a plus." in parsed.reading_notes
+
+
 def test_about_you_is_read_as_requirements() -> None:
     # The Stage 1 bug the recall measurement found (DECISIONS 2026-10-22).
     items = split_items(clean((BENIGN / "platform_engineer_prose.txt").read_text(encoding="utf-8")).text)

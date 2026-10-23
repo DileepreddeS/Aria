@@ -40,7 +40,14 @@ from aria_resume.llm import LlmClient, LlmPurpose, LlmRequest, LlmUnavailable
 from aria_resume.normalize.requirements import degree_levels
 from aria_resume.schemas import JDSection, ParsedJD, RawRequirement
 
-__all__ = ["INSTRUCTIONS", "INSTRUCTIONS_VERSION", "RESPONSE_SCHEMA", "ModelReading", "read_jd_with_model"]
+__all__ = [
+    "INSTRUCTIONS",
+    "INSTRUCTIONS_VERSION",
+    "RESPONSE_SCHEMA",
+    "TAXONOMY_GAP",
+    "ModelReading",
+    "read_jd_with_model",
+]
 
 INSTRUCTIONS_VERSION = "2026.10.1"
 
@@ -88,6 +95,9 @@ class ModelReading(BaseModel):
 RESPONSE_SCHEMA = ModelReading.model_json_schema()
 #: The longest title or company name a quote may be.
 MAX_NAME = 200
+#: The note prefix for a line not taken because it names nothing the taxonomy knows. The taxonomy
+#: is a ceiling on what the step can add, so each such line is kept in sight (DECISIONS 2026-10-22).
+TAXONOMY_GAP = "taxonomy_gap: "
 #: How many non-blank lines from the top make the masthead, where a title and company are.
 MASTHEAD_LINES = 2
 
@@ -200,7 +210,8 @@ def _merge(
                 return item
         return None
 
-    ignored = part_of_a_sentence = unreadable = 0
+    ignored = part_of_a_sentence = 0
+    gaps: list[str] = []
     added: dict[JDSection, list[str]] = {
         JDSection.REQUIRED: [],
         JDSection.PREFERRED: [],
@@ -231,7 +242,7 @@ def _merge(
                 part_of_a_sentence += 1
                 continue
             if not _readable(quote, taxonomy):
-                unreadable += 1
+                gaps.append(quote)
                 continue
             added[section].append(quote)
 
@@ -265,8 +276,9 @@ def _merge(
         notes.append(f"model: {not_quoted} line(s) not found verbatim in the posting were dropped")
     if part_of_a_sentence:
         notes.append(f"model: {part_of_a_sentence} line(s) that were only part of a sentence were not taken")
-    if unreadable:
-        notes.append(f"model: {unreadable} line(s) naming no skill, years or degree were not taken")
+    if gaps:
+        notes.append(f"model: {len(gaps)} line(s) naming no skill, years or degree were not taken")
+        notes.extend(f"{TAXONOMY_GAP}{line}" for line in gaps)
     if ignored:
         notes.append(
             f"model: {ignored} line(s) outside the text the rules left unplaced, or flagged, were not taken"

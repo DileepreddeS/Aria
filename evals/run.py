@@ -158,6 +158,9 @@ def main(argv: list[str] | None = None) -> int:
     print(f"{args.suite}: {NOTE}")
     print(f"configuration: {json.dumps(report.configuration, sort_keys=True)}\n")
     print(_table(report))
+    for posting in report.postings:
+        for gap in posting.reported.get("taxonomy_gaps", []):
+            print(f"taxonomy gap  {posting.name}: {gap}")
     print(f"\nreport: {written}")
     for failure in report.failures:
         print(f"GATE FAILED  {failure}")

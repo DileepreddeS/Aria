@@ -105,6 +105,8 @@ class TestWhatTheModelCannotAdd:
         )
         assert "Quillon builds billing software for clinics." not in parsed.responsibilities
         assert any("naming no skill, years or degree" in note for note in parsed.reading_notes)
+        # Each one by name: the taxonomy is the ceiling, and a gap must not disappear.
+        assert "taxonomy_gap: Quillon builds billing software for clinics." in parsed.reading_notes
 
     async def test_a_fragment_of_a_sentence_is_not_taken(self, taxonomy: SkillTaxonomy) -> None:
         parsed, _ = await _read(taxonomy, _reply(required=["Terraform and AWS"]))

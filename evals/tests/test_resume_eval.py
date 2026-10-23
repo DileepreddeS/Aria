@@ -61,6 +61,23 @@ class TestLabels:
         assert _mismatches("tidewell_frontend", labels) == ["min_years: read 5, labelled 3"]
 
 
+def test_taxonomy_gaps_join_stage_2_s_unplaced_lines_and_the_model_s_drops() -> None:
+    from aria_resume.schemas import JDSection, NormalizedJD, ParsedJD, RawRequirement
+
+    parsed = ParsedJD(
+        reading_notes=("model: instructions x", "taxonomy_gap: Experience with Zendesk is a plus.")
+    )
+    normalized = NormalizedJD(
+        requirements=(),
+        taxonomy_version="test",
+        unplaced=(RawRequirement(text="A portfolio of shipped work", section=JDSection.REQUIRED),),
+    )
+    assert suite.taxonomy_gaps(parsed, normalized) == [
+        "A portfolio of shipped work",
+        "Experience with Zendesk is a plus.",
+    ]
+
+
 def _report(*, failures: list[str], coverage: float = 0.5) -> Report:
     gates: dict[str, Any] = {
         "truth_violations": [],

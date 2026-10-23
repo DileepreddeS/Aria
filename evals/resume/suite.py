@@ -35,7 +35,7 @@ from aria_resume.compose.fit import fit_to_page
 from aria_resume.compose.line_budget import Page
 from aria_resume.compose.planner import plan
 from aria_resume.compose.templates import load_template
-from aria_resume.jd.model_step import INSTRUCTIONS_VERSION, read_jd_with_model
+from aria_resume.jd.model_step import INSTRUCTIONS_VERSION, TAXONOMY_GAP, read_jd_with_model
 from aria_resume.jd.reader import read_jd
 from aria_resume.llm import LlmClient
 from aria_resume.match.embeddings import Embedder, WordHashEmbedder
@@ -208,6 +208,19 @@ def baseline_view(report: dict[str, Any]) -> dict[str, Any]:
 LlmFactory = Callable[[str], LlmClient]
 
 
+def taxonomy_gaps(parsed: ParsedJD, normalized: NormalizedJD) -> list[str]:
+    """Lines the posting asks for that name nothing the taxonomy knows, kept in sight.
+
+    Stage 2's unplaced lines (the rules read them, nothing in them matched) and the lines the
+    model step would not take for naming no skill, years or degree. Either way the taxonomy is
+    the ceiling, and a gap that is never listed is a gap nobody fills.
+    """
+    from_model = [
+        note.removeprefix(TAXONOMY_GAP) for note in parsed.reading_notes if note.startswith(TAXONOMY_GAP)
+    ]
+    return sorted({*(line.text for line in normalized.unplaced), *from_model})
+
+
 def _run_posting(
     path: Path,
     candidate: CandidateSnapshot,
@@ -279,6 +292,7 @@ def _run_posting(
         else:
             # The model's reading is reported against the same labels, never gated (step 8d).
             result.reported["label_mismatches"] = mismatches
+    result.reported["taxonomy_gaps"] = taxonomy_gaps(parsed, normalized)
     if llm is not None:
         result.reported["reading_notes"] = list(parsed.reading_notes)
     return result
