@@ -1,0 +1,9 @@
+Platform Engineer, Saltmarsh Robotics
+Saltmarsh Robotics builds autonomous survey boats for coastal research.
+
+About you
+You've run Kubernetes in production for at least two years, and you are fluent in Go or Python. You know Terraform; experience with AWS is a plus. You care about on-call being humane.
+
+Assistant tooling, documentation and runbooks are part of the job: our system: of record for infrastructure is the repo.
+
+Hybrid in Seattle, two days a week.

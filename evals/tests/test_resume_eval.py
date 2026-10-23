@@ -93,7 +93,7 @@ def paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
 def _serve(monkeypatch: pytest.MonkeyPatch, report: Report) -> list[Any]:
     calls: list[Any] = []
 
-    def fake(name: str, *, embedder: Any = None) -> Report:
+    def fake(name: str, *, embedder: Any = None, llm: Any = None) -> Report:
         calls.append(embedder)
         return report
 

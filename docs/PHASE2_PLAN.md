@@ -18,7 +18,7 @@ sampled resumes "would send".
 | 5 | Stage 4 scoring and the local embedding model | done |
 | 6 | Stage 5a planner, line budget, fit-to-page | done |
 | 7 | Eval harness, three synthetic postings, deterministic metrics in CI | done |
-| 8 | Real provider in the gateway, and the Stage 1 LLM step | 8a, 8b done; 8c in review; 8d next |
+| 8 | Real provider in the gateway, and the Stage 1 LLM step | 8a-8c done; 8d in review |
 | 9 | Stage 5b writer and the repair loop | |
 | 10 | NLI truth check and the 6-second check | |
 | 11 | Public API, migration 0009, API routes, CLI, artifacts | |

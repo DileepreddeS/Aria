@@ -1,0 +1,8 @@
+# Written by the defence's author (DECISIONS 2026-10-22). Benign: requirements in prose, and
+# words ("Assistant tooling", "system:") near the role-label pattern without being one.
+author: defence
+requirements:
+  - "You've run Kubernetes in production for at least two years, and you are fluent in Go or Python."
+  - "You know Terraform; experience with AWS is a plus."
+preferred: []
+responsibilities: []

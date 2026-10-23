@@ -24,6 +24,7 @@ import asyncio
 import datetime as dt
 import json
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -34,7 +35,9 @@ from aria_resume.compose.fit import fit_to_page
 from aria_resume.compose.line_budget import Page
 from aria_resume.compose.planner import plan
 from aria_resume.compose.templates import load_template
+from aria_resume.jd.model_step import INSTRUCTIONS_VERSION, read_jd_with_model
 from aria_resume.jd.reader import read_jd
+from aria_resume.llm import LlmClient
 from aria_resume.match.embeddings import Embedder, WordHashEmbedder
 from aria_resume.match.matcher import match
 from aria_resume.normalize.requirements import DEGREE_ORDER, normalize
@@ -201,14 +204,24 @@ def baseline_view(report: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+#: Builds the model client for one posting: one run per posting, so each is capped alone.
+LlmFactory = Callable[[str], LlmClient]
+
+
 def _run_posting(
     path: Path,
     candidate: CandidateSnapshot,
     taxonomy: SkillTaxonomy,
     embedder: Embedder,
     labels: dict[str, Any] | None,
+    llm: LlmFactory | None = None,
 ) -> PostingResult:
-    parsed = read_jd(path.read_text(encoding="utf-8"), taxonomy)
+    text = path.read_text(encoding="utf-8")
+    parsed = (
+        read_jd(text, taxonomy)
+        if llm is None
+        else asyncio.run(read_jd_with_model(text, taxonomy, llm(path.stem), source_ref=f"eval:{path.stem}"))
+    )
     normalized = normalize(parsed, taxonomy)
     evidence = match(normalized, candidate, taxonomy, embedder)
     template = load_template(evidence.role_type)
@@ -260,12 +273,18 @@ def _run_posting(
         result.failures.append("one_page: the page did not fit after fitting")
     if labels is not None:
         mismatches = label_mismatches(parsed, normalized, evidence, labels)
-        gates["label_mismatches"] = mismatches
-        result.failures.extend(f"labels: {item}" for item in mismatches)
+        if llm is None:
+            gates["label_mismatches"] = mismatches
+            result.failures.extend(f"labels: {item}" for item in mismatches)
+        else:
+            # The model's reading is reported against the same labels, never gated (step 8d).
+            result.reported["label_mismatches"] = mismatches
+    if llm is not None:
+        result.reported["reading_notes"] = list(parsed.reading_notes)
     return result
 
 
-def run_suite(name: str, *, embedder: Embedder | None = None) -> Report:
+def run_suite(name: str, *, embedder: Embedder | None = None, llm: LlmFactory | None = None) -> Report:
     directory = SUITES[name]
     taxonomy = load_default_taxonomy()
     embedder = embedder or WordHashEmbedder()
@@ -276,7 +295,7 @@ def run_suite(name: str, *, embedder: Embedder | None = None) -> Report:
         gated_labels = (
             yaml.safe_load(label_path.read_text(encoding="utf-8")) if name == "resume-synthetic" else None
         )
-        postings.append(_run_posting(path, candidate, taxonomy, embedder, gated_labels))
+        postings.append(_run_posting(path, candidate, taxonomy, embedder, gated_labels, llm))
     configuration = {
         "embedder": embedder.model_id,
         "taxonomy": taxonomy.version,
@@ -292,5 +311,6 @@ def run_suite(name: str, *, embedder: Embedder | None = None) -> Report:
             )
         ),
         "render_template": TEMPLATE_VERSION,
+        "stage1": "rules" if llm is None else f"rules+model (instructions {INSTRUCTIONS_VERSION})",
     }
     return Report(name, configuration, postings)

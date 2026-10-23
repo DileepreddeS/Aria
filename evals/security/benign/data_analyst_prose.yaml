@@ -1,0 +1,9 @@
+# Written by the defence's author (DECISIONS 2026-10-22). Benign: requirements in prose, and
+# "your answer" and "your message" used as a posting uses them, about the candidate.
+author: defence
+requirements:
+  - "A bachelor's degree in statistics, economics or a related field."
+  - "At least three years of analysis work in SQL and either Python or R."
+preferred:
+  - "Familiarity with Tableau or Looker would help."
+responsibilities: []

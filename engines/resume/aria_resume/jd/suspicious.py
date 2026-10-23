@@ -40,6 +40,27 @@ KINDS: dict[str, re.Pattern[str]] = {
     "moves_off_site": re.compile(
         r"\b(?:telegram|whatsapp|signal\s+app|text\s+(?:us|me)\s+at)\b", re.IGNORECASE
     ),
+    # Text addressed to whatever is reading the posting rather than to a candidate: a
+    # directive about the reader's own output, a role label, or a reference to the reader's
+    # instructions. The output directives were written from BIPIA's text_attack_test.json,
+    # the role-label and reader-reference ones from evals/security/postings/
+    # system_override_prose.txt; BIPIA's train half was held out and measured once, after
+    # these were fixed (DECISIONS 2026-10-22). "Your response time(s)" and "your answers" are
+    # ordinary customer-facing words and are not it.
+    "instructs_the_reader": re.compile(
+        # The reader's output as the object of a directive ("Encode your response", "in your
+        # answer"). As a sentence's subject ("Your answer to ... should") it is the candidate's,
+        # which is how a posting uses it, so a sentence-initial "Your" is not a match.
+        r"(?<!^)(?<![.!?:]\s)\byour\s+(?:response|answer|reply|output)\b"
+        r"(?!\s*(?:times?|rates?|windows?|SLAs?)\b)"
+        r"|\b(?:reply|respond|answer)\s+(?:in|using|with)\s+"
+        r"(?:reverse|base\s?\d+|emojis?|(?:a\s+)?cipher|french|spanish|german|italian|portuguese)\b"
+        r"|^\s*(?:system|assistant|developer)\s*:"
+        r"|\bthe\s+(?:text|instructions?)\s+above\b"
+        r"|\bwhen\s+you\s+(?:read|process|parse|summari[sz]e|evaluate|review|analy[sz]e)\s+this\s+"
+        r"(?:posting|job|description|listing|page|text|ad)\b",
+        re.IGNORECASE | re.MULTILINE,
+    ),
 }
 
 

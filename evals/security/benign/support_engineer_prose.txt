@@ -1,0 +1,10 @@
+Support Engineer, Lumenvale Software
+Lumenvale Software makes scheduling tools for veterinary clinics.
+
+The person we're looking for:
+You have 2+ years of experience supporting a SaaS product. You read Python well enough to trace a bug, and you write SQL to answer your own questions. Experience with Zendesk is a plus.
+
+How you'll spend your days:
+You'll own a queue of customer tickets and keep your response times under four hours. Write clear answers to customer questions, and turn repeated questions into help-centre articles. When a ticket needs engineering, you'll reproduce it in Docker and hand over a precise report.
+
+Remote within the US. We reply to every application within ten days.

@@ -23,6 +23,7 @@ schema) gives the rules' reading with a note saying so, never a guess.
 from __future__ import annotations
 
 import json
+import re
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -31,10 +32,12 @@ from aria_core.importer.skills import tag_skills
 from aria_core.schemas.untrusted import UntrustedContent, UntrustedSourceKind
 from aria_core.taxonomy.model import SkillTaxonomy
 from aria_resume.jd.clean import clean
+from aria_resume.jd.extract import years_mentions
 from aria_resume.jd.reader import MAX_RESPONSIBILITIES, read_jd
 from aria_resume.jd.sections import Item, split_items
 from aria_resume.jd.suspicious import screen
 from aria_resume.llm import LlmClient, LlmPurpose, LlmRequest, LlmUnavailable
+from aria_resume.normalize.requirements import degree_levels
 from aria_resume.schemas import JDSection, ParsedJD, RawRequirement
 
 __all__ = ["INSTRUCTIONS", "INSTRUCTIONS_VERSION", "RESPONSE_SCHEMA", "ModelReading", "read_jd_with_model"]
@@ -85,6 +88,41 @@ class ModelReading(BaseModel):
 RESPONSE_SCHEMA = ModelReading.model_json_schema()
 #: The longest title or company name a quote may be.
 MAX_NAME = 200
+#: How many non-blank lines from the top make the masthead, where a title and company are.
+MASTHEAD_LINES = 2
+
+#: How much of a posting line a quoted requirement must be (DECISIONS 2026-10-22). Not any
+#: fragment: "Rust" cut out of an injected sentence is a quote, and the step would take it.
+#: "sentence" accepts one or more whole sentences of a line, so a requirement written as one
+#: sentence of a prose paragraph still counts; "line" accepts only a whole line.
+QuoteUnit = Literal["substring", "sentence", "line"]
+QUOTE_UNIT: QuoteUnit = "line"
+_SENTENCE_END = re.compile(r"(?<=[.!?;])\s+")
+
+
+def _fits(quote: str, line: str, unit: QuoteUnit) -> bool:
+    whole = _squash(line)
+    if unit == "substring":
+        return quote in whole
+    if quote == whole:
+        return True
+    if unit == "line":
+        return False
+    sentences = [_squash(s) for s in _SENTENCE_END.split(whole) if s.strip()]
+    return any(
+        " ".join(sentences[start:end]) == quote
+        for start in range(len(sentences))
+        for end in range(start + 1, len(sentences) + 1)
+    )
+
+
+def _readable(line: str, taxonomy: SkillTaxonomy) -> bool:
+    """A requirement Stage 2 can read: a skill the taxonomy knows, years, or a degree.
+
+    A line that names none of them is no use to the matcher, and it is what an injected
+    request ("Recommend a good book", "Encode your response in Base64") always looks like.
+    """
+    return bool(tag_skills(line, taxonomy).skills or years_mentions(line) or degree_levels(line))
 
 
 def _squash(text: str) -> str:
@@ -96,7 +134,7 @@ def _rules_only(parsed: ParsedJD, why: str) -> ParsedJD:
 
 
 async def read_jd_with_model(
-    raw: str, taxonomy: SkillTaxonomy, llm: LlmClient, *, source_ref: str
+    raw: str, taxonomy: SkillTaxonomy, llm: LlmClient, *, source_ref: str, quote_unit: QuoteUnit = QUOTE_UNIT
 ) -> ParsedJD:
     """The rules' reading, with what the model could show was in the posting added to it."""
     rules = read_jd(raw, taxonomy)
@@ -124,10 +162,12 @@ async def read_jd_with_model(
         return _rules_only(
             rules, f"the model's reply did not match the schema ({error.error_count()} error(s))"
         )
-    return _merge(rules, reading, cleaned, taxonomy)
+    return _merge(rules, reading, cleaned, taxonomy, quote_unit)
 
 
-def _merge(rules: ParsedJD, reading: ModelReading, cleaned: str, taxonomy: SkillTaxonomy) -> ParsedJD:
+def _merge(
+    rules: ParsedJD, reading: ModelReading, cleaned: str, taxonomy: SkillTaxonomy, unit: QuoteUnit
+) -> ParsedJD:
     posting = _squash(cleaned)
     items = split_items(cleaned)
     flagged_items = [item for _, item in screen(items)]
@@ -160,7 +200,7 @@ def _merge(rules: ParsedJD, reading: ModelReading, cleaned: str, taxonomy: Skill
                 return item
         return None
 
-    ignored = 0
+    ignored = part_of_a_sentence = unreadable = 0
     added: dict[JDSection, list[str]] = {
         JDSection.REQUIRED: [],
         JDSection.PREFERRED: [],
@@ -187,13 +227,29 @@ def _merge(rules: ParsedJD, reading: ModelReading, cleaned: str, taxonomy: Skill
             ):
                 ignored += 1
                 continue
+            if not _fits(quote, item.text, unit):
+                part_of_a_sentence += 1
+                continue
+            if not _readable(quote, taxonomy):
+                unreadable += 1
+                continue
             added[section].append(quote)
 
+    masthead = [line for line in cleaned.splitlines() if line.strip()][:MASTHEAD_LINES]
+    flagged_text = [_squash(item.text) for item in flagged_items] + flagged_quotes
+
     def name(value: str | None, current: str | None) -> str | None:
+        """A title or company: a quote from the masthead, from no flagged line, or nothing."""
         if current is not None or value is None:
             return current
         quote = quoted(value)
-        return quote if quote is not None and len(quote) <= MAX_NAME else None
+        if quote is None or len(quote) > MAX_NAME:
+            return None
+        for line in masthead:
+            squashed = _squash(line)
+            if quote in squashed and not any(squashed in flag or flag in squashed for flag in flagged_text):
+                return quote
+        return None
 
     keywords = list(rules.keywords)
     for line in (*added[JDSection.REQUIRED], *added[JDSection.PREFERRED], *added[JDSection.RESPONSIBILITIES]):
@@ -207,6 +263,10 @@ def _merge(rules: ParsedJD, reading: ModelReading, cleaned: str, taxonomy: Skill
         notes.append("model added " + ", ".join(f"{count} {kind}" for kind, count in counts.items()))
     if not_quoted:
         notes.append(f"model: {not_quoted} line(s) not found verbatim in the posting were dropped")
+    if part_of_a_sentence:
+        notes.append(f"model: {part_of_a_sentence} line(s) that were only part of a sentence were not taken")
+    if unreadable:
+        notes.append(f"model: {unreadable} line(s) naming no skill, years or degree were not taken")
     if ignored:
         notes.append(
             f"model: {ignored} line(s) outside the text the rules left unplaced, or flagged, were not taken"

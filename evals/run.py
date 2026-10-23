@@ -1,4 +1,13 @@
-"""Run an eval suite: ``uv run python -m evals.run resume-synthetic [--models] [--update-baseline]``.
+"""Run an eval suite: ``python -m evals.run <suite> [--models] [--llm --tenant ID] [--update-baseline]``.
+
+Suites: ``resume-synthetic`` (gated in CI), ``resume`` (real postings, reported), and
+``security`` (the red-team postings; scripted hostile replies, as CI runs them).
+
+``--llm`` reads each posting with Stage 1's model step through a running gateway
+(``./tasks.ps1 gateway``), as the tenant ``--tenant`` names, one run per posting. It costs
+money and is never run in CI. What it finds is reported, never gated: label mismatches
+for the resume suites, findings for the security suite, and it neither compares with nor
+updates the baseline.
 
 Every run writes its report to ``evals/resume/reports/`` (untracked) and prints a table. On
 the synthetic suite it is then compared with the committed baseline, and a difference fails
@@ -14,9 +23,19 @@ import argparse
 import datetime as dt
 import json
 import sys
+import uuid
 from typing import Any
 
-from evals.resume.suite import BASELINES, NOTE, REPORTS, SUITES, Report, baseline_view, run_suite
+from evals.resume.suite import (
+    BASELINES,
+    NOTE,
+    REPORTS,
+    SUITES,
+    LlmFactory,
+    Report,
+    baseline_view,
+    run_suite,
+)
 
 
 def _table(report: Report) -> str:
@@ -41,9 +60,51 @@ def _table(report: Report) -> str:
     return "\n".join(rows)
 
 
+def _gateway_llm(tenant: uuid.UUID) -> LlmFactory:
+    """One gateway client per posting, each its own run, so each is capped on its own."""
+    from aria_core.config import get_settings
+    from aria_core.llm_client import GatewayLlmClient
+
+    settings = get_settings()
+    if settings.llm_gateway_service_token is None:
+        raise SystemExit("error: --llm needs ARIA_LLM_GATEWAY_SERVICE_TOKEN and a running gateway")
+    token = settings.llm_gateway_service_token
+
+    def build(posting: str) -> GatewayLlmClient:
+        return GatewayLlmClient(
+            base_url=settings.llm_gateway_url, service_token=token, tenant_id=tenant, run_id=uuid.uuid4()
+        )
+
+    return build
+
+
+def _security(llm: LlmFactory | None) -> int:
+    import asyncio
+
+    from aria_resume.llm import LlmPurpose, ScriptedLlm
+
+    from aria_core.taxonomy.loader import load_default_taxonomy
+    from evals.security.suite import examine, load_postings
+
+    taxonomy = load_default_taxonomy()
+    found = 0
+    mode = "the real model (reported, never gated)" if llm else "scripted hostile replies (gated, as in CI)"
+    print(f"security: red-team postings, read with {mode}\n")
+    for posting in load_postings():
+        client = llm(posting.name) if llm else ScriptedLlm({LlmPurpose.PARSE_JD: [posting.hostile_json()]})
+        examined = asyncio.run(examine(posting, taxonomy, client))
+        found += len(examined.findings)
+        print(f"{posting.name} ({posting.author}): flags {sorted(examined.flags)}")
+        for finding in examined.findings:
+            print(f"  {'REPORTED' if llm else 'FAILED'}  {finding}")
+        for note in examined.parsed.reading_notes:
+            print(f"  note: {note}")
+    return 1 if found and llm is None else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run an eval suite.")
-    parser.add_argument("suite", choices=sorted(SUITES))
+    parser.add_argument("suite", choices=sorted([*SUITES, "security"]))
     parser.add_argument(
         "--models", action="store_true", help="use the local embedding model (./tasks.ps1 models)"
     )
@@ -52,7 +113,23 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="rewrite the committed baseline (synthetic suite, CI configuration)",
     )
+    parser.add_argument(
+        "--llm",
+        action="store_true",
+        help="read postings with the model step through a running gateway (costs money)",
+    )
+    parser.add_argument("--tenant", type=uuid.UUID, help="the tenant the gateway charges, with --llm")
     args = parser.parse_args(argv)
+
+    if args.llm and args.tenant is None:
+        print("error: --llm needs --tenant: the gateway caps and records spend per tenant", file=sys.stderr)
+        return 2
+    if args.update_baseline and args.llm:
+        print("error: the baseline is never written from a model run", file=sys.stderr)
+        return 2
+    llm = _gateway_llm(args.tenant) if args.llm else None
+    if args.suite == "security":
+        return _security(llm)
 
     if args.update_baseline and (args.models or args.suite not in BASELINES):
         print(
@@ -66,12 +143,14 @@ def main(argv: list[str] | None = None) -> int:
         from aria_resume.match.onnx_embedder import OnnxEmbedder
 
         embedder = OnnxEmbedder()
-    report = run_suite(args.suite, embedder=embedder)
+    report = run_suite(args.suite, embedder=embedder, llm=llm)
     data: dict[str, Any] = report.as_dict()
 
     REPORTS.mkdir(parents=True, exist_ok=True)
     stamp = dt.datetime.now(dt.UTC).strftime("%Y%m%dT%H%M%SZ")
-    written = REPORTS / f"{args.suite}{'-models' if args.models else ''}-{stamp}.json"
+    written = (
+        REPORTS / f"{args.suite}{'-models' if args.models else ''}{'-llm' if args.llm else ''}-{stamp}.json"
+    )
     written.write_text(
         json.dumps({**data, "written_at": stamp}, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
@@ -85,7 +164,7 @@ def main(argv: list[str] | None = None) -> int:
     status = 0 if not report.failures else 1
 
     baseline = BASELINES.get(args.suite)
-    if baseline is not None and not args.models:
+    if baseline is not None and not args.models and not args.llm:
         current = json.dumps(baseline_view(data), indent=2, sort_keys=True) + "\n"
         if args.update_baseline:
             if report.failures:

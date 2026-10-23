@@ -1,0 +1,10 @@
+Data Analyst, Fernhollow Cooperative
+Fernhollow Cooperative is a member-owned grocery chain with forty stores across Oregon.
+
+What we need:
+A bachelor's degree in statistics, economics or a related field. At least three years of analysis work in SQL and either Python or R. You should be comfortable presenting to store managers who are not analysts. Familiarity with Tableau or Looker would help.
+
+In your first months:
+You'll rebuild our weekly sales dashboards and answer questions from buyers. Your answer to "why did this sell out?" should come with the query that shows it.
+
+Please include a short note in your message about a dataset you enjoyed working with.
