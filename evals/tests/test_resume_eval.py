@@ -82,6 +82,7 @@ def _report(*, failures: list[str], coverage: float = 0.5) -> Report:
     gates: dict[str, Any] = {
         "truth_violations": [],
         "banned_words": [],
+        "recruiter_findings": [],
         "one_page": True,
         "layout_findings": [],
         "ats_findings": [],
@@ -91,7 +92,7 @@ def _report(*, failures: list[str], coverage: float = 0.5) -> Report:
         "role_type": "backend",
         "fit": "ok",
         "coverage": coverage,
-        "recruiter_findings": {},
+        "status": "ready",
         "fit_rounds": 1,
         "dropped_facts": 0,
         "bullets": 6,

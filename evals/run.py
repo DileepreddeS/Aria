@@ -40,22 +40,26 @@ from evals.resume.suite import (
 
 def _table(report: Report) -> str:
     columns = (
-        "posting", "truth", "banned", "one page", "layout", "ATS", "labels",
-        "coverage", "fit", "rounds", "recruiter (reported)",
+        "posting", "status", "truth", "banned", "recruiter", "one page", "layout", "ATS", "labels",
+        "coverage", "fit", "rounds", "writer (first/rewritten/swapped/fallback)",
     )  # fmt: skip
     rows = ["| " + " | ".join(columns) + " |", "|" + "---|" * len(columns)]
     for posting in report.postings:
         gates, reported = posting.gates, posting.reported
-        recruiter = (
-            ", ".join(f"{name} {count}" for name, count in reported["recruiter_findings"].items()) or "none"
-        )
         labels = gates.get("label_mismatches")
+        writer = reported.get("writer")
+        written = (
+            "facts' own words"
+            if writer is None
+            else f"{writer['first_try']}/{writer['rewritten']}/{writer['swapped']}/{writer['fallback']}"
+        )
         rows.append(
-            f"| {posting.name} | {len(gates['truth_violations'])} | {len(gates['banned_words'])} | "
+            f"| {posting.name} | {reported['status']} | {len(gates['truth_violations'])} | "
+            f"{len(gates['banned_words'])} | {len(gates['recruiter_findings'])} | "
             f"{'yes' if gates['one_page'] else 'NO'} | {len(gates['layout_findings'])} | "
             f"{len(gates['ats_findings'])} | "
             f"{'n/a' if labels is None else len(labels)} | {reported['coverage']:.2f} | {reported['fit']} | "
-            f"{reported['fit_rounds']} | {recruiter} |"
+            f"{reported['fit_rounds']} | {written} |"
         )
     return "\n".join(rows)
 

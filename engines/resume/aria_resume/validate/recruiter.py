@@ -24,7 +24,7 @@ from aria_resume.validate import Finding
 from aria_resume.validate.style import Style
 from aria_resume.validate.text import has_phrase, number_mentions, number_words, phrase_spans
 
-__all__ = ["check_recruiter"]
+__all__ = ["check_bullet_style", "check_recruiter", "opening_verb"]
 
 
 def _opening(text: str, phrases: tuple[str, ...]) -> str | None:
@@ -34,6 +34,37 @@ def _opening(text: str, phrases: tuple[str, ...]) -> str | None:
         if spans and spans[0][0] == len(text) - len(text.lstrip()):
             return phrase
     return None
+
+
+def opening_verb(text: str, style: Style) -> str | None:
+    """The allowed verb ``text`` opens with, or None."""
+    if _opening(text, style.weak_openings) is not None:
+        return None
+    return _opening(text, style.allowed_verbs)
+
+
+def check_bullet_style(text: str, cited: list[str], style: Style) -> list[Finding]:
+    """What one bullet can fail on its own: a banned word, its opening, a vague phrase.
+
+    ``cited`` is the text of the facts the bullet cites: a vague phrase is allowed only if
+    one of them says it in those words. The page-wide rules (repeated and overused verbs,
+    the quantified share) are :func:`check_recruiter`'s.
+    """
+    findings: list[Finding] = []
+    for word in style.banned:
+        if has_phrase(text, word):
+            findings.append(Finding("banned_word", f"{text!r} uses the banned word {word!r}"))
+    if (weak := _opening(text, style.weak_openings)) is not None:
+        findings.append(Finding("weak_opening", f"{text!r} opens with {weak!r}"))
+    elif _opening(text, style.allowed_verbs) is None:
+        first = text.split()[0] if text.split() else ""
+        findings.append(
+            Finding("verb_not_allowed", f"{text!r} opens with {first!r}, which is not in the voice's verbs")
+        )
+    for phrase in style.vague_phrases:
+        if has_phrase(text, phrase) and not any(has_phrase(fact, phrase) for fact in cited):
+            findings.append(Finding("vague_phrase", f"{text!r} says {phrase!r}, which no cited fact says"))
+    return findings
 
 
 def check_recruiter(document: ResumeDocument, snapshot: CandidateSnapshot, style: Style) -> list[Finding]:
@@ -46,7 +77,7 @@ def check_recruiter(document: ResumeDocument, snapshot: CandidateSnapshot, style
     bullets = [
         bullet for section in document.sections for entry in section.entries for bullet in entry.bullets
     ]
-    for text in lines + [bullet.text for bullet in bullets]:
+    for text in lines:
         for word in style.banned:
             if has_phrase(text, word):
                 findings.append(Finding("banned_word", f"{text!r} uses the banned word {word!r}"))
@@ -56,16 +87,9 @@ def check_recruiter(document: ResumeDocument, snapshot: CandidateSnapshot, style
     quantified = 0
     for bullet in bullets:
         text = bullet.text
-        verb = None
-        if (weak := _opening(text, style.weak_openings)) is not None:
-            findings.append(Finding("weak_opening", f"{text!r} opens with {weak!r}"))
-        elif (verb := _opening(text, style.allowed_verbs)) is None:
-            first = text.split()[0] if text.split() else ""
-            findings.append(
-                Finding(
-                    "verb_not_allowed", f"{text!r} opens with {first!r}, which is not in the voice's verbs"
-                )
-            )
+        cited = [facts[fact_id] for fact_id in bullet.fact_ids if fact_id in facts]
+        findings.extend(check_bullet_style(text, cited, style))
+        verb = opening_verb(text, style)
         if verb is not None:
             if verb == previous:
                 findings.append(
@@ -76,13 +100,6 @@ def check_recruiter(document: ResumeDocument, snapshot: CandidateSnapshot, style
 
         if number_mentions(text) or number_words(text):
             quantified += 1
-
-        cited = [facts[fact_id] for fact_id in bullet.fact_ids if fact_id in facts]
-        for phrase in style.vague_phrases:
-            if has_phrase(text, phrase) and not any(has_phrase(fact, phrase) for fact in cited):
-                findings.append(
-                    Finding("vague_phrase", f"{text!r} says {phrase!r}, which no cited fact says")
-                )
 
     for verb, count in counts.items():
         if count > style.max_bullets_per_verb:

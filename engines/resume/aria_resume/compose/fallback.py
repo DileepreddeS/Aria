@@ -12,6 +12,8 @@ from evidence, may add one (DECISIONS 2026-10-18).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from aria_core.schemas.snapshot import CandidateSnapshot
 from aria_resume.compose.headers import Header, degree_header, project_header, role_header
 from aria_resume.compose.planner import PlanError
@@ -23,9 +25,9 @@ from aria_resume.document import (
     ResumeDocument,
     SectionKind,
 )
-from aria_resume.schemas import PlannedEntry, ResumePlan
+from aria_resume.schemas import BulletSlot, PlannedEntry, ResumePlan
 
-__all__ = ["contact_items", "fallback_document"]
+__all__ = ["SlotKey", "contact_items", "fact_bullet", "fallback_document"]
 
 
 def _bare(url: str) -> str:
@@ -61,19 +63,29 @@ def _header(entry: PlannedEntry, snapshot: CandidateSnapshot) -> Header:
     return degree_header(next(item for item in snapshot.education if item.education_id == entry.source_id))
 
 
-def fallback_document(plan: ResumePlan, snapshot: CandidateSnapshot) -> ResumeDocument:
+#: (section, entry, slot) in the plan's order: where a written bullet goes.
+SlotKey = tuple[int, int, int]
+
+
+def fact_bullet(slot: BulletSlot, snapshot: CandidateSnapshot) -> DocumentBullet:
+    """A slot in its fact's own words: true by construction, and the writer's last resort."""
+    return DocumentBullet(text=" ".join(snapshot.fact(slot.fact_ids[0]).text.split()), fact_ids=slot.fact_ids)
+
+
+def fallback_document(
+    plan: ResumePlan, snapshot: CandidateSnapshot, written: Mapping[SlotKey, DocumentBullet] | None = None
+) -> ResumeDocument:
+    """The plan as a document: each slot's written bullet where there is one, its fact's words where not."""
     if not snapshot.contact.full_name:
         raise PlanError("the snapshot has no approved name")
+    written = written or {}
     sections: list[DocumentSection] = []
-    for planned in plan.sections:
+    for s, planned in enumerate(plan.sections):
         entries = []
-        for entry in planned.entries:
+        for e, entry in enumerate(planned.entries):
             header = _header(entry, snapshot)
             bullets = tuple(
-                DocumentBullet(
-                    text=" ".join(snapshot.fact(slot.fact_ids[0]).text.split()), fact_ids=slot.fact_ids
-                )
-                for slot in entry.bullets
+                written.get((s, e, b)) or fact_bullet(slot, snapshot) for b, slot in enumerate(entry.bullets)
             )
             entries.append(
                 DocumentEntry(

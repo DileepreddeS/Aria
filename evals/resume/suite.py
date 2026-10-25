@@ -23,17 +23,13 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import json
-from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import yaml
-from aria_resume.compose.fallback import fallback_document
-from aria_resume.compose.fit import fit_to_page
-from aria_resume.compose.line_budget import Page
-from aria_resume.compose.planner import plan
+from aria_resume.compose.build import build_page
 from aria_resume.compose.templates import load_template
 from aria_resume.jd.model_step import INSTRUCTIONS_VERSION, TAXONOMY_GAP, read_jd_with_model
 from aria_resume.jd.reader import read_jd
@@ -41,16 +37,11 @@ from aria_resume.llm import LlmClient
 from aria_resume.match.embeddings import Embedder, WordHashEmbedder
 from aria_resume.match.matcher import match
 from aria_resume.normalize.requirements import DEGREE_ORDER, normalize
-from aria_resume.render.html import TEMPLATE_VERSION, render_html
-from aria_resume.render.links import add_links
+from aria_resume.render.html import TEMPLATE_VERSION
 from aria_resume.render.pdf import ChromiumPrinter
-from aria_resume.schemas import EvidenceMap, NormalizedJD, ParsedJD, RequirementKind, ResumePlan, RoleType
-from aria_resume.validate.ats import check_ats
+from aria_resume.schemas import EvidenceMap, NormalizedJD, ParsedJD, RequirementKind, RoleType
 from aria_resume.validate.implied import load_implied_skills
-from aria_resume.validate.layout import check_layout
-from aria_resume.validate.recruiter import check_recruiter
 from aria_resume.validate.style import load_style
-from aria_resume.validate.truth import check_truth
 
 from aria_core.schemas.snapshot import CandidateSnapshot
 from aria_core.taxonomy.loader import load_default_taxonomy
@@ -230,40 +221,39 @@ def _run_posting(
     llm: LlmFactory | None = None,
 ) -> PostingResult:
     text = path.read_text(encoding="utf-8")
+    # One client per posting: its parse and its bullets are one run, capped as one.
+    client = llm(path.stem) if llm is not None else None
     parsed = (
         read_jd(text, taxonomy)
-        if llm is None
-        else asyncio.run(read_jd_with_model(text, taxonomy, llm(path.stem), source_ref=f"eval:{path.stem}"))
+        if client is None
+        else asyncio.run(read_jd_with_model(text, taxonomy, client, source_ref=f"eval:{path.stem}"))
     )
     normalized = normalize(parsed, taxonomy)
     evidence = match(normalized, candidate, taxonomy, embedder)
-    template = load_template(evidence.role_type)
-
-    def build(page: Page) -> tuple[ResumePlan, bytes]:
-        result = plan(normalized, evidence, candidate, taxonomy, template=template, page=page)
-        document = fallback_document(result, candidate)
-        return result, add_links(asyncio.run(ChromiumPrinter().print_pdf(render_html(document))), document)
-
-    fitted = fit_to_page(build)
-    document = fallback_document(fitted.plan, candidate)
-    style = load_style()
-    truth = check_truth(document, candidate, taxonomy)
-    recruiter = check_recruiter(document, candidate, style)
-    layout = check_layout(fitted.pdf, document)
-    strong_must = [
-        r.surface_forms[0]
-        for r in normalized.requirements
-        if r.must_have and r.kind in _SKILL_KINDS and r.id in evidence.strong
-    ]
-    ats = check_ats(fitted.pdf, document, taxonomy, today=TODAY, keywords=strong_must)
-    banned = [finding for finding in recruiter if finding.check == "banned_word"]
+    page = build_page(
+        normalized,
+        evidence,
+        candidate,
+        taxonomy,
+        template=load_template(evidence.role_type),
+        printer=ChromiumPrinter(),
+        today=TODAY,
+        llm=client,
+    )
+    found = page.findings
+    banned = [finding for finding in found["recruiter"] if finding.check == "banned_word"]
     gates: dict[str, Any] = {
-        "truth_violations": [finding.detail for finding in truth],
+        "truth_violations": [finding.detail for finding in found["truth"]],
         "banned_words": [finding.detail for finding in banned],
-        "one_page": fitted.fits and not any(finding.check == "one_page" for finding in layout),
-        "layout_findings": [finding.detail for finding in layout],
-        "ats_findings": [finding.detail for finding in ats],
+        # Every 6c finding, not only banned words: step 9's done-when (DECISIONS 2026-10-23).
+        "recruiter_findings": [
+            finding.detail for finding in found["recruiter"] if finding.check != "banned_word"
+        ],
+        "one_page": not any(finding.check == "one_page" for finding in found["layout"]),
+        "layout_findings": [finding.detail for finding in found["layout"]],
+        "ats_findings": [finding.detail for finding in found["ats"]],
     }
+    document = page.document
     result = PostingResult(
         name=path.stem,
         gates=gates,
@@ -271,15 +261,17 @@ def _run_posting(
             "role_type": evidence.role_type.value,
             "fit": evidence.fit_decision.value,
             "coverage": evidence.coverage,
-            "recruiter_findings": dict(
-                sorted(Counter(f.check for f in recruiter if f.check != "banned_word").items())
-            ),
-            "fit_rounds": fitted.rounds,
-            "dropped_facts": len(fitted.plan.dropped),
+            "status": page.status,
+            "fit_rounds": page.fit_rounds,
+            "dropped_facts": len(page.plan.dropped),
             "bullets": sum(len(entry.bullets) for section in document.sections for entry in section.entries),
         },
     )
-    for name in ("truth_violations", "banned_words", "layout_findings", "ats_findings"):
+    if page.writer is not None:
+        # How each bullet came to be, so it shows whether effort "low" holds.
+        result.reported["writer"] = page.writer.as_dict()
+        result.reported["writer_notes"] = page.notes
+    for name in ("truth_violations", "banned_words", "recruiter_findings", "layout_findings", "ats_findings"):
         if gates[name]:
             result.failures.append(f"{name}: {gates[name]}")
     if not gates["one_page"]:
