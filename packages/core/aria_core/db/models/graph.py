@@ -258,6 +258,10 @@ class Experience(Base):
     start_month: Mapped[dt.date] = month_column()
     #: NULL means "Present": still there as of now, not "unknown".
     end_month: Mapped[dt.date | None] = month_column(nullable=True)
+    #: Whether the candidate counts this role toward "years of experience". Set only by
+    #: their answer, never inferred from title, employer or kind; NULL until they say
+    #: (DECISIONS 2026-10-25).
+    counts_toward_years: Mapped[bool | None] = mapped_column(nullable=True)
     status: Mapped[str] = _status_column()
     source: Mapped[str] = mapped_column(String(30), nullable=False)
     source_upload_id: Mapped[uuid.UUID | None] = mapped_column(

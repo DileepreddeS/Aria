@@ -1,7 +1,7 @@
 # The synthetic candidate the resume evals build for: Jordan A. Rivera, the repository's
 # synthetic identity (CLAUDE.md). Shaped as a CandidateSnapshot: approved rows only, as the
 # engine receives them in production. Three years full-time over two roles, one project, one
-# degree in progress.
+# degree in progress. Both roles answered as counting toward years of experience.
 candidate_id: 00000000-0000-0000-0000-000000000009
 taken_at: "2026-10-19T00:00:00Z"
 as_of: "2026-10-01"
@@ -23,12 +23,14 @@ experiences:
     location_region: OR
     start_month: "2024-02-01"
     end_month: "2025-07-01"
+    counts_toward_years: true
   - experience_id: 00000000-0000-0000-0000-000000000002
     employer: Brightfold Systems
     title: Associate Software Engineer
     kind: professional
     start_month: "2022-07-01"
     end_month: "2023-12-01"
+    counts_toward_years: true
 projects:
   - project_id: 00000000-0000-0000-0000-000000000003
     name: VERA-RAG

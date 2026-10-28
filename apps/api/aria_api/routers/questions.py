@@ -31,6 +31,7 @@ from aria_core.graph.questions import (
     Reconsidered,
     UnansweredQuestion,
     answer_question,
+    ask_counts_toward_years,
     dismiss_question,
     get_question,
     open_question_count,
@@ -72,7 +73,12 @@ async def list_questions(
     session: SessionDep,
     status_filter: Annotated[QuestionStatus | None, Query(alias="status")] = QuestionStatus.OPEN,
 ) -> QuestionList:
-    """Questions in one state, oldest first. Defaults to what is still waiting."""
+    """Questions in one state, oldest first. Defaults to what is still waiting.
+
+    Roles approved before the years flag existed get their question here, the first
+    time the candidate looks; asking twice is a no-op.
+    """
+    await ask_counts_toward_years(session, tenant_id=caller.tenant_id, candidate_id=caller.candidate_id)
     views = await questions_for(session, caller.candidate_id, status=status_filter)
     return QuestionList(
         questions=[_out(view) for view in views],

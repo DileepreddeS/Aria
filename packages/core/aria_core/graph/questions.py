@@ -62,6 +62,7 @@ __all__ = [
     "UnansweredQuestion",
     "answer_question",
     "ask",
+    "ask_counts_toward_years",
     "dismiss_question",
     "get_question",
     "open_question_count",
@@ -431,6 +432,89 @@ async def _apply_paid_or_unpaid(
     )
 
 
+#: Plain yes or no only. "Paid" or "employed" answer a different question: a paid
+#: assistantship can still be a role the candidate does not count as experience.
+_COUNTS: Final[frozenset[str]] = frozenset({"y", "yes", "true", "1"})
+_DOES_NOT_COUNT: Final[frozenset[str]] = frozenset({"n", "no", "false", "0"})
+
+COUNTS_TOWARD_YEARS = "counts_toward_years"
+
+
+async def ask_counts_toward_years(
+    session: AsyncSession,
+    *,
+    tenant_id: TenantId,
+    candidate_id: uuid.UUID,
+    experience_id: uuid.UUID | None = None,
+) -> list[uuid.UUID]:
+    """Ask, for each approved role with no answer yet, whether it counts toward years.
+
+    One role when ``experience_id`` is given (just approved); otherwise every approved
+    role still unanswered, which is how roles approved before the flag existed get
+    their question. Nothing is inferred meanwhile: an unanswered role keeps any years
+    claim off the resume (DECISIONS 2026-10-25). Returns the questions newly created;
+    a role already asked is not asked again.
+    """
+    query = select(Experience.id, Experience.employer, Experience.title).where(
+        Experience.candidate_id == candidate_id,
+        Experience.status == ApprovalStatus.APPROVED.value,
+        Experience.counts_toward_years.is_(None),
+    )
+    if experience_id is not None:
+        query = query.where(Experience.id == experience_id)
+    created = []
+    for role_id, employer, title in (await session.execute(query)).all():
+        question_id = await ask(
+            session,
+            tenant_id=tenant_id,
+            candidate_id=candidate_id,
+            kind=COUNTS_TOWARD_YEARS,
+            prompt=f"Should {title!r} at {employer!r} count toward your years of experience?",
+            detail=(
+                "Only roles you say yes to are added up when a resume or an answer states "
+                "how many years of experience you have. Overlapping roles are counted once."
+            ),
+            dedupe_key=f"{COUNTS_TOWARD_YEARS}:{role_id}",
+            subject_kind="experience",
+            subject_id=role_id,
+        )
+        if question_id is not None:
+            created.append(question_id)
+    return created
+
+
+async def _apply_counts_toward_years(
+    session: AsyncSession,
+    *,
+    tenant_id: TenantId,
+    candidate_id: uuid.UUID,
+    question: QuestionView,
+    answer: str,
+) -> AnswerOutcome:
+    """Set the role's flag from a plain yes or no. Anything else is not an answer."""
+    cleaned = answer.strip().lower()
+    if cleaned in _COUNTS:
+        counts = True
+    elif cleaned in _DOES_NOT_COUNT:
+        counts = False
+    else:
+        raise UnansweredQuestion(
+            f"{answer!r} does not say whether this role counts toward your years",
+            expected="yes or no",
+        )
+    await session.execute(
+        update(Experience)
+        .where(Experience.id == question.subject_id, Experience.candidate_id == candidate_id)
+        .values(counts_toward_years=counts)
+    )
+    return AnswerOutcome(
+        question_id=question.question_id,
+        subject_kind="experience",
+        subject_id=question.subject_id,
+        detail="counts toward years of experience" if counts else "does not count toward years of experience",
+    )
+
+
 async def _apply_as_new_fact(
     session: AsyncSession,
     *,
@@ -593,6 +677,7 @@ def _as_uuid(value: object) -> uuid.UUID | None:
 _APPLIERS: Final[dict[str, Any]] = {
     "missing_dates": _apply_missing_dates,
     "paid_or_unpaid": _apply_paid_or_unpaid,
+    COUNTS_TOWARD_YEARS: _apply_counts_toward_years,
     # The enrichment interview. All three become a new draft fact: the answer is a
     # claim about the candidate's work, so it goes where claims go.
     "missing_metric": _apply_as_new_fact,

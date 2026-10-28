@@ -39,6 +39,7 @@ from aria_core.db.models import (
     Project,
 )
 from aria_core.graph.facts import ALLOWED_ACTIONS
+from aria_core.graph.questions import ask_counts_toward_years
 from aria_core.graph.status import ApprovalStatus
 from aria_core.schemas.audit import (
     ActorKind,
@@ -271,6 +272,14 @@ async def approve_entity(
         actor_id=str(approved_by),
         payload={"from": status.value},
     )
+    if kind is EntityKind.EXPERIENCE:
+        # Whether the role counts toward years is the candidate's to say, never inferred
+        # from its title or kind, so approving it asks (DECISIONS 2026-10-25).
+        candidate_id = await session.scalar(select(Experience.candidate_id).where(Experience.id == entity_id))
+        if candidate_id is not None:
+            await ask_counts_toward_years(
+                session, tenant_id=tenant_id, candidate_id=candidate_id, experience_id=entity_id
+            )
     return await get_entity(session, kind, entity_id)
 
 

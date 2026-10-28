@@ -116,6 +116,7 @@ async def build_candidate_snapshot(
             location_region=row[6],
             start_month=row[7],
             end_month=row[8],
+            counts_toward_years=row[9],
         )
         for row in await _approved(
             session,
@@ -130,6 +131,7 @@ async def build_candidate_snapshot(
             Experience.location_region,
             Experience.start_month,
             Experience.end_month,
+            Experience.counts_toward_years,
         )
     )
     projects = tuple(

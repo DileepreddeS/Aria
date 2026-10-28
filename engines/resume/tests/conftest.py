@@ -88,6 +88,7 @@ def snapshot() -> CandidateSnapshot:
                 kind="professional",
                 start_month=dt.date(2024, 2, 1),
                 end_month=dt.date(2025, 7, 1),
+                counts_toward_years=True,
             ),
             SnapshotExperience(
                 experience_id=IDS.brightfold,
@@ -96,6 +97,7 @@ def snapshot() -> CandidateSnapshot:
                 kind="professional",
                 start_month=dt.date(2022, 7, 1),
                 end_month=dt.date(2023, 12, 1),
+                counts_toward_years=True,
             ),
         ),
         projects=(SnapshotProject(project_id=IDS.vera, name="VERA-RAG", kind="personal"),),

@@ -8,6 +8,7 @@ repair loop's last resort is the fact text itself.
 
 from __future__ import annotations
 
+import datetime as dt
 import uuid
 from collections.abc import Callable
 from types import SimpleNamespace
@@ -310,11 +311,11 @@ class TestTheWholeDocument:
     @pytest.mark.parametrize(
         ("line", "check"),
         [
-            # 36 full-time months: three years, not four.
+            # Two counted roles, 36 months: three years, not four.
             ("Software engineer with 4 years of experience.", "summary_years"),
             ("Software engineer with 3.5 years of experience.", "summary_years"),
             ("Software engineer with five years of experience.", "summary_years"),
-            # Python has 6 full-time months behind it, whatever the career total.
+            # Python is in one role's facts, 18 months, whatever the career total.
             ("Software engineer with 2 years of Python.", "summary_years"),
             ("Software engineer with 2+ years of Python experience.", "summary_years"),
             # Three years of experience *in React*: React has 18 months behind it.
@@ -382,6 +383,62 @@ class TestTheWholeDocument:
     ) -> None:
         line = DocumentSection(kind=SectionKind.SKILLS, lines=("Languages: Python, Zorblang",))
         assert _checks(check_truth(_document(line), snapshot, taxonomy)) == {"unverified_skill"}
+
+
+class TestSummaryYearsAreCountedRoles:
+    """The figure is the candidate's flagged roles, unioned, rounded down (DECISIONS 2026-10-25)."""
+
+    def test_an_unanswered_role_refuses_every_years_claim(
+        self, snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy
+    ) -> None:
+        unanswered = snapshot.experiences[1].model_copy(update={"counts_toward_years": None})
+        changed = snapshot.model_copy(update={"experiences": (snapshot.experiences[0], unanswered)})
+        findings = check_truth(
+            _document(_summary("Software engineer with 1+ year of experience.")), changed, taxonomy
+        )
+        assert _checks(findings) == {"summary_years"}
+        assert "not yet marked" in findings[0].detail
+
+    def test_a_role_answered_no_is_not_counted(
+        self, snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy
+    ) -> None:
+        # Nordvale's 18 months alone: one year, not three.
+        declined = snapshot.experiences[1].model_copy(update={"counts_toward_years": False})
+        changed = snapshot.model_copy(update={"experiences": (snapshot.experiences[0], declined)})
+        assert _checks(
+            check_truth(
+                _document(_summary("Software engineer with 3 years of experience.")), changed, taxonomy
+            )
+        ) == {"summary_years"}
+        assert (
+            check_truth(
+                _document(_summary("Software engineer with 1+ year of experience.")), changed, taxonomy
+            )
+            == []
+        )
+
+    def test_overlapping_roles_are_counted_once(
+        self, snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy
+    ) -> None:
+        # Move Brightfold onto Nordvale's dates: 18 + 18 by addition, 18 on the calendar.
+        overlapping = snapshot.experiences[1].model_copy(
+            update={"start_month": dt.date(2024, 2, 1), "end_month": dt.date(2025, 7, 1)}
+        )
+        changed = snapshot.model_copy(update={"experiences": (snapshot.experiences[0], overlapping)})
+        line = "Software engineer with 3 years of experience."
+        assert _checks(check_truth(_document(_summary(line)), changed, taxonomy)) == {"summary_years"}
+
+    @pytest.mark.parametrize(("end", "allowed"), [(dt.date(2025, 6, 1), False), (dt.date(2025, 7, 1), True)])
+    def test_three_years_needs_thirty_six_months(
+        self, snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy, end: dt.date, allowed: bool
+    ) -> None:
+        # Nordvale ending in June leaves 35 counted months: 2.9 years is not "3+".
+        role = snapshot.experiences[0].model_copy(update={"end_month": end})
+        changed = snapshot.model_copy(update={"experiences": (role, snapshot.experiences[1])})
+        findings = check_truth(
+            _document(_summary("Software engineer with 3+ years of experience.")), changed, taxonomy
+        )
+        assert (findings == []) is allowed
 
 
 class TestHeaders:

@@ -14,6 +14,7 @@ place to prove the properties that must not depend on which client is asking:
 
 from __future__ import annotations
 
+import datetime as dt
 import io
 import json
 import uuid
@@ -316,6 +317,40 @@ class TestQuestionsOverHttp:
         assert body["open_count"] >= 1
         kinds = {question["kind"] for question in body["questions"]}
         assert "missing_dates" in kinds
+
+    async def test_a_role_approved_before_the_years_flag_is_asked_when_listed(
+        self,
+        client: httpx.AsyncClient,
+        engine: AsyncEngine,
+        tenant_a: TenantId,
+        user_a: UserId,
+        candidate_id: uuid.UUID,
+    ) -> None:
+        # Approved before migration 0010: no flag and no question yet. Listing asks.
+        role_id = new_id()
+        async with tenant_transaction(engine, tenant_a) as session:
+            await session.execute(
+                insert(Experience).values(
+                    id=role_id,
+                    tenant_id=tenant_a,
+                    candidate_id=candidate_id,
+                    employer="Cascadia State University",
+                    title="Teaching Assistant",
+                    kind="part_time",
+                    start_month=dt.date(2023, 1, 1),
+                    end_month=dt.date(2023, 12, 1),
+                    status="approved",
+                    approved_at=dt.datetime(2026, 10, 1, tzinfo=dt.UTC),
+                    approved_by=user_a,
+                    source="user_edit",
+                )
+            )
+        listed = [
+            question["subject_id"]
+            for question in (await client.get("/questions")).json()["questions"]
+            if question["kind"] == "counts_toward_years"
+        ]
+        assert listed == [str(role_id)]
 
     async def test_answering_creates_the_held_back_role_as_a_draft(self, client: httpx.AsyncClient) -> None:
         await _upload_and_import(client)
@@ -665,6 +700,20 @@ class TestTheGateCanActuallyBePassed:
         ):
             for row in (await client.get(f"/entities/{kind}")).json()["entities"]:
                 await client.post(f"/entities/{kind}/{row['entity_id']}/approve", json={})
+
+        # Approving a role asks whether it counts toward years; the graph is not
+        # complete until each is answered (DECISIONS 2026-10-25).
+        asked = [
+            question
+            for question in (await client.get("/questions")).json()["questions"]
+            if question["kind"] == "counts_toward_years"
+        ]
+        assert asked
+        for question in asked:
+            answered = await client.post(
+                f"/questions/{question['question_id']}/answer", json={"answer": "yes"}
+            )
+            assert answered.status_code == 200
 
         body = (await client.get("/report/completeness")).json()
         unmet = [check["name"] + ": " + check["detail"] for check in body["checks"] if not check["met"]]

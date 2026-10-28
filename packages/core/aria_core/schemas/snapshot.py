@@ -69,6 +69,9 @@ class SnapshotExperience(AriaMessage):
     start_month: Annotated[dt.date, Sensitivity.S1]
     #: None while the role is current.
     end_month: Annotated[dt.date | None, Sensitivity.S1] = None
+    #: The candidate's own answer: does this role count toward "years of experience"?
+    #: None until they say, and while any role is None no years claim is made.
+    counts_toward_years: Annotated[bool | None, Sensitivity.S0] = None
 
 
 class SnapshotProject(AriaMessage):

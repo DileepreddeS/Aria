@@ -87,6 +87,11 @@ class QuestionKind(StrEnum):
     MOTIVATION = "motivation"
     """One of the six things the Answer Engine needs and must never invent."""
 
+    # Raised by approving a role (aria_core.graph.questions.ask_counts_toward_years).
+    COUNTS_TOWARD_YEARS = "counts_toward_years"
+    """Does this role count toward years of experience? Never inferred from its title,
+    employer or kind (DECISIONS 2026-10-25)."""
+
 
 @dataclass(frozen=True, slots=True)
 class ImportQuestion:

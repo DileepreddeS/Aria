@@ -44,7 +44,7 @@ import re
 import uuid
 from collections.abc import Iterable, Sequence
 
-from aria_core.graph.months import months_to_years
+from aria_core.graph.counted_years import counted_years
 from aria_core.importer.skills import resolve_terms, split_skill_terms, tag_skills
 from aria_core.schemas.snapshot import CandidateSnapshot, SnapshotFact
 from aria_core.taxonomy.model import SkillTaxonomy
@@ -239,25 +239,27 @@ def _summary(line: str, snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy) ->
     label = f"summary {line!r}"
     findings: list[Finding] = []
     skip: list[tuple[int, int]] = []
-    months = {item.canonical: item.full_time_months for item in snapshot.skill_years}
     for match in _YEARS.finditer(line):
         skip.append((match.start(), match.end()))
         claimed = _years_value(match.group("n"))
         # The years are of whatever skill the rest of the clause names; of the career if none.
+        # Either way they are the candidate's counted roles, unioned (DECISIONS 2026-10-25).
         clause = re.split(r"[.,;:]", line[match.end() :], maxsplit=1)[0]
         skills = tag_skills(clause, taxonomy).skills
-        subjects = [(skill.surface_form, months.get(skill.canonical, 0)) for skill in skills]
+        subjects = [(skill.surface_form, counted_years(snapshot, skill=skill.canonical)) for skill in skills]
         if not subjects:
-            subjects = [("experience", snapshot.full_time_months)]
+            subjects = [("experience", counted_years(snapshot))]
         for subject, held in subjects:
-            if claimed > months_to_years(held):
-                findings.append(
-                    Finding(
-                        "summary_years",
-                        f"{label}: claims {match.group(0)!r} of {subject}; the graph holds "
-                        f"{months_to_years(held)} full-time years",
-                    )
-                )
+            if held.allows(claimed):
+                continue
+            why = (
+                f"{len(held.unresolved)} role(s) not yet marked as counting toward years"
+                if held.unresolved
+                else f"the counted roles hold {held.months} months"
+            )
+            findings.append(
+                Finding("summary_years", f"{label}: claims {match.group(0)!r} of {subject}; {why}")
+            )
     return findings + _backed(line, snapshot.facts, snapshot, taxonomy, label=label, skip=skip)
 
 
