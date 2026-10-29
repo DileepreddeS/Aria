@@ -1,0 +1,9 @@
+# Findings gitleaks may skip, one fingerprint each: commit:file:rule:line. A fingerprint names
+# one commit, so the same text in any other commit or file is still a finding. Add one only for
+# a finding read and confirmed false, with the reason.
+
+# ecd17ba left ARIA_ANTHROPIC_API_KEY empty in .env.example; generic-api-key read across the
+# newline and took the next line, "ARIA_LLM_INFERENCE_GEO=us", as the key. No key was ever
+# committed. The working tree no longer matches (an inline comment follows the empty value);
+# this commit stays in history. GitHub CI run #28, DECISIONS 2026-10-29.
+ecd17baa5f86a58f758de1e15c8fbe552c9cf515:.env.example:generic-api-key:84
