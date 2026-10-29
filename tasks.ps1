@@ -4,10 +4,12 @@
 
     Usage:  ./tasks.ps1 <task>
     Tasks:  setup, up, down, kms-init, keys-init, migrate, anchor, test, test-db, lint,
-            fmt, typecheck, control-chars, pii, secrets, audit, check, gateway, api, seed-me,
-            parser-image, browsers, models, eval
+            fmt, typecheck, control-chars, pii, secrets, sast, audit, check, gateway, api,
+            seed-me, parser-image, browsers, models, eval
 
-    CI uses the Makefile. This file is for local development on Windows.
+    CI uses the Makefile. This file is for local development on Windows. `check` runs every
+    check CI's jobs run, with the same tools and versions; CI runs them on Linux, where a
+    test can still differ (DECISIONS 2026-10-29).
 #>
 [CmdletBinding()]
 param(
@@ -93,7 +95,29 @@ switch ($Task) {
         Invoke-Step "no real personal identifiers" { uv run python infra/checks/no_personal_identifiers.py }
     }
     "secrets" {
-        Invoke-Step "gitleaks" { gitleaks dir . --redact --verbose }
+        # CI's two scans, from the pinned gitleaks image (infra/checks/gitleaks.py): the files a
+        # checkout would hold, then the history. Needs Docker; no gitleaks binary.
+        Invoke-Step "gitleaks (working tree, history)" { uv run python infra/checks/gitleaks.py tree history }
+    }
+    "sast" {
+        # The version ci.yml installs; another version runs other rules and can disagree with CI.
+        $wanted = "1.180.0"
+        # semgrep prints an upgrade notice on stderr. Under "Stop", Windows PowerShell 5.1 makes any
+        # redirected native stderr a terminating error, so this one call runs under "Continue".
+        $found = & { $ErrorActionPreference = "Continue"; semgrep --version 2>$null } | Select-Object -Last 1
+        if ($found -ne $wanted) {
+            throw "semgrep $wanted is needed (found '$found'): uv tool install semgrep==$wanted"
+        }
+        $env:PYTHONUTF8 = "1"
+        Invoke-Step "semgrep" {
+            semgrep --config p/python --config p/security-audit --config .semgrep/ --error --metrics off
+        }
+        # Each rule file's own cases, as the Makefile pairs them: .semgrep/X.yml with .semgrep/tests/X.py.
+        foreach ($rules in Get-ChildItem .semgrep -Filter *.yml) {
+            $cases = Join-Path ".semgrep/tests" ($rules.BaseName + ".py")
+            if (-not (Test-Path $cases)) { throw "$($rules.Name) has no cases: write $cases" }
+            Invoke-Step "semgrep --test $($rules.Name)" { semgrep --test --config $rules.FullName $cases --metrics off }
+        }
     }
     "audit" {
         # The whole lock, every group included (the optional ml group too), not the installed environment.
@@ -110,12 +134,17 @@ switch ($Task) {
         Invoke-Step "dependency age (14 days, declared security fixes exempt)" { uv run python infra/checks/dependency_age.py }
     }
     "check" {
+        # CI's jobs, in CI's order: lint, typecheck, test (with the eval), secrets, sast,
+        # dependencies. Run test-db on a database migrated to head.
         & $PSCommandPath lint
         & $PSCommandPath typecheck
         & $PSCommandPath control-chars
         & $PSCommandPath pii
         & $PSCommandPath test-db
+        & $PSCommandPath eval
         & $PSCommandPath secrets
+        & $PSCommandPath sast
+        & $PSCommandPath audit
     }
     "gateway" {
         Invoke-Step "llm_gateway (loopback only)" { uv run python -m aria_llm_gateway.main }

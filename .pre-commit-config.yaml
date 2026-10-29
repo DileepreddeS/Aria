@@ -1,5 +1,6 @@
-# Hooks run on every commit. gitleaks is installed on the machine (winget install gitleaks)
-# and invoked as a system binary, so it is the same scanner CI uses.
+# Hooks run on every commit, once `uv run pre-commit install` has been run (./tasks.ps1 setup
+# does it). gitleaks runs from the release CI installs, in its pinned image
+# (infra/checks/gitleaks.py), so it is the same scanner CI uses and needs only Docker.
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
@@ -45,10 +46,9 @@ repos:
         files: ^(uv\.lock|pyproject\.toml|infra/checks/dependency_age\.py)$
         pass_filenames: false
 
-      - id: gitleaks-system
-        name: gitleaks (system binary)
-        entry: gitleaks
-        args: ["git", "--pre-commit", "--staged", "--redact", "--verbose"]
+      - id: gitleaks
+        name: gitleaks (staged changes, CI's pinned release)
+        entry: uv run python infra/checks/gitleaks.py staged
         language: system
         pass_filenames: false
 

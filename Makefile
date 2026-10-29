@@ -54,8 +54,16 @@ pii:
 secrets:
 	gitleaks dir . --redact --verbose --exit-code 1
 
+# The registry rulesets and every ARIA rule file, then each rule file's own cases:
+# .semgrep/X.yml against .semgrep/tests/X.py, which must exist. (semgrep --test cannot pair
+# them by directory: it skips hidden directories such as .semgrep/ when it walks one.)
 sast:
-	semgrep --config p/python --config p/security-audit --config .semgrep/aria.yml --error --metrics off
+	semgrep --config p/python --config p/security-audit --config .semgrep/ --error --metrics off
+	@for rules in .semgrep/*.yml; do \
+		cases=.semgrep/tests/$$(basename $$rules .yml).py; \
+		test -f $$cases || { echo "$$rules has no cases: write $$cases"; exit 1; }; \
+		semgrep --test --config $$rules $$cases --metrics off || exit 1; \
+	done
 
 # Known vulnerabilities, then the 14-day rule for every pinned file (DECISIONS
 # 2026-10-12): a release younger than that is refused unless it is a declared security
