@@ -394,7 +394,11 @@ def test_an_estimate_that_overshoots_is_caught_by_the_print(
     snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy
 ) -> None:
     """A budget that believes the page holds more than it does: the print runs to two pages,
-    and the loop plans again until it prints on one."""
+    and the loop plans again until it prints on one.
+
+    The first plan must overflow on every platform, so it is made to be estimated well past a
+    real page, not just past it: Chromium on Linux sets the same page in fewer lines than on
+    Windows, and an overshoot of two lines printed on one page there (GitHub CI run #28)."""
     import asyncio
 
     from aria_resume.render.html import render_html
@@ -404,16 +408,16 @@ def test_an_estimate_that_overshoots_is_caught_by_the_print(
     long = " ".join(
         ["Shipped eight full-stack applications with Node.js and PostgreSQL for regional grocers"] * 4
     )
-    # Sixteen long facts, eight under each role, and a template that wants eight bullets on each.
+    # Twenty long facts, ten under each role, and a template that wants ten bullets on each.
     extra = tuple(
         candidate.facts[2 if index % 2 else 0].model_copy(
             update={"fact_id": uuid.UUID(int=900 + index), "text": f"{long} ({index})"}
         )
-        for index in range(16)
+        for index in range(20)
     )
     candidate = candidate.model_copy(update={"facts": (*candidate.facts, *extra)})
     template = load_template(RoleType.BACKEND).model_copy(
-        update={"older_role_bullets": (8, 8), "recent_role_bullets": (8, 8)}
+        update={"older_role_bullets": (10, 10), "recent_role_bullets": (10, 10)}
     )
     normalized, evidence = _inputs("larkspur_backend", candidate, taxonomy)
 
@@ -424,6 +428,9 @@ def test_an_estimate_that_overshoots_is_caught_by_the_print(
 
     optimistic = Page(height=1400.0)
     first, first_pdf = build(optimistic)
+    # The estimate never counts a bullet short and the print runs at most ~2% fewer lines
+    # (evals/tests/test_line_budget.py), so six lines past a full page cannot print on one.
+    assert first.estimated_height > PAGE.height + 6 * PAGE.line, "the test's premise: an overshooting plan"
     assert overflow(first_pdf) > 0, "the optimistic plan was meant to overflow"
     fitted = fit_to_page(build, page=optimistic)
     assert fitted.fits and fitted.rounds > 1

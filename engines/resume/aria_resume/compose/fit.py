@@ -1,7 +1,8 @@
 """The page as printed decides: re-plan until the resume prints on one page, or say it does not.
 
-The line budget is an estimate (:mod:`.line_budget`): Carlito's widths, without kerning, at
-97% of the line. RESUME_ENGINE §8 5a says to re-check after rendering, and this is the
+The line budget is an estimate (:mod:`.line_budget`): Carlito's widths, without kerning,
+with a width margin calibrated against Linux's print. RESUME_ENGINE §8 5a says to re-check
+after rendering, and this is the
 re-check. ``build`` plans for a page and prints the result; when the print runs past one
 page, how far the second page runs is measured from the printed text, the budget shrinks
 by that much and one line more, and the plan is made again, for a few rounds. The planner's

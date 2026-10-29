@@ -5,9 +5,12 @@ Heights follow resume.css: US Letter with 0.6in margins (a 525.6 by 705.6pt cont
 each entry, a heading with its rule, bullets with an 11pt padding and an 8pt hanging indent.
 Text is wrapped word by word with Carlito's own glyph widths (:mod:`.metrics`).
 
-It is an estimate: Chromium kerns, and rounds line boxes its own way. So the width is taken
-at 97% and a line of slack is kept at the foot of the page, and the printed page is what
-decides in the end: 6d's one-page check, after rendering.
+It is an estimate: Chromium kerns, and sets text a little narrower than the font's advance
+widths, by an amount that differs by platform. Measured against the print
+(evals/line_budget/measure.py, DECISIONS 2026-10-29), a full line prints at 0.981 of its
+advance width on Linux, where production runs, and at 0.995 on Windows. The width margin is
+calibrated on Linux, a line of slack is kept at the foot of the page, and the printed page
+is what decides in the end: 6d's one-page check, after rendering.
 """
 
 from __future__ import annotations
@@ -32,8 +35,12 @@ class Page:
     entry_gap: float = 3.0
     bullet_padding: float = 11.0
     bullet_hang: float = 8.0
-    #: Share of the measured width a line may fill, for kerning and rounding.
-    width_margin: float = 0.97
+    #: How much of a line, in advance widths, a line may fill. Above 1 because Chromium sets
+    #: text narrower than its advance widths. Calibrated on Linux over 1,200 bullets: no
+    #: bullet estimated short up to 1.010 (the first at 1.015), so 1.005 keeps half a percent
+    #: in hand; also none short on Windows. Was 0.97, a guess that left a line unused on one
+    #: bullet in ten on Linux.
+    width_margin: float = 1.005
     #: Lines held back at the foot of the page.
     slack_lines: int = 1
 
