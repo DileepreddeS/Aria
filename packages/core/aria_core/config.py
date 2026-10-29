@@ -6,15 +6,17 @@ that would let a misconfigured process start and do real work: missing settings
 fail at start-up, not at the first request.
 
 Local development reads ``.env`` (gitignored). Keys and the dev KMS root key live
-in ``%APPDATA%\\aria``, outside the repository, so a stray ``git add -A`` cannot
-pick them up. Staging and production read their environment from a secret manager
-and are refused the dev KMS entirely.
+in ``%APPDATA%\\aria`` (``$XDG_DATA_HOME/aria`` on Linux), outside the repository,
+so a stray ``git add -A`` cannot pick them up. Staging and production read their
+environment from a secret manager and are refused the dev KMS entirely.
 """
 
 from __future__ import annotations
 
 import ipaddress
+import ntpath
 import os
+import re
 from collections.abc import Mapping
 from functools import lru_cache
 from pathlib import Path
@@ -35,9 +37,35 @@ __all__ = [
 Environment = Literal["dev", "ci", "staging", "prod"]
 
 
+#: A variable reference expansion left in place: its variable is not set.
+_UNEXPANDED = re.compile(r"%([A-Za-z_]\w*)%|\$\{?([A-Za-z_]\w*)\}?")
+
+
 def _expand(path: str | Path) -> Path:
-    """Expand ``%APPDATA%``-style and ``~`` paths, so .env can stay readable."""
-    return Path(os.path.expandvars(str(path))).expanduser()
+    """Expand ``%APPDATA%``, ``$HOME`` and ``~`` in a path, the same way on every platform.
+
+    ``ntpath.expandvars`` reads all three variable syntaxes; ``os.path.expandvars`` is
+    ``posixpath`` on Linux, where CI and production run, and leaves ``%APPDATA%`` as text.
+    A variable that is not set is refused rather than left in place, where it would name
+    a relative directory such as ``%APPDATA%`` and put a key in it.
+    """
+    expanded = ntpath.expandvars(str(path))
+    unset = _UNEXPANDED.search(expanded)
+    if unset:
+        raise ValueError(f"the path {str(path)!r} names {unset.group(1) or unset.group(2)}, which is not set")
+    return Path(expanded).expanduser()
+
+
+def _data_home() -> Path:
+    """Where keys and the upload quarantine live by default, outside the repository.
+
+    ``%APPDATA%`` names it on Windows only: Linux has no such variable, and a path naming
+    one is refused, so a Linux default under it would refuse to start. Elsewhere it is the
+    XDG data directory, as for the models (``aria_resume.models.models_root``).
+    """
+    if os.name == "nt":
+        return Path("%APPDATA%") / "aria"
+    return Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "aria"
 
 
 class Settings(BaseSettings):
@@ -64,7 +92,7 @@ class Settings(BaseSettings):
     # ------------------------------------------------------- uploads (SECURITY.md §7)
     #: Quarantine store for uploaded files, outside the repository and outside any
     #: web root. Files land here before they are scanned or parsed.
-    upload_quarantine_path: Path = Field(default=Path(r"%APPDATA%\aria\quarantine"))
+    upload_quarantine_path: Path = Field(default_factory=lambda: _data_home() / "quarantine")
     #: clamd's address. Empty means no scanner, which the API refuses to serve with
     #: outside dev/ci (see aria_api.uploads.scanner.assert_scanner_is_allowed).
     clamav_host: str = ""
@@ -89,7 +117,7 @@ class Settings(BaseSettings):
 
     # ------------------------------------------------- envelope encryption (S2)
     #: Dev-only KMS root key. Refused outside dev/ci by the validator below.
-    dev_kms_key_path: Path = Field(default=Path(r"%APPDATA%\aria\dev-kms-root.key"))
+    dev_kms_key_path: Path = Field(default_factory=lambda: _data_home() / "dev-kms-root.key")
 
     # ------------------------------------------------------------- llm gateway
     llm_gateway_url: str = "http://127.0.0.1:8081"
@@ -116,7 +144,7 @@ class Settings(BaseSettings):
     api_candidate_id: str = ""
 
     # -------------------------------------------------------- ApplyTask signing
-    apply_task_signing_key_path: Path = Field(default=Path(r"%APPDATA%\aria\apply-task-signing.key"))
+    apply_task_signing_key_path: Path = Field(default_factory=lambda: _data_home() / "apply-task-signing.key")
     apply_task_signing_kid: str = "dev-1"
     #: How long a dispatched task stays valid. Minutes, not hours (SECURITY.md §8).
     apply_task_ttl_seconds: int = Field(default=300, ge=30, le=1800)

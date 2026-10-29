@@ -118,11 +118,40 @@ class TestProductionRefusesDevelopmentShortcuts:
 
 
 class TestPathsAndTtl:
+    """Paths in .env may name variables. They expand the same way on every platform: CI and
+    production are Linux, and os.path.expandvars there leaves %APPDATA% as literal text, so
+    the key would have gone into a directory called "%APPDATA%" (GitHub CI run #28)."""
+
     def test_environment_variables_in_paths_are_expanded(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("APPDATA", r"C:\Users\test\AppData\Roaming")
-        settings = _settings(dev_kms_key_path=r"%APPDATA%\aria\dev-kms-root.key")
+        monkeypatch.setenv("APPDATA", str(Path("/home/test/AppData/Roaming")))
+        settings = _settings(dev_kms_key_path="%APPDATA%/aria/dev-kms-root.key")
         assert "%APPDATA%" not in str(settings.dev_kms_key_path)
-        assert settings.dev_kms_key_path.name == "dev-kms-root.key"
+        assert settings.dev_kms_key_path == Path("/home/test/AppData/Roaming/aria/dev-kms-root.key")
+
+    @pytest.mark.parametrize("written", ["%KEYS_HOME%/dev.key", "$KEYS_HOME/dev.key", "${KEYS_HOME}/dev.key"])
+    def test_every_variable_syntax_expands_on_every_platform(
+        self, monkeypatch: pytest.MonkeyPatch, written: str
+    ) -> None:
+        monkeypatch.setenv("KEYS_HOME", str(Path("/srv/keys")))
+        assert _settings(dev_kms_key_path=written).dev_kms_key_path == Path("/srv/keys/dev.key")
+
+    @pytest.mark.parametrize("written", ["%ARIA_UNSET_HOME%/dev.key", "$ARIA_UNSET_HOME/dev.key"])
+    def test_a_path_naming_an_unset_variable_is_refused(self, written: str) -> None:
+        """Left unexpanded it is a relative directory named after the variable, silently."""
+        with pytest.raises(ValidationError, match=r"ARIA_UNSET_HOME, which is not set"):
+            _settings(dev_kms_key_path=written)
+
+    def test_the_default_paths_load_on_this_platform(self) -> None:
+        """They named %APPDATA% everywhere, which Linux does not set: refused, they stopped every
+        Linux process that took the defaults from starting (the replay of this fix)."""
+        settings = _settings()
+        for path in (
+            settings.upload_quarantine_path,
+            settings.dev_kms_key_path,
+            settings.apply_task_signing_key_path,
+        ):
+            assert path.is_absolute()
+            assert path.parent.name == "aria"
 
     def test_an_apply_task_lives_for_minutes_not_hours(self) -> None:
         assert _settings().apply_task_ttl_seconds <= 1800
