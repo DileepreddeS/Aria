@@ -1,0 +1,31 @@
+# The untrusted-content rule (SECURITY.md §5), on its own so its cases sit beside it:
+# .semgrep/tests/untrusted.py, checked by `semgrep --test` in `make sast`.
+rules:
+  # Aimed at the sinks, not at a type: semgrep cannot see Python types, so a rule that
+  # fired on every `x.text` in an f-string fired on error messages, parser lines and
+  # eval printouts, and nowhere near a prompt (GitHub CI run #28, DECISIONS 2026-10-29).
+  # The sinks are the two places text becomes an instruction: the trusted_instructions
+  # of a model request, built by an engine, and the gateway's system block, assembled in
+  # prompt.py. The provider call only forwards that block, so it is covered there.
+  # Taint mode follows the text through variables, f-strings, concatenation, format and
+  # join within one function. It does not follow it into a helper function's parameters
+  # (semgrep's open-source taint analysis is per function): the gateway's prompt tests
+  # are the layer behind it. Positive and negative cases: .semgrep/tests/aria.py, run
+  # by `semgrep --test` in `make sast`.
+  - id: aria-untrusted-text-not-in-instructions
+    languages: [python]
+    severity: ERROR
+    mode: taint
+    pattern-sources:
+      - pattern: $CONTENT.text
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: LlmRequest(..., trusted_instructions=$INSTRUCTION, ...)
+              - pattern: CompletionRequest(..., trusted_instructions=$INSTRUCTION, ...)
+              - pattern: PromptBlock(..., role="system", ..., text=$INSTRUCTION, ...)
+          - focus-metavariable: $INSTRUCTION
+    message: >-
+      Untrusted content is data, never part of an instruction (SECURITY.md §5). This
+      .text reaches a model's instructions. Pass the UntrustedContent block itself in
+      untrusted_content: the gateway renders it as its own labelled message.

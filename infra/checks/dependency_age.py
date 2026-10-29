@@ -150,6 +150,8 @@ def query_osv(package: str) -> list[dict[str, Any]]:
         data=json.dumps({"package": {"name": package, "ecosystem": "PyPI"}}).encode("utf-8"),
         headers={"Content-Type": "application/json"},
     )
+    # OSV_QUERY, a fixed https URL; nothing here can choose another scheme or host.
+    # nosemgrep: dynamic-urllib-use-detected
     with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310  (fixed https URL)
         body = json.load(response)
     vulns = body.get("vulns", [])

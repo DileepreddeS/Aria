@@ -54,25 +54,6 @@ rules:
       Setting aria.tenant_id by hand bypasses the one place that guarantees every
       query is scoped.
 
-  - id: aria-untrusted-content-not-in-an-f-string
-    languages: [python]
-    severity: WARNING
-    paths:
-      exclude:
-        # The one place that is supposed to render untrusted text: the gateway's
-        # prompt assembler, which puts it in its own labelled block. The tests in
-        # services/llm_gateway/tests assert the separation holds there.
-        - /services/llm_gateway/aria_llm_gateway/prompt.py
-    pattern-either:
-      - pattern: f"...{$CONTENT.text}..."
-      - pattern: $PREFIX + $CONTENT.text
-      - pattern: $CONTENT.text + $SUFFIX
-    message: >-
-      Untrusted content is data, never part of an instruction (SECURITY.md §5).
-      Pass the UntrustedContent block itself to the gateway, which renders it as its
-      own labelled message. Interpolating .text is how a job description becomes a
-      prompt.
-
   - id: aria-no-broad-candidate-getter
     languages: [python]
     severity: ERROR

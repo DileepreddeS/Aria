@@ -111,6 +111,8 @@ def false_positives() -> None:
 def _bipia(half: str) -> dict[str, list[str]]:
     name, digest = BIPIA_FILES[half]
     url = f"https://raw.githubusercontent.com/microsoft/BIPIA/{BIPIA_COMMIT}/benchmark/{name}"
+    # A fixed https URL at a pinned commit, checked against its digest below.
+    # nosemgrep: dynamic-urllib-use-detected
     with urllib.request.urlopen(url, timeout=30) as response:
         body = response.read()
     if hashlib.sha256(body).hexdigest() != digest:

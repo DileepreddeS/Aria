@@ -49,6 +49,8 @@ def fetch(spec: ModelSpec, root: Path) -> None:
             temporary = Path(handle.name)
             request = urllib.request.Request(url, headers={"User-Agent": "aria-models"})  # noqa: S310  (https, checked above)
             try:
+                # https://huggingface.co/ only: any other URL is refused above.
+                # nosemgrep: dynamic-urllib-use-detected
                 with urllib.request.urlopen(request, timeout=60) as response:  # noqa: S310  (https, a fixed host)
                     for chunk in iter(lambda: response.read(_CHUNK), b""):
                         handle.write(chunk)
