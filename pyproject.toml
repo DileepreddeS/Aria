@@ -24,9 +24,10 @@ exclude-newer-package = { pdfplumber = "14 days", pypdfium2 = "14 days", jinja2 
 # pin here to have its exemption and every exemption its pin, and fails once one expires.
 constraint-dependencies = [
     "pillow==13.0.0",
-    "pypdf==6.21.1",
-    "virtualenv==21.14.9",
+    "pypdf==6.21.2",
+    "virtualenv==21.14.13",
     "certifi==2026.10.19",
+    "filelock==4.2.1",
 ]
 # Packages with native source distributions: a missing wheel fails the install instead of
 # compiling Rust or C from source (docs/vetting/2026-10-18-ml-group.md, 2026-10-20-anthropic-sdk.md).
@@ -166,18 +167,24 @@ expires = 2026-10-30
 
 [[tool.aria.dependency-age.exemptions]]
 package = "pypdf"
-version = "6.21.1"
-advisory = "GHSA-5hx5-vpf9-5wcv"
-expires = 2026-10-31
+version = "6.21.2"
+advisory = "GHSA-6c7f-9265-g8fw"
+expires = 2026-11-04
 
 [[tool.aria.dependency-age.exemptions]]
 package = "virtualenv"
-version = "21.14.9"
-advisory = "GHSA-c978-59m8-c77v"
-expires = 2026-10-31
+version = "21.14.13"
+advisory = "GHSA-cx6f-vjhg-g3cc"
+expires = 2026-11-05
 
 [[tool.aria.dependency-age.exemptions]]
 package = "certifi"
 version = "2026.10.19"
 advisory = "GHSA-6q48-6c7w-9gw2"
 expires = 2026-11-03
+
+[[tool.aria.dependency-age.exemptions]]
+package = "filelock"
+version = "4.2.1"
+advisory = "GHSA-v4x8-3wr5-3wq8"
+expires = 2026-10-31

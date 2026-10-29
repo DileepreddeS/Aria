@@ -300,14 +300,16 @@ def _recorded(package: str, advisory: str, alias: str, fixed: str) -> dict[str, 
     return _advisory(advisory, [alias], package, fixed)
 
 
-#: OSV's answers for the exemptions in pyproject.toml, as recorded on 2026-10-22: the test runs
-#: offline, and the live check in `make audit` asks OSV itself. An exemption or pin that moves no
-#: longer matches its record and fails here until the new release is checked and recorded.
+#: OSV's answers for the exemptions in pyproject.toml, as recorded on 2026-10-22 (pypdf,
+#: virtualenv and filelock on 2026-10-29): the test runs offline, and the live check in
+#: `make audit` asks OSV itself. An exemption or pin that moves no longer matches its record and
+#: fails here until the new release is checked and recorded.
 RECORDED_FIXES: dict[str, list[dict[str, Any]]] = {
     "pillow": [_recorded("pillow", "GHSA-8g5g-8vmr-9782", "CVE-2026-112403", "13.0.0")],
-    "pypdf": [_recorded("pypdf", "GHSA-5hx5-vpf9-5wcv", "CVE-2026-113786", "6.21.1")],
-    "virtualenv": [_recorded("virtualenv", "GHSA-c978-59m8-c77v", "CVE-2026-113722", "21.14.9")],
+    "pypdf": [_recorded("pypdf", "GHSA-6c7f-9265-g8fw", "CVE-2026-115572", "6.21.2")],
+    "virtualenv": [_recorded("virtualenv", "GHSA-cx6f-vjhg-g3cc", "CVE-2026-115586", "21.14.13")],
     "certifi": [_recorded("certifi", "GHSA-6q48-6c7w-9gw2", "PYSEC-2026-4320", "2026.10.19")],
+    "filelock": [_recorded("filelock", "GHSA-v4x8-3wr5-3wq8", "CVE-2026-112940", "4.2.1")],
 }
 
 
