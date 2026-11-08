@@ -37,11 +37,11 @@ members = [
     "aria-resume",
 ]
 constraints = [
-    { name = "certifi", specifier = "==2026.10.19" },
-    { name = "filelock", specifier = "==4.2.1" },
-    { name = "pillow", specifier = "==13.0.0" },
-    { name = "pypdf", specifier = "==6.21.2" },
-    { name = "virtualenv", specifier = "==21.14.13" },
+    { name = "certifi", specifier = ">=2026.10.19" },
+    { name = "filelock", specifier = ">=4.2.1" },
+    { name = "pillow", specifier = ">=13.0.0" },
+    { name = "pypdf", specifier = ">=6.21.2" },
+    { name = "virtualenv", specifier = ">=21.14.13" },
 ]
 
 [[package]]
