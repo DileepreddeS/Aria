@@ -33,7 +33,7 @@ from dataclasses import dataclass, field
 from aria_core.schemas.snapshot import CandidateSnapshot, SnapshotFact
 from aria_core.taxonomy.model import SkillTaxonomy
 from aria_resume.compose import line_budget
-from aria_resume.compose.headers import degree_header, project_header, role_header
+from aria_resume.compose.headers import contact_items, degree_header, project_header, role_header
 from aria_resume.compose.line_budget import PAGE, Page
 from aria_resume.compose.templates import RoleTemplate, load_template
 from aria_resume.document import SectionKind
@@ -176,9 +176,14 @@ def _skills_lines(
 
 
 def _height(
-    entries: dict[SectionKind, list[_Entry]], skills: list[str], page: Page, order: tuple[SectionKind, ...]
+    entries: dict[SectionKind, list[_Entry]],
+    skills: list[str],
+    page: Page,
+    order: tuple[SectionKind, ...],
+    contact: int,
 ) -> float:
-    height = page.name + page.line + page.contact_gap
+    """The page's height in points, with ``contact`` lines of contact details under the name."""
+    height = page.name + contact * page.line + page.contact_gap
     for kind in order:
         if kind is SectionKind.SKILLS:
             if skills:
@@ -312,12 +317,14 @@ def plan(
                     )
 
     skills, surface = _skills_lines(snapshot, normalized, taxonomy, template, implied)
+    # The lines the contact details print on, as the template breaks them: only between items.
+    contact = len(line_budget.contact_rows([item.text for item in contact_items(snapshot)], page))
     dropped: list[uuid.UUID] = []
 
     def slot_worth(slot: BulletSlot) -> float:
         return slot.value + (_MANDATORY if slot.mandatory else 0.0)
 
-    while _height(entries, skills, page, template.section_order) > page.usable_height:
+    while _height(entries, skills, page, template.section_order, contact) > page.usable_height:
         options: list[tuple[float, int, _Entry, BulletSlot | None]] = []
         for kind in (SectionKind.EXPERIENCE, SectionKind.PROJECTS):
             for entry in entries[kind]:
@@ -370,7 +377,7 @@ def plan(
         template_version=template.version,
         sections=tuple(sections),
         surface_forms=surface,
-        estimated_height=round(_height(entries, skills, page, template.section_order), 2),
+        estimated_height=round(_height(entries, skills, page, template.section_order, contact), 2),
         usable_height=page.usable_height,
         dropped=tuple(dropped),
     )

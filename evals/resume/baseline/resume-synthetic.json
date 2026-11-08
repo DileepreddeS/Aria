@@ -2,7 +2,7 @@
   "configuration": {
     "embedder": "fake:word-hash-256",
     "implied_skills": "2026.10.1",
-    "render_template": "1",
+    "render_template": "2",
     "stage1": "rules",
     "style": "2026.10.1",
     "taxonomy": "2026.10.4",

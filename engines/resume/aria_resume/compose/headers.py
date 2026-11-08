@@ -10,6 +10,8 @@ compares the printed header with this function's answer for the same role.
   "Carvana (via Accenture)", which would misstate the employer (DECISIONS 2026-10-18).
 - **A project:** its name; its months when it has them.
 - **A degree:** the school, then the degree and field; the month it ends (or ended).
+- **The contact items:** the approved email, phone, place and https profile links, in that
+  order, so the links end the contact's last line, where Stage 0 still reads a link as contact.
 
 Months print as two months, or a month and "Present", joined by a spaced en dash ("Feb 2024",
 the dash, "Jul 2025"); or one month for a degree: the one date style 6d checks for.
@@ -20,9 +22,15 @@ from __future__ import annotations
 import datetime as dt
 from dataclasses import dataclass
 
-from aria_core.schemas.snapshot import SnapshotEducation, SnapshotExperience, SnapshotProject
+from aria_core.schemas.snapshot import (
+    CandidateSnapshot,
+    SnapshotEducation,
+    SnapshotExperience,
+    SnapshotProject,
+)
+from aria_resume.document import ContactItem
 
-__all__ = ["Header", "degree_header", "month", "project_header", "role_header"]
+__all__ = ["Header", "contact_items", "degree_header", "month", "project_header", "role_header"]
 
 EN_DASH = "\u2013"
 
@@ -89,3 +97,26 @@ def degree_header(degree: SnapshotEducation) -> Header:
         dates=month(when) if when else "",
         subline=_place(degree.location_city, degree.location_region),
     )
+
+
+def _bare(url: str) -> str:
+    for prefix in ("https://www.", "https://", "http://www.", "http://"):
+        if url.startswith(prefix):
+            return url[len(prefix) :].rstrip("/")
+    return url
+
+
+def contact_items(snapshot: CandidateSnapshot) -> tuple[ContactItem, ...]:
+    contact = snapshot.contact
+    items: list[ContactItem] = []
+    if contact.email:
+        items.append(ContactItem(text=contact.email, url=f"mailto:{contact.email}"))
+    if contact.phone:
+        items.append(ContactItem(text=contact.phone))
+    place = ", ".join(part for part in (contact.location_city, contact.location_region) if part)
+    if place:
+        items.append(ContactItem(text=place))
+    for url in (contact.linkedin_url, contact.github_url, contact.portfolio_url):
+        if url and url.startswith("https://"):
+            items.append(ContactItem(text=_bare(url), url=url))
+    return tuple(items)

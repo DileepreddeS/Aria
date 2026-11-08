@@ -15,10 +15,15 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from aria_core.schemas.snapshot import CandidateSnapshot
-from aria_resume.compose.headers import Header, degree_header, project_header, role_header
+from aria_resume.compose.headers import (
+    Header,
+    contact_items,
+    degree_header,
+    project_header,
+    role_header,
+)
 from aria_resume.compose.planner import PlanError
 from aria_resume.document import (
-    ContactItem,
     DocumentBullet,
     DocumentEntry,
     DocumentSection,
@@ -28,29 +33,6 @@ from aria_resume.document import (
 from aria_resume.schemas import BulletSlot, PlannedEntry, ResumePlan
 
 __all__ = ["SlotKey", "contact_items", "fact_bullet", "fallback_document"]
-
-
-def _bare(url: str) -> str:
-    for prefix in ("https://www.", "https://", "http://www.", "http://"):
-        if url.startswith(prefix):
-            return url[len(prefix) :].rstrip("/")
-    return url
-
-
-def contact_items(snapshot: CandidateSnapshot) -> tuple[ContactItem, ...]:
-    contact = snapshot.contact
-    items: list[ContactItem] = []
-    if contact.email:
-        items.append(ContactItem(text=contact.email, url=f"mailto:{contact.email}"))
-    if contact.phone:
-        items.append(ContactItem(text=contact.phone))
-    place = ", ".join(part for part in (contact.location_city, contact.location_region) if part)
-    if place:
-        items.append(ContactItem(text=place))
-    for url in (contact.linkedin_url, contact.github_url, contact.portfolio_url):
-        if url and url.startswith("https://"):
-            items.append(ContactItem(text=_bare(url), url=url))
-    return tuple(items)
 
 
 def _header(entry: PlannedEntry, snapshot: CandidateSnapshot) -> Header:

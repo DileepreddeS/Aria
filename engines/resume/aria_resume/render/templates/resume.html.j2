@@ -12,10 +12,15 @@
 </head>
 <body>
 <div class="name">{{ document.name }}</div>
-{#- The contact line is one unstyled text node: a styled span or link here makes Chromium
+{#- Each contact line is one unstyled text node: a styled span or link here makes Chromium
     place every glyph on its own, and extractors then read "d i l e e p". Links are added
-    to the PDF afterwards as annotations over the text (RESUME_ENGINE §10). -#}
-<div class="contact">{{ document.contact_line }}</div>
+    to the PDF afterwards as annotations over the text (RESUME_ENGINE §10). The lines break
+    only between items (line_budget.contact_rows); none wraps (resume.css). -#}
+<div class="contacts">
+{%- for line in contact_lines %}
+<div class="contact">{{ line }}</div>
+{%- endfor %}
+</div>
 {%- for section in document.sections %}
 <div class="section">
 <div class="heading">{{ section.heading }}</div>

@@ -128,6 +128,23 @@ def test_a_floated_date_column_is_out_of_order_in_the_stream() -> None:
     )
 
 
+def test_a_contact_line_broken_inside_an_item_is_caught() -> None:
+    """Left free to wrap, Chromium breaks a long item at a space, which the old whole-line
+    check read through, or after a hyphen, as it did on Linux (DECISIONS 2026-10-29). Each
+    contact line must be one extracted line. Printed without links, which refuse it."""
+    wide = (
+        "Remote anywhere in the United States, or on site in Portland, Seattle, San Francisco, "
+        "Austin, Denver, Boston, Chicago or New York"
+    )
+    document = _document().model_copy(update={"contact": (*_document().contact, ContactItem(text=wide))})
+    html = render_html(document).replace("white-space: nowrap;", "")
+    findings = _check(asyncio.run(ChromiumPrinter().print_pdf(html)), document)
+    assert {finding.detail.split()[0] for finding in findings if finding.check == "contact_line"} == {
+        "pypdf",
+        "pdfplumber",
+    }
+
+
 def test_ligatures_left_on_are_caught() -> None:
     html = (
         render_html(_document())

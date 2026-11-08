@@ -97,6 +97,22 @@ class TestThePage:
             "jordan.rivera@example.com | (555) 014-2288 | linkedin.com/in/jordan-rivera-example"
         )
 
+    def test_a_contact_too_long_for_a_line_is_two_text_nodes_broken_between_items(self) -> None:
+        github = ContactItem(
+            text="github.com/jordan-rivera-example", url="https://github.com/jordan-rivera-example"
+        )
+        place = ContactItem(text="Portland, OR")
+        document = _document()
+        email, phone, linkedin = document.contact
+        longer = document.model_copy(update={"contact": (email, phone, place, linkedin, github)})
+        first, second = _divs(render_html(longer), "contact")
+        assert first["children"] == [] and second["children"] == []
+        assert first["text"] == (
+            "jordan.rivera@example.com | (555) 014-2288 | Portland, OR | "
+            "linkedin.com/in/jordan-rivera-example"
+        )
+        assert second["text"] == "github.com/jordan-rivera-example"
+
     def test_every_bullet_begins_with_a_literal_bullet_character(self) -> None:
         bullets = _divs(render_html(_document()), "bullet")
         assert [str(bullet["text"]) for bullet in bullets] == [
@@ -155,6 +171,10 @@ class TestTheLintCatchesEachRule:
         css = stylesheet().replace('font-feature-settings: "liga" 0, "clig" 0, "dlig" 0;', "")
         assert any("ligatures" in problem for problem in lint_stylesheet(css))
 
+    def test_a_contact_line_left_free_to_wrap(self) -> None:
+        css = stylesheet().replace("white-space: nowrap;", "")
+        assert any("contact line that may wrap" in problem for problem in lint_stylesheet(css))
+
     def test_a_date_band_starting_left_of_55_percent(self) -> None:
         css = stylesheet().replace("width: 72%;", "width: 50%;")
         assert any("55%" in problem for problem in lint_stylesheet(css))
@@ -164,8 +184,8 @@ class TestTheLintCatchesEachRule:
         [
             (
                 (
-                    '<div class="contact">{{ document.contact_line }}</div>',
-                    '<div class="contact"><a href="x">{{ document.contact_line }}</a></div>',
+                    '<div class="contact">{{ line }}</div>',
+                    '<div class="contact"><a href="x">{{ line }}</a></div>',
                 ),
                 "contact line",
             ),

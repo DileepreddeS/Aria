@@ -116,6 +116,89 @@ class TestThePrintedTextLayer:
         ]
 
 
+GITHUB = "github.com/jordan-rivera-example"
+#: Wider than a line on its own, still on the paper; hyphens give Chromium places to break it.
+TOO_WIDE = (
+    "jordan-rivera-example.dev/writing/notes-on-building-a-resume-engine-that-never-breaks-"
+    "a-link-across-two-printed-lines-of-text"
+)
+
+
+def _with_contact(*items: ContactItem) -> ResumeDocument:
+    return _document().model_copy(update={"contact": items})
+
+
+def _lines(text: str) -> list[str]:
+    return [" ".join(line.split()) for line in text.splitlines()]
+
+
+@cache
+def _two_lines() -> bytes:
+    return _print(
+        _with_contact(
+            ContactItem(text=EMAIL, url=f"mailto:{EMAIL}"),
+            ContactItem(text="(555) 014-2288"),
+            ContactItem(text="Portland, OR"),
+            ContactItem(text=LINKEDIN, url=f"https://{LINKEDIN}"),
+            ContactItem(text=GITHUB, url=f"https://{GITHUB}"),
+        )
+    )
+
+
+@cache
+def _too_wide() -> bytes:
+    return _print(
+        _with_contact(
+            ContactItem(text=EMAIL, url=f"mailto:{EMAIL}"),
+            ContactItem(text=TOO_WIDE, url=f"https://{TOO_WIDE}"),
+        )
+    )
+
+
+@pytest.mark.chromium
+class TestContactLines:
+    """Broken only between items. On Linux, Chromium broke one long line after the hyphen in
+    "github.com/jordan-", and both extractors read the link in two halves (DECISIONS 2026-10-29)."""
+
+    @pytest.mark.parametrize("extract", [_pypdf_text, _pdfplumber_text], ids=["pypdf", "pdfplumber"])
+    def test_a_contact_too_long_for_a_line_prints_as_two_whole_lines(self, extract: object) -> None:
+        assert callable(extract)
+        lines = _lines(extract(_two_lines()))
+        assert f"{EMAIL} | (555) 014-2288 | Portland, OR | {LINKEDIN}" in lines
+        assert GITHUB in lines
+
+    def test_its_links_sit_over_their_items_and_the_layout_passes(self) -> None:
+        document = _with_contact(
+            ContactItem(text=EMAIL, url=f"mailto:{EMAIL}"),
+            ContactItem(text="(555) 014-2288"),
+            ContactItem(text="Portland, OR"),
+            ContactItem(text=LINKEDIN, url=f"https://{LINKEDIN}"),
+            ContactItem(text=GITHUB, url=f"https://{GITHUB}"),
+        )
+        assert check_layout(_two_lines(), document) == []
+
+    @pytest.mark.parametrize("extract", [_pypdf_text, _pdfplumber_text], ids=["pypdf", "pdfplumber"])
+    def test_an_item_wider_than_a_line_prints_whole(self, extract: object) -> None:
+        assert callable(extract)
+        assert TOO_WIDE in _lines(extract(_too_wide()))
+
+    def test_a_link_is_refused_for_a_contact_line_printed_on_two_lines(self) -> None:
+        """One box over both halves would cover the lines between them too."""
+        document = _with_contact(ContactItem(text=TOO_WIDE, url=f"https://{TOO_WIDE}"))
+        html = render_html(document).replace("white-space: nowrap;", "")
+        with pytest.raises(RenderError, match="broken across printed lines"):
+            add_links(asyncio.run(ChromiumPrinter().print_pdf(html)), document)
+
+    def test_an_item_wider_than_a_line_is_reported(self) -> None:
+        document = _with_contact(
+            ContactItem(text=EMAIL, url=f"mailto:{EMAIL}"),
+            ContactItem(text=TOO_WIDE, url=f"https://{TOO_WIDE}"),
+        )
+        found = check_layout(_too_wide(), document)
+        # Chromium shrinks the whole page to fit the line, rather than let it run past the margin.
+        assert sorted(finding.check for finding in found) == ["contact_width", "scaled"]
+
+
 @pytest.mark.chromium
 class TestThePageCannotReachOut:
     def test_a_request_for_anything_is_refused_and_is_an_error(self) -> None:

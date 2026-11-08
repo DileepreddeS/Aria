@@ -27,7 +27,7 @@ __all__ = [
     "SectionKind",
 ]
 
-#: What separates contact items on the line. Plain text, so an extractor reads the line whole.
+#: What separates contact items on a line. Plain text, so an extractor reads the line whole.
 CONTACT_SEPARATOR = " | "
 
 
@@ -104,7 +104,3 @@ class ResumeDocument(AriaMessage):
     name: Annotated[str, Sensitivity.S1] = Field(min_length=1, max_length=120)
     contact: tuple[ContactItem, ...] = ()
     sections: tuple[DocumentSection, ...] = ()
-
-    @property
-    def contact_line(self) -> str:
-        return CONTACT_SEPARATOR.join(item.text for item in self.contact)

@@ -28,6 +28,7 @@ from aria_core.importer.dates import parse_date_range
 from aria_core.taxonomy.model import SkillTaxonomy
 from aria_document_parser.errors import ParseRefused
 from aria_document_parser.pdf import extract_pdf
+from aria_resume.compose.line_budget import contact_lines
 from aria_resume.document import DocumentEntry, ResumeDocument, SectionKind
 from aria_resume.validate import Finding
 
@@ -68,10 +69,12 @@ def _extraction(texts: dict[str, str], document: ResumeDocument) -> list[Finding
             findings.append(Finding("glyph_integrity", f"{name} reads ligature characters {ligatures}"))
         if _UNMAPPED in text:
             findings.append(Finding("glyph_integrity", f"{name} reads unmapped glyphs, {_UNMAPPED}N)"))
-        if document.contact and _collapsed(document.contact_line) not in _collapsed(text):
-            findings.append(
-                Finding("contact_line", f"{name} does not read the contact line as one run of text")
-            )
+        printed = [_collapsed(line) for line in text.splitlines()]
+        for line in contact_lines([item.text for item in document.contact]):
+            if not any(_collapsed(line) in reading for reading in printed):
+                findings.append(
+                    Finding("contact_line", f"{name} does not read the contact line {line!r} as one line")
+                )
         lines = {line.strip() for line in text.splitlines()}
         for section in document.sections:
             if section.heading not in lines:

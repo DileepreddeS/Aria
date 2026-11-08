@@ -1,4 +1,5 @@
-"""6d Layout check (RESUME_ENGINE §9): one page, fonts embedded, links right, one date format.
+"""6d Layout check (RESUME_ENGINE §9): one page, fonts embedded, links right, one date format,
+printed at full size, no contact item wider than a line.
 
 Orphan lines need the page read back line by line, which is the ATS check's job (6a); they
 are checked there, through Stage 0's own reading of the page.
@@ -8,10 +9,13 @@ from __future__ import annotations
 
 import io
 import re
+from collections import Counter
 from typing import Any
 
+import pdfplumber
 from pypdf import PdfReader
 
+from aria_resume.compose.line_budget import PAGE, fits_a_line
 from aria_resume.document import ResumeDocument
 from aria_resume.render.links import Box, locate_contact_items
 from aria_resume.render.pdf import RenderError
@@ -54,6 +58,33 @@ def _covers(rect: tuple[float, ...], box: Box) -> bool:
     return min(x0, x1) <= middle_x <= max(x0, x1) and min(y0, y1) <= middle_y <= max(y0, y1)
 
 
+def _scaled(pdf: bytes) -> list[Finding]:
+    """A page Chromium shrank to fit a line too wide for it, read from its body text's size.
+
+    Only a contact line cannot wrap (resume.css). Chromium does not let one run past the
+    margin: it scales the whole page down until the line fits, so every line is smaller than
+    the 10.5pt the line budget and the template were built for.
+    """
+    findings = []
+    with pdfplumber.open(io.BytesIO(pdf)) as document_pdf:
+        for number, page in enumerate(document_pdf.pages, start=1):
+            sizes = Counter(
+                round(float(char["size"]), 2) for char in page.chars if not char["text"].isspace()
+            )
+            if not sizes:
+                continue
+            body = sizes.most_common(1)[0][0]
+            if abs(body - PAGE.size) > 0.05:
+                findings.append(
+                    Finding(
+                        "scaled",
+                        f"page {number} printed at {body / PAGE.size:.1%} of its size, "
+                        "shrunk to fit a line too wide for it",
+                    )
+                )
+    return findings
+
+
 def check_layout(pdf: bytes, document: ResumeDocument) -> list[Finding]:
     reader = PdfReader(io.BytesIO(pdf))
     findings: list[Finding] = []
@@ -78,6 +109,15 @@ def check_layout(pdf: bytes, document: ResumeDocument) -> list[Finding]:
                         f"page {number} is set in {base or 'an unnamed font'}, not Carlito",
                     )
                 )
+
+    findings += _scaled(pdf)
+    # Never broken inside, so printed whole on a line of its own, and Chromium shrinks the page
+    # to fit it: the page goes to a person, who can shorten it (DECISIONS 2026-10-29).
+    for item in document.contact:
+        if not fits_a_line(item.text):
+            findings.append(
+                Finding("contact_width", f"the contact item {item.text!r} is wider than a line on its own")
+            )
 
     expected = [item for item in document.contact if item.url is not None]
     links = _links(reader)

@@ -15,11 +15,22 @@ is what decides in the end: 6d's one-page check, after rendering.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from aria_resume.compose.metrics import carlito
+from aria_resume.document import CONTACT_SEPARATOR
 
-__all__ = ["PAGE", "Page", "bullet_lines", "plain_lines", "wrapped_lines"]
+__all__ = [
+    "PAGE",
+    "Page",
+    "bullet_lines",
+    "contact_lines",
+    "contact_rows",
+    "fits_a_line",
+    "plain_lines",
+    "wrapped_lines",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,3 +88,33 @@ def bullet_lines(text: str, page: Page = PAGE) -> int:
 
 def plain_lines(text: str, page: Page = PAGE) -> int:
     return wrapped_lines(text, page.width * page.width_margin)
+
+
+def fits_a_line(text: str, page: Page = PAGE) -> bool:
+    """Whether ``text`` prints on one line on every platform: its full advance width fits.
+
+    No width margin: Chromium sets a line at 0.981 (Linux) to 0.995 (Windows) of its advance
+    width, so a line that fits at full width fits on both. A contact line that does not fit is
+    not a line of room lost, as a bullet's is, but a link broken in two.
+    """
+    return carlito("Regular").width(text, page.size) <= page.width
+
+
+def contact_rows(items: Sequence[str], page: Page = PAGE) -> tuple[tuple[str, ...], ...]:
+    """The contact items in printed lines, broken only between items (DECISIONS 2026-10-29).
+
+    Filled from the left, so the profile links, which come last, end the last line. An item
+    wider than a line on its own takes a line of its own, whole: it is never broken, and the
+    layout check (6d) reports it, so the page goes to a person.
+    """
+    rows: list[list[str]] = []
+    for item in items:
+        if rows and fits_a_line(CONTACT_SEPARATOR.join([*rows[-1], item]), page):
+            rows[-1].append(item)
+        else:
+            rows.append([item])
+    return tuple(tuple(row) for row in rows)
+
+
+def contact_lines(items: Sequence[str], page: Page = PAGE) -> tuple[str, ...]:
+    return tuple(CONTACT_SEPARATOR.join(row) for row in contact_rows(items, page))

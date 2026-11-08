@@ -46,8 +46,13 @@ def _named(snapshot: CandidateSnapshot) -> CandidateSnapshot:
     )
 
 
-def _build(snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy, style: Style) -> object:
+def _build(
+    snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy, style: Style, *, portfolio_url: str | None = None
+) -> object:
     named = _named(snapshot)
+    if portfolio_url is not None:
+        contact = named.contact.model_copy(update={"portfolio_url": portfolio_url})
+        named = named.model_copy(update={"contact": contact})
     normalized = normalize(
         read_jd((JDS / "larkspur_backend.txt").read_text(encoding="utf-8"), taxonomy), taxonomy
     )
@@ -72,6 +77,19 @@ class TestTheEngineGate:
         # The fixture's facts open with allowed verbs, and its vague phrase is in its own fact.
         page = _build(snapshot, taxonomy, load_style())
         assert page.status == "ready", page.findings  # type: ignore[attr-defined]
+
+    def test_a_contact_item_wider_than_a_line_makes_it_needs_review(
+        self, snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy
+    ) -> None:
+        """Never broken inside: printed whole, the page shrunk to fit it, for a person to see."""
+        long_url = (
+            "https://jordan-rivera-example.dev/writing/notes-on-building-a-resume-engine-that-never-"
+            "breaks-a-link-across-two-printed-lines-of-text"
+        )
+        page = _build(snapshot, taxonomy, load_style(), portfolio_url=long_url)
+        assert page.status == "needs_review"  # type: ignore[attr-defined]
+        checks = {finding.check for finding in page.findings["layout"]}  # type: ignore[attr-defined]
+        assert {"contact_width", "scaled"} <= checks
 
     def test_a_single_recruiter_finding_makes_it_needs_review(
         self, snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy

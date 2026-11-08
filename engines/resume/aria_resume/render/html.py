@@ -14,12 +14,13 @@ from importlib import resources
 
 from jinja2 import Environment, PackageLoader, StrictUndefined
 
+from aria_resume.compose.line_budget import contact_lines
 from aria_resume.document import ResumeDocument
 
 __all__ = ["TEMPLATE_VERSION", "render_html", "stylesheet", "template_source"]
 
 #: Recorded in every resume's artifacts. Bump on any change to the template or stylesheet.
-TEMPLATE_VERSION = "1"
+TEMPLATE_VERSION = "2"
 
 _FACES = (
     ("Carlito-Regular.ttf", 400, "normal"),
@@ -70,4 +71,12 @@ def render_html(document: ResumeDocument) -> str:
     Nothing is marked safe: the stylesheet comes in through an include, whose literal text
     autoescaping does not touch, and every value inserted is escaped.
     """
-    return _environment().get_template("resume.html.j2").render(document=document, font_faces=_font_faces())
+    return (
+        _environment()
+        .get_template("resume.html.j2")
+        .render(
+            document=document,
+            contact_lines=contact_lines([item.text for item in document.contact]),
+            font_faces=_font_faces(),
+        )
+    )

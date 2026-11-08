@@ -15,7 +15,8 @@ import pdfplumber
 from pypdf import PdfReader, PdfWriter
 from pypdf.annotations import Link
 
-from aria_resume.document import ResumeDocument
+from aria_resume.compose.line_budget import contact_rows
+from aria_resume.document import CONTACT_SEPARATOR, ResumeDocument
 from aria_resume.render.pdf import RenderError
 
 __all__ = ["Box", "add_links", "locate_contact_items"]
@@ -35,8 +36,10 @@ def locate_contact_items(pdf: bytes, document: ResumeDocument) -> dict[str, Box]
     """Where each contact item's text sits on page 1, by the item's text.
 
     Matched on non-space characters in reading order, since whether a printed space is a
-    glyph or a gap varies by renderer. The whole contact line is found first, so a phone
-    number repeated in a bullet cannot be mistaken for the one in the header.
+    glyph or a gap varies by renderer. Each contact line is found whole first, so a phone
+    number repeated in a bullet cannot be mistaken for the one in the header, and must sit on
+    one printed line: an item broken across two would get one link box over both lines and
+    the items between them.
     """
     with pdfplumber.open(io.BytesIO(pdf)) as document_pdf:
         page = document_pdf.pages[0]
@@ -46,25 +49,34 @@ def locate_contact_items(pdf: bytes, document: ResumeDocument) -> dict[str, Box]
             key=lambda char: (round(float(char["top"])), float(char["x0"])),
         )
     stream = "".join(char["text"] for char in chars)
-    line = "".join(document.contact_line.split())
-    start = stream.find(line)
-    if not line or start < 0:
-        raise RenderError("the contact line is not on page 1 as one run of text")
     found: dict[str, Box] = {}
-    offset = start
-    for item in document.contact:
-        text = "".join(item.text.split())
-        at = stream.find(text, offset, start + len(line))
-        if at < 0:
-            raise RenderError(f"contact item {item.text!r} is not where the contact line says")
-        span = chars[at : at + len(text)]
-        found[item.text] = Box(
-            x0=min(float(char["x0"]) for char in span),
-            y0=height - max(float(char["bottom"]) for char in span),
-            x1=max(float(char["x1"]) for char in span),
-            y1=height - min(float(char["top"]) for char in span),
-        )
-        offset = at + len(text)
+    offset = 0
+    for row in contact_rows([item.text for item in document.contact]):
+        line = "".join(CONTACT_SEPARATOR.join(row).split())
+        start = stream.find(line, offset)
+        if start < 0:
+            raise RenderError(
+                f"the contact line {CONTACT_SEPARATOR.join(row)!r} is not on page 1 as one run of text"
+            )
+        if len({round(float(char["top"])) for char in chars[start : start + len(line)]}) > 1:
+            raise RenderError(
+                f"the contact line {CONTACT_SEPARATOR.join(row)!r} is broken across printed lines"
+            )
+        offset = start
+        for text in row:
+            bare = "".join(text.split())
+            at = stream.find(bare, offset, start + len(line))
+            if at < 0:
+                raise RenderError(f"contact item {text!r} is not where the contact line says")
+            span = chars[at : at + len(bare)]
+            found[text] = Box(
+                x0=min(float(char["x0"]) for char in span),
+                y0=height - max(float(char["bottom"]) for char in span),
+                x1=max(float(char["x1"]) for char in span),
+                y1=height - min(float(char["top"]) for char in span),
+            )
+            offset = at + len(bare)
+        offset = start + len(line)
     return found
 
 

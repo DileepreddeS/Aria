@@ -31,7 +31,7 @@ Other parts of ARIA call it only through its public API (section 10).
 8. **ATS-safe layout.** Single column, standard section headings, real text (no images of text), no tables
    for layout, contact info in the body (not the header/footer), embedded standard fonts.
 9. **Design:** black text throughout, clickable links (email, LinkedIn, GitHub, portfolio) as PDF link
-   annotations over the plain contact line, never coloured or styled there (§10; DECISIONS 2026-10-16),
+   annotations over the plain contact lines, never coloured or styled there (§10; DECISIONS 2026-10-16),
    10.5–11 pt body, 12–14 pt name, 0.5–0.7" margins. Output is PDF. DOCX export is optional.
 10. **Every resume is unique to its job,** and reproducible: the same inputs and versions produce the same output.
 
@@ -446,7 +446,9 @@ All validators are code first, LLM only where noted. Each returns pass/fail plus
 - **Reading-order assertion:** every entry header is immediately followed by its own bullets in the
   extracted stream (the 2026-10-11 float defect, §5).
 - **Glyph integrity:** no U+FB00–FB06 ligature characters and no `(cid:` in extracted text.
-- **Contact line:** extracts as contiguous tokens, not per-glyph (`d i l e e p …` → fail).
+- **Contact lines:** each extracts as contiguous tokens, not per-glyph (`d i l e e p …` → fail), and whole
+  on one line. Contact details take as many lines as they need, broken only between items, never inside
+  one: a URL broken at its hyphen reads as two (DECISIONS 2026-10-29).
 - Standard headings: Summary, Education, Experience, Projects, Skills (configurable).
 - Keyword coverage: share of must-have **evidenced** requirements whose JD surface form appears in the text.
   Also the acronym + long form where useful ("CI/CD", "Continuous Integration").
@@ -476,6 +478,9 @@ All validators are code first, LLM only where noted. Each returns pass/fail plus
 
 **6d Layout check**
 - Exactly one page; no orphan lines; consistent date format; links clickable and correct; fonts embedded.
+- Printed at full size: Chromium shrinks a whole page to fit a line that cannot wrap, which 6d reports.
+- No contact item wider than a line on its own. Such an item is printed whole, on a line of its own, and
+  the page is `needs_review`: it is never broken inside (DECISIONS 2026-10-29).
 
 **Repair loop:** failures produce targeted fixes (rewrite only the failing bullet with the finding as
 feedback, swap a fact, drop the lowest-value bullet for length). Max 2 rounds. If a bullet still fails, use
@@ -496,6 +501,7 @@ and by the §9 6a assertions:
 | No `float` for date columns — use `display: inline-block` | Chromium writes floated boxes into the text layer *ahead of* the body text, so every entry header is separated from its bullets. Verified: `inline-block`, table-cell and plain-line all preserve order; `float` alone breaks it. |
 | No CSS list markers — emit a literal `•` with `list-style: none`, plus a hanging indent | CSS-generated markers never reach the text layer, leaving no way to tell a new bullet from a wrapped line. The hanging indent gives geometric parsers (§5.3) the second signal. |
 | No styled `<span>` or `<a>` in the contact line — keep it unstyled and add links afterwards as PDF annotations from character coordinates | Any styled inline element makes Chromium position each glyph individually; `pypdf` then extracts `d i l e e p k u m a r …`. |
+| Contact lines hold whole items and never wrap (`white-space: nowrap`); the composer breaks them between items | Left to wrap, Chromium breaks a long line after a hyphen, inside a URL: on Linux an ATS read `github.com/jordan- rivera-example`. |
 | `font-feature-settings: "liga" 0, "clig" 0, "dlig" 0` | Carlito/Calibri otherwise emit U+FB00-range ligatures, some with no Unicode mapping, which extract as `(cid:NN)`. |
 | Right-hand date band at `x0 > 0.55 ×` content width | Matches the band §5.3 reads dates from, so our own output parses by the same rule everyone else's does. |
 - File name: `First_Last_Resume.pdf` (no company names in the file name).

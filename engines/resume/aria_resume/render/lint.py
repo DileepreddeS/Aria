@@ -43,6 +43,8 @@ def lint_stylesheet(css: str) -> list[str]:
         found.append("a page margin box: contact details belong in the body, not a header or footer")
     if re.search(r"url\((?!data:)", rules):
         found.append("an external url(): the page must need nothing from the network")
+    if not re.search(r"white-space\s*:\s*nowrap", _rule_body(rules, ".contact")):
+        found.append("a contact line that may wrap: Chromium breaks it inside an item, after a URL's hyphen")
     what = re.search(r"width\s*:\s*(\d+(?:\.\d+)?)%", _rule_body(rules, ".what"))
     if what is None or float(what.group(1)) < 55:
         found.append("the date band starts before 55% of the content width, where Stage 0 reads dates")

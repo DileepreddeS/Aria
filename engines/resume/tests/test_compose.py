@@ -12,7 +12,14 @@ import pytest
 import yaml
 from aria_resume.compose.fallback import fallback_document
 from aria_resume.compose.fit import fit_to_page, overflow
-from aria_resume.compose.line_budget import PAGE, Page, bullet_lines, wrapped_lines
+from aria_resume.compose.line_budget import (
+    PAGE,
+    Page,
+    bullet_lines,
+    contact_rows,
+    fits_a_line,
+    wrapped_lines,
+)
 from aria_resume.compose.metrics import carlito
 from aria_resume.compose.planner import PlanError, plan
 from aria_resume.compose.templates import ROLES, TemplateError, load_template
@@ -56,6 +63,46 @@ class TestWrapping:
     def test_the_first_line_s_extra_room_is_used(self) -> None:
         text = "word " * 40
         assert wrapped_lines(text, 200.0, first_line_extra=200.0) < wrapped_lines(text, 200.0)
+
+
+#: The synthetic eval's contact: one line too long by about 13% (GitHub CI, the Linux eval).
+FIVE_ITEMS = (
+    "jordan.rivera@example.com",
+    "(555) 014-2288",
+    "Portland, OR",
+    "linkedin.com/in/jordan-rivera-example",
+    "github.com/jordan-rivera-example",
+)
+#: Wider than a line on its own (548.5pt of advance width against 525.6pt), still on the paper.
+TOO_WIDE = (
+    "jordan-rivera-example.dev/writing/notes-on-building-a-resume-engine-that-never-breaks-"
+    "a-link-across-two-printed-lines-of-text"
+)
+
+
+class TestContactLines:
+    """Contact details break only between items: Chromium broke the eval's GitHub URL after its
+    hyphen on Linux, and an ATS read "github.com/jordan- rivera-example" (DECISIONS 2026-10-29)."""
+
+    def test_items_that_fit_share_one_line(self) -> None:
+        assert contact_rows(FIVE_ITEMS[:4]) == (FIVE_ITEMS[:4],)
+
+    def test_a_contact_too_long_for_a_line_breaks_between_items(self) -> None:
+        rows = contact_rows(FIVE_ITEMS)
+        assert rows == (FIVE_ITEMS[:4], FIVE_ITEMS[4:])
+        assert all(fits_a_line(" | ".join(row)) for row in rows)
+
+    def test_an_item_wider_than_a_line_takes_a_line_of_its_own_whole(self) -> None:
+        assert not fits_a_line(TOO_WIDE)
+        assert contact_rows((FIVE_ITEMS[0], TOO_WIDE, FIVE_ITEMS[1])) == (
+            (FIVE_ITEMS[0],),
+            (TOO_WIDE,),
+            (FIVE_ITEMS[1],),
+        )
+
+    def test_the_bullets_width_margin_does_not_apply(self) -> None:
+        """Past the line, a bullet loses a line of room; a contact line loses a link."""
+        assert contact_rows(FIVE_ITEMS, Page(width_margin=1.2)) == contact_rows(FIVE_ITEMS)
 
 
 class TestTemplates:
@@ -131,6 +178,18 @@ class TestTheLarkspurPlan:
     def result(self, candidate: CandidateSnapshot, taxonomy: SkillTaxonomy) -> ResumePlan:
         normalized, evidence = _inputs("larkspur_backend", candidate, taxonomy)
         return plan(normalized, evidence, candidate, taxonomy)
+
+    def test_a_second_contact_line_is_budgeted(
+        self, candidate: CandidateSnapshot, result: ResumePlan, taxonomy: SkillTaxonomy
+    ) -> None:
+        contact = candidate.contact.model_copy(
+            update={"github_url": "https://github.com/jordan-rivera-example"}
+        )
+        longer = candidate.model_copy(update={"contact": contact})
+        normalized, evidence = _inputs("larkspur_backend", longer, taxonomy)
+        two_lines = plan(normalized, evidence, longer, taxonomy)
+        assert two_lines.sections == result.sections
+        assert two_lines.estimated_height == pytest.approx(result.estimated_height + PAGE.line)
 
     def test_roles_reverse_chronologically_with_the_template_s_counts(
         self, result: ResumePlan, ids: SimpleNamespace
@@ -280,12 +339,14 @@ class TestTheFallbackPage:
         assert bullets and all(text in texts for text in bullets)
         assert SectionKind.SUMMARY not in {section.kind for section in document.sections}
 
-    def test_the_contact_line_holds_approved_details_only(self, page: tuple) -> None:  # type: ignore[type-arg]
+    def test_the_contact_holds_approved_details_only(self, page: tuple) -> None:  # type: ignore[type-arg]
         _, document = page
-        assert document.contact_line == (
-            "jordan.rivera@example.com | (555) 014-2288 | Portland, OR | "
-            "linkedin.com/in/jordan-rivera-example"
-        )
+        assert [item.text for item in document.contact] == [
+            "jordan.rivera@example.com",
+            "(555) 014-2288",
+            "Portland, OR",
+            "linkedin.com/in/jordan-rivera-example",
+        ]
 
     def test_a_degree_prints_with_its_field(self, page: tuple) -> None:  # type: ignore[type-arg]
         _, document = page

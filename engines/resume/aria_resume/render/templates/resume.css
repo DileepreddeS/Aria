@@ -26,8 +26,16 @@ body {
   font-weight: 700;
 }
 
-.contact {
+.contacts {
   margin-bottom: 4pt;
+}
+
+/* A contact line holds whole items and fits the line (line_budget.contact_rows), so it never
+   needs to wrap. Chromium would otherwise break one inside an item, after a URL's hyphen, and
+   an ATS would read a broken link. For a line still too wide, Chromium shrinks the whole
+   page until it fits, and the layout check (6d) reports the smaller page. */
+.contact {
+  white-space: nowrap;
 }
 
 .section {
