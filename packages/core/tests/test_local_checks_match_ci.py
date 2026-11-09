@@ -81,6 +81,26 @@ class TestRuff:
         assert "make lint" in CI
 
 
+class TestMypy:
+    """The hook checked three members on the work tree; CI checks seven on a checkout
+    (DECISIONS 2026-11-09)."""
+
+    def test_the_hook_checks_every_member_ci_checks(self) -> None:
+        path = REPO_ROOT / "infra" / "checks" / "mypy_staged.py"
+        spec = importlib.util.spec_from_file_location("mypy_staged_check", path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        in_ci = re.findall(r"^\tuv run mypy (\S+)$", _make_target("typecheck"), re.MULTILINE)
+        in_task = re.findall(r"\{ uv run mypy (\S+) \}", _task("typecheck"))
+        assert list(module.MEMBERS) == in_ci == in_task
+        assert "make typecheck" in CI
+
+    def test_the_hook_checks_the_index_not_the_work_tree(self) -> None:
+        assert "entry: uv run python infra/checks/mypy_staged.py" in PRE_COMMIT
+        assert 'entry: bash -c "uv run mypy' not in PRE_COMMIT
+
+
 class TestSemgrep:
     def test_the_local_version_is_the_one_ci_installs(self) -> None:
         ci_version = re.search(r"semgrep==(\S+)", CI)

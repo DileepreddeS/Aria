@@ -62,9 +62,12 @@ repos:
         language: system
         pass_filenames: false
 
-      - id: mypy-core
-        name: mypy (strict)
-        entry: bash -c "uv run mypy packages/core && uv run mypy services/llm_gateway && uv run mypy apps/api"
+      # Every member `make typecheck` checks, on an export of the index alone: run on the work
+      # tree, mypy saw untracked files beside the staged ones (DECISIONS 2026-11-09).
+      - id: mypy
+        name: mypy (strict, what is being committed)
+        entry: uv run python infra/checks/mypy_staged.py
         language: system
         types: [python]
         pass_filenames: false
+        require_serial: true
