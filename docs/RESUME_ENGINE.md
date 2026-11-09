@@ -475,8 +475,9 @@ All validators are code first, LLM only where noted. Each returns pass/fail plus
   no verb opening more than three bullets on the page.
 - Vague phrase list ("cloud-native solutions", "modern web systems", "digital solutions") → fail unless
   literally in the fact.
-- **6-second test (LLM, JSON):** given the top 3 requirements, does the top third of the page show each one?
-  Fewer than 2 → fail with which ones are missing.
+- **6-second test (LLM, JSON):** given the top 3 requirements the candidate has strong evidence for, does the
+  top third of the page show each one? Fewer than 2 → fail with which ones are missing. A requirement the
+  graph cannot prove is not weighed: it is already a gap (DECISIONS 2026-11-09).
 
 **6d Layout check**
 - Exactly one page; no orphan lines; consistent date format; links clickable and correct; fonts embedded.

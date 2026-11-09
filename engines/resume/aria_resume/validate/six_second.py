@@ -2,11 +2,15 @@
 
 RESUME_ENGINE \u00a71 and \u00a79 6c: the top third (the summary, the first three bullets, the first
 skills line) must show the job's three most important requirements; fewer than two shown is a
-finding naming the missing ones. A model reads the page, as a recruiter would, through the
+finding naming the missing ones. Only requirements the candidate has strong evidence for are
+weighed: one the graph cannot prove is already a gap, reported as one, and no page could show
+it truthfully (DECISIONS 2026-11-09). A model reads the page, as a recruiter would, through the
 gateway; code decides what counts (DECISIONS 2026-11-08):
 
 * the requirements are the taxonomy's names for them, never the posting's words: the posting is
   untrusted, the names are ours;
+* they are the three most important among those the evidence map holds as strong, the same
+  "evidenced" the ATS check's keywords are;
 * the top third is built from the document, in reading order, which the ATS check (6a) holds
   the printed page to;
 * a requirement counts as shown only when the model quotes where, and the quote is found in
@@ -26,7 +30,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from aria_core.taxonomy.model import SkillTaxonomy
 from aria_resume.document import ResumeDocument, SectionKind
 from aria_resume.llm import LlmClient, LlmPurpose, LlmRequest, LlmUnavailable
-from aria_resume.schemas import NormalizedJD, RequirementKind
+from aria_resume.schemas import EvidenceMap, NormalizedJD, RequirementKind
 from aria_resume.validate import Finding
 
 __all__ = [
@@ -39,7 +43,7 @@ __all__ = [
     "top_third",
 ]
 
-SIX_SECOND_VERSION = "2026.11.1"
+SIX_SECOND_VERSION = "2026.11.2"
 _TOP = 3
 _REQUIRED = 2
 _NAMED_KINDS = (RequirementKind.SKILL, RequirementKind.DOMAIN, RequirementKind.SOFT)
@@ -82,10 +86,18 @@ class SixSecondResult:
     notes: list[str] = field(default_factory=list)
 
 
-def top_requirements(normalized: NormalizedJD, taxonomy: SkillTaxonomy) -> tuple[str, ...]:
-    """The job's three most important nameable requirements: must-haves first, then by weight."""
+def top_requirements(
+    normalized: NormalizedJD, evidence: EvidenceMap, taxonomy: SkillTaxonomy
+) -> tuple[str, ...]:
+    """The three most important nameable requirements the candidate can prove: must-haves
+    first, then by weight."""
+    proven = set(evidence.strong)
     ranked = sorted(
-        (requirement for requirement in normalized.requirements if requirement.kind in _NAMED_KINDS),
+        (
+            requirement
+            for requirement in normalized.requirements
+            if requirement.kind in _NAMED_KINDS and requirement.id in proven
+        ),
         key=lambda requirement: (not requirement.must_have, -requirement.weight),
     )
     names: list[str] = []
@@ -120,12 +132,18 @@ def _collapsed(text: str) -> str:
 
 
 async def six_second_check(
-    document: ResumeDocument, normalized: NormalizedJD, taxonomy: SkillTaxonomy, llm: LlmClient
+    document: ResumeDocument,
+    normalized: NormalizedJD,
+    evidence: EvidenceMap,
+    taxonomy: SkillTaxonomy,
+    llm: LlmClient,
 ) -> SixSecondResult:
-    asked = top_requirements(normalized, taxonomy)
+    asked = top_requirements(normalized, evidence, taxonomy)
     result = SixSecondResult(asked=asked, notes=[f"six-second: instructions {SIX_SECOND_VERSION}"])
     if not asked:
-        result.notes.append("six-second: not run, the posting names no requirement the taxonomy holds")
+        result.notes.append(
+            "six-second: not run, the candidate has strong evidence for no requirement the taxonomy names"
+        )
         return result
     page = top_third(document)
     request = LlmRequest(

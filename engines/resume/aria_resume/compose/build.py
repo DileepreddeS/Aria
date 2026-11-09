@@ -114,7 +114,9 @@ def build_page(
     if not fitted.fits:
         layout.append(Finding("one_page", "the page did not fit on one page after fitting"))
     six_second = (
-        asyncio.run(six_second_check(document, normalized, taxonomy, llm)) if llm is not None else None
+        asyncio.run(six_second_check(document, normalized, evidence, taxonomy, llm))
+        if llm is not None
+        else None
     )
     findings = {
         "truth": check_truth(document, snapshot, taxonomy),

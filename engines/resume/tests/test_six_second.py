@@ -1,5 +1,7 @@
 """6c's 6-second test: the top third must show at least two of the job's top three requirements.
 
+Only requirements the candidate has strong evidence for are weighed (DECISIONS 2026-11-09).
+
 The model's replies are scripted. What counts is decided here: a requirement is shown only
 with a quote the top third holds word for word, so a confident "yes" with an invented quote
 counts for nothing, and a page that shows fewer than two is a finding naming what is missing.
@@ -23,7 +25,7 @@ from aria_resume.document import (
 from aria_resume.jd.reader import read_jd
 from aria_resume.llm import LlmPurpose, LlmRequest, ScriptedLlm
 from aria_resume.normalize.requirements import normalize
-from aria_resume.schemas import NormalizedJD, RequirementKind
+from aria_resume.schemas import EvidenceMap, FitDecision, NormalizedJD, RequirementKind, RoleType
 from aria_resume.validate.six_second import (
     INSTRUCTIONS,
     RESPONSE_SCHEMA,
@@ -71,6 +73,20 @@ def normalized(taxonomy: SkillTaxonomy) -> NormalizedJD:
     return normalize(read_jd((JDS / "larkspur_backend.txt").read_text(encoding="utf-8"), taxonomy), taxonomy)
 
 
+def _evidence(normalized: NormalizedJD, strong: list[str] | None = None) -> EvidenceMap:
+    """Every named requirement proven strongly, unless told which."""
+    if strong is None:
+        strong = [r.id for r in normalized.requirements if r.kind in NAMED]
+    return EvidenceMap(
+        per_requirement={},
+        coverage=1.0,
+        strong=tuple(strong),
+        role_type=RoleType.BACKEND,
+        fit_decision=FitDecision.STRONG,
+        embedder="test",
+    )
+
+
 def _answer(*seen: tuple[str, bool, str]) -> Any:
     def reply(request: LlmRequest) -> str:
         return json.dumps(
@@ -85,10 +101,15 @@ def _answer(*seen: tuple[str, bool, str]) -> Any:
 
 
 async def _check(
-    normalized: NormalizedJD, taxonomy: SkillTaxonomy, *replies: Any, document: ResumeDocument | None = None
+    normalized: NormalizedJD,
+    taxonomy: SkillTaxonomy,
+    *replies: Any,
+    document: ResumeDocument | None = None,
+    evidence: EvidenceMap | None = None,
 ) -> Any:
     llm = ScriptedLlm({LlmPurpose.SIX_SECOND_CHECK: list(replies)})
-    result = await six_second_check(document or _document(), normalized, taxonomy, llm)
+    evidence = evidence or _evidence(normalized)
+    result = await six_second_check(document or _document(), normalized, evidence, taxonomy, llm)
     return result, llm
 
 
@@ -96,7 +117,7 @@ class TestWhatIsAsked:
     def test_the_top_three_are_must_haves_first_by_the_taxonomy_s_name(
         self, normalized: NormalizedJD, taxonomy: SkillTaxonomy
     ) -> None:
-        asked = top_requirements(normalized, taxonomy)
+        asked = top_requirements(normalized, _evidence(normalized), taxonomy)
         assert 1 <= len(asked) <= 3
         named = [r for r in normalized.requirements if r.kind in NAMED]
         names = {taxonomy.display_form(r.canonical) for r in named}
@@ -112,9 +133,28 @@ class TestWhatIsAsked:
         musts = [r.model_copy(update={"weight": 0.1}) for r in named if r.must_have][:3]
         assert len(musts) == 3
         reweighted = normalized.model_copy(update={"requirements": (nice, *musts)})
-        assert top_requirements(reweighted, taxonomy) == tuple(
+        assert top_requirements(reweighted, _evidence(reweighted), taxonomy) == tuple(
             taxonomy.display_form(r.canonical) for r in musts
         )
+
+    def test_a_requirement_the_candidate_cannot_prove_is_not_weighed(
+        self, normalized: NormalizedJD, taxonomy: SkillTaxonomy
+    ) -> None:
+        """It is already a gap; no truthful page could show it."""
+        named = [r for r in normalized.requirements if r.kind in NAMED]
+        everything = top_requirements(normalized, _evidence(normalized), taxonomy)
+        unproven = next(r for r in named if taxonomy.display_form(r.canonical) == everything[0])
+        proven = [r.id for r in named if r.canonical != unproven.canonical]
+        asked = top_requirements(normalized, _evidence(normalized, proven), taxonomy)
+        assert everything[0] not in asked
+        assert asked[:2] == everything[1:3]
+
+    async def test_nothing_proven_is_not_run_and_finds_nothing(
+        self, normalized: NormalizedJD, taxonomy: SkillTaxonomy
+    ) -> None:
+        result, llm = await _check(normalized, taxonomy, _answer(), evidence=_evidence(normalized, []))
+        assert (result.ran, result.findings, llm.requests) == (False, [], [])
+        assert any("not run" in note for note in result.notes)
 
     def test_the_top_third_is_the_summary_three_bullets_and_one_skills_line(self) -> None:
         assert top_third(_document()).splitlines() == [
@@ -140,7 +180,7 @@ class TestWhatCounts:
     async def test_two_shown_with_true_quotes_pass(
         self, normalized: NormalizedJD, taxonomy: SkillTaxonomy
     ) -> None:
-        asked = top_requirements(normalized, taxonomy)
+        asked = top_requirements(normalized, _evidence(normalized), taxonomy)
         page = top_third(_document())
         seen = [(name, True, page.splitlines()[0]) for name in asked[:2]] + [
             (name, False, "") for name in asked[2:]
@@ -152,7 +192,7 @@ class TestWhatCounts:
     async def test_a_yes_with_a_quote_the_page_does_not_hold_counts_for_nothing(
         self, normalized: NormalizedJD, taxonomy: SkillTaxonomy
     ) -> None:
-        asked = top_requirements(normalized, taxonomy)
+        asked = top_requirements(normalized, _evidence(normalized), taxonomy)
         seen = [(name, True, "Led a team of 40 engineers on Kubernetes") for name in asked]
         result, _ = await _check(normalized, taxonomy, _answer(*seen))
         assert result.shown == {}
@@ -162,7 +202,7 @@ class TestWhatCounts:
     async def test_one_of_three_is_a_finding_naming_the_missing(
         self, normalized: NormalizedJD, taxonomy: SkillTaxonomy
     ) -> None:
-        asked = top_requirements(normalized, taxonomy)
+        asked = top_requirements(normalized, _evidence(normalized), taxonomy)
         assert len(asked) == 3
         quote = BULLETS[0]
         result, _ = await _check(
@@ -177,7 +217,7 @@ class TestWhatCounts:
     async def test_a_quote_is_found_whatever_its_spacing_and_case(
         self, normalized: NormalizedJD, taxonomy: SkillTaxonomy
     ) -> None:
-        asked = top_requirements(normalized, taxonomy)
+        asked = top_requirements(normalized, _evidence(normalized), taxonomy)
         seen = [(name, True, "  CUT p95 api   latency ") for name in asked[:2]]
         result, _ = await _check(normalized, taxonomy, _answer(*seen))
         assert result.findings == []
