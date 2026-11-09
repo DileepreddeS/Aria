@@ -64,12 +64,12 @@ class ExperienceBucket(StrEnum):
 
     Calendars may still overlap between buckets — a part-time campus job can run
     during a research post — so anything combining buckets unions the spans rather
-    than adding the totals (see
-    :meth:`aria_core.graph.derive.SkillExperience.claimable_months`).
+    than adding the totals. Buckets describe the graph; the years a candidate may claim
+    come from their per-role answers instead (:mod:`aria_core.graph.counted_years`).
     """
 
     FULL_TIME = "full_time"
-    """Salaried and contract work. What "years of experience" means by default."""
+    """Salaried and contract work."""
     PART_TIME = "part_time"
     """Paid work alongside something else: an on-campus job, a graduate or research
     assistantship, a few hours a week. Real employment, and not a full-time year \u2014 a

@@ -46,6 +46,7 @@ class SubjectKind(StrEnum):
     APPLY_TASK = "apply_task"
     SERVICE = "service"
     USER_QUESTION = "user_question"
+    RESUME = "resume"
 
 
 class AuditOutcome(StrEnum):
@@ -85,6 +86,8 @@ class AuditAction(StrEnum):
     #: An answer or a dismissal taken back: the question reopened, or withdrawn so the
     #: next import asks it afresh.
     USER_QUESTION_RECONSIDERED = "user_question.reconsidered"
+    #: A resume page built for a posting and stored (step 11b).
+    RESUME_BUILT = "resume.built"
     UPLOAD_RECEIVED = "upload.received"
     UPLOAD_SCANNED = "upload.scanned"
     UPLOAD_PARSED = "upload.parsed"

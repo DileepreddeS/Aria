@@ -108,6 +108,12 @@ def _ok(payload: dict[str, Any] | None = None) -> Callable[[httpx2.Request], htt
     return lambda request: httpx2.Response(200, json=payload or _message())
 
 
+def _answering(status_code: int, error_type: str, message: str) -> Wire:
+    """A wire whose every request gets the API's error answer."""
+    body = {"type": "error", "error": {"type": error_type, "message": message}}
+    return Wire(lambda request: httpx2.Response(status_code, json=body))
+
+
 async def _send(wire: Wire, request: CompletionRequest | None = None, **options: Any) -> Any:
     request = request or _request()
     return await wire.provider().complete(
@@ -155,6 +161,48 @@ class TestWhatIsSent:
         wire = Wire(_ok())
         await _send(wire, response_schema=None, effort="medium")
         assert wire.body["output_config"] == {"effort": "medium"}
+
+    async def test_a_keyword_structured_outputs_refuse_is_left_out_of_the_format(self) -> None:
+        # The API answered 400 "For 'array' type, property 'maxItems' is not supported"
+        # (DECISIONS 2026-11-08). The caller still enforces it: it validates every reply.
+        schema: dict[str, Any] = {
+            "$defs": {"Item": {"type": "object", "properties": {"tags": {"type": "array", "maxItems": 3}}}},
+            "type": "object",
+            "properties": {
+                "items": {"type": "array", "items": {"$ref": "#/$defs/Item"}, "maxItems": 20, "minItems": 1},
+                # Through items and anyOf, not only named subschemas.
+                "matrix": {"type": "array", "items": {"type": "array", "maxItems": 2}},
+                "either": {"anyOf": [{"type": "array", "maxItems": 4}, {"type": "null"}]},
+                # A property that happens to be called maxItems is data, not the keyword.
+                "maxItems": {"type": "string", "maxLength": 10},
+            },
+            "required": ["items", "maxItems"],
+        }
+        wire = Wire(_ok())
+        await _send(wire, response_schema=schema)
+        sent = wire.body["output_config"]["format"]["schema"]
+        assert sent["properties"]["items"] == {
+            "type": "array",
+            "items": {"$ref": "#/$defs/Item"},
+            "minItems": 1,
+        }
+        assert sent["$defs"]["Item"]["properties"]["tags"] == {"type": "array"}
+        assert sent["properties"]["matrix"] == {"type": "array", "items": {"type": "array"}}
+        assert sent["properties"]["either"] == {"anyOf": [{"type": "array"}, {"type": "null"}]}
+        assert sent["properties"]["maxItems"] == {"type": "string", "maxLength": 10}
+        assert sent["required"] == ["items", "maxItems"]
+        assert schema["properties"]["items"]["maxItems"] == 20  # the caller's schema is untouched
+
+    async def test_the_token_count_is_asked_with_the_same_format(self) -> None:
+        schema = {"type": "object", "properties": {"x": {"type": "array", "maxItems": 2}}}
+        wire = Wire(lambda request: httpx2.Response(200, json={"input_tokens": 7}))
+        await wire.provider().count_input_tokens(
+            assemble(_request()), model="claude-sonnet-5-5", response_schema=schema
+        )
+        assert wire.body["output_config"]["format"]["schema"] == {
+            "type": "object",
+            "properties": {"x": {"type": "array"}},
+        }
 
     async def test_no_refusal_fallback_is_asked_for(self) -> None:
         # A fallback would re-run the request on a model nobody priced (DECISIONS 2026-10-20).
@@ -255,6 +303,38 @@ class TestCountingAndFailing:
             )
         assert caught.value.status_code == 529
         assert len(wire.requests) == 1
+
+    async def test_a_4xx_carries_the_api_s_type_and_message(self) -> None:
+        # It describes the request's shape, which is how the parse_jd schema was found to use
+        # a keyword structured outputs refuse (DECISIONS 2026-11-08).
+        message = "output_config.format.schema: For 'array' type, property 'maxItems' is not supported"
+        wire = _answering(400, "invalid_request_error", message)
+        with pytest.raises(ProviderRejected) as caught:
+            await _send(wire)
+        assert (caught.value.api_error_type, caught.value.api_message) == ("invalid_request_error", message)
+
+    async def test_the_token_count_s_4xx_carries_them_too(self) -> None:
+        wire = _answering(400, "invalid_request_error", "bad shape")
+        with pytest.raises(ProviderRejected) as caught:
+            await wire.provider().count_input_tokens(assemble(_request()), model="claude-sonnet-5-5")
+        assert (caught.value.status_code, caught.value.api_message) == (400, "bad shape")
+
+    async def test_a_5xx_carries_no_message(self) -> None:
+        wire = _answering(529, "overloaded_error", "overloaded")
+        with pytest.raises(ProviderRejected) as caught:
+            await _send(wire)
+        assert (caught.value.api_error_type, caught.value.api_message) == (None, None)
+
+    async def test_the_message_is_one_short_line(self) -> None:
+        long = "line one\nline two\x00 " + "x" * 1000
+        wire = _answering(400, "invalid_request_error", long)
+        with pytest.raises(ProviderRejected) as caught:
+            await _send(wire)
+        shown = caught.value.api_message
+        assert shown is not None
+        assert len(shown) <= 300
+        assert shown.startswith("line one line two ")
+        assert all(character.isprintable() for character in shown)
 
     async def test_a_timeout_is_not_a_rejection(self) -> None:
         def hang(request: httpx2.Request) -> httpx2.Response:

@@ -17,6 +17,7 @@ from contextlib import asynccontextmanager
 import httpx2
 import pytest
 import pytest_asyncio
+import structlog.testing
 from httpx import ASGITransport, AsyncClient, Response
 from pydantic import SecretStr
 from sqlalchemy import delete, insert, select, text
@@ -643,6 +644,22 @@ class TestSpendIsCappedFromWhatIsRecorded:
         (row,) = await _rows(engine, tenant_id)
         assert (row.outcome, row.cost_usd) == ("failed", decimal.Decimal(0))
         assert row.refusal_reason == "provider_error:InternalServerError,500"
+
+    async def test_a_4xx_s_message_is_logged_and_never_returned(
+        self, engine: AsyncEngine, tenant_id: TenantId
+    ) -> None:
+        message = "output_config.format.schema: For 'array' type, property 'maxItems' is not supported"
+        rejected = ProviderRejected(
+            "BadRequestError", 400, api_error_type="invalid_request_error", api_message=message
+        )
+        with structlog.testing.capture_logs() as logs:
+            async with _gateway(engine, ScriptedProvider(fail=rejected)) as http:
+                response = await _post(http, _request(tenant_id))
+        assert response.status_code == 502
+        assert "maxItems" not in response.text
+        (logged,) = [entry for entry in logs if entry["event"] == "llm_provider_failed"]
+        assert logged["api_message"] == message
+        assert (logged["status"], logged["api_error_type"]) == (400, "invalid_request_error")
 
     async def test_two_requests_at_once_cannot_both_take_the_last_room(
         self, engine: AsyncEngine, tenant_id: TenantId

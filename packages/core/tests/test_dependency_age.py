@@ -304,8 +304,10 @@ def _recorded(package: str, advisory: str, alias: str, fixed: str) -> dict[str, 
 #: ``"certifi": [_recorded("certifi", "GHSA-6q48-6c7w-9gw2", "PYSEC-2026-4320", "2026.10.19")]``:
 #: the test runs offline, and the live check in `make audit` asks OSV itself. An exemption or
 #: pin that moves no longer matches its record and fails here until the new release is checked
-#: and recorded. None is declared since 2026-11-08 (DECISIONS 2026-10-22).
-RECORDED_FIXES: dict[str, list[dict[str, Any]]] = {}
+#: and recorded. pypdf recorded on 2026-11-08.
+RECORDED_FIXES: dict[str, list[dict[str, Any]]] = {
+    "pypdf": [_recorded("pypdf", "GHSA-5849-834g-hvw5", "CVE-2026-119203", "6.21.4")],
+}
 
 
 def test_the_lock_in_this_repository_passes() -> None:

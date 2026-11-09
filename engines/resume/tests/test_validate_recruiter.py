@@ -79,6 +79,15 @@ class TestWords:
         findings = check(_page(*GOOD, summary=("A passionate engineer.",)))
         assert _checks(findings) == ["banned_word"]
 
+    def test_a_vague_phrase_in_the_summary(self, check: Check) -> None:
+        # A summary claims what the candidate is: the vague phrases fail there as in a bullet,
+        # unless some approved fact says them in those words (DECISIONS 2026-11-08).
+        findings = check(_page(*GOOD, summary=("Software engineer who ships modern web systems.",)))
+        assert _checks(findings) == ["vague_phrase"]
+
+    def test_a_summary_does_not_open_with_a_verb_and_is_not_asked_to(self, check: Check) -> None:
+        assert check(_page(*GOOD, summary=("Backend engineer with Redis caching work.",))) == []
+
     def test_a_banned_word_only_as_a_whole_word(self, check: Check) -> None:
         # "dynamic" is banned; "dynamically" and "aerodynamic" are other words.
         assert check(_page("Built 15+ dynamically loaded React screens", *GOOD[1:])) == []

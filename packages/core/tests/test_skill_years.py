@@ -195,9 +195,8 @@ class TestOnlyApprovedEvidenceCounts:
         async with tenant_transaction(engine, tenant_a) as session:
             skills = await compute_skill_experience(session, career.candidate_id, now=NOW)
 
-        # Jun 2024 through Oct 2026 inclusive = 29 months = 2.4 years truncated.
+        # Jun 2024 through Oct 2026 inclusive = 29 months.
         assert skills["react"].full_time_months == 29
-        assert skills["react"].claimable_years() == 2.4
 
     async def test_a_fact_on_an_unapproved_experience_contributes_no_months(
         self, engine: AsyncEngine, tenant_a: TenantId, user_a: UserId, career: Career
@@ -277,7 +276,6 @@ class TestConcurrentRolesDoNotDoubleCount:
             skills = await compute_skill_experience(session, career.candidate_id, now=NOW)
 
         assert skills["python"].full_time_months == 29
-        assert skills["python"].claimable_years() == 2.4
 
 
 class TestProfessionalAndProjectTimeStaySeparate:
@@ -367,7 +365,6 @@ class TestImpliedYearsAreNeverDirectYears:
         assert skills["react"].full_time_months == 29
         assert skills["javascript"].full_time_months == 0
         assert skills["javascript"].implied_full_time_months == 29
-        assert skills["javascript"].claimable_years() == 0.0
 
     async def test_implied_months_are_absent_without_a_taxonomy(
         self, engine: AsyncEngine, tenant_a: TenantId, user_a: UserId, career: Career
@@ -503,7 +500,6 @@ class TestCareerTotals:
         assert totals.full_time_months == 0
         assert totals.internship_months == 0
         assert totals.project_months == 0
-        assert totals.claimable_years() == 0.0
         assert totals.first_working_month is None
         assert totals.skills == {}
 

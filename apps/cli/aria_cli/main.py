@@ -361,6 +361,8 @@ def _cmd_dismiss(client: AriaClient, args: argparse.Namespace) -> int:
 
 
 def _cmd_gaps(client: AriaClient, args: argparse.Namespace) -> int:
+    if args.resume_id:
+        return _resume_gaps(client, args.resume_id)
     payload = client.gaps()
     found = payload.get("gaps", [])
     if not found:
@@ -372,6 +374,76 @@ def _cmd_gaps(client: AriaClient, args: argparse.Namespace) -> int:
         print(f"\n  [{gap['kind']}]")
         print(f"    {_truncate(gap['prompt'], 100)}")
     print("\nnext: aria interview enrichment   (asks the most useful few)")
+    return 0
+
+
+def _print_resume(resume: dict[str, Any]) -> None:
+    findings = ", ".join(f"{check} {count}" for check, count in sorted(resume.get("findings", {}).items()))
+    model = "model" if resume.get("used_model") else "facts' own words"
+    print(f"{resume['id']}  {resume['status']:<12}  fit {resume['fit']:<6}  {model}  [{findings}]")
+
+
+def _cmd_resume(client: AriaClient, args: argparse.Namespace) -> int:
+    if args.action == "build":
+        if not args.jd:
+            print("error: aria resume build needs the posting's text file", file=sys.stderr)
+            return 2
+        jd_text = Path(args.jd).read_text(encoding="utf-8")
+        resume = client.build_resume(jd_text, use_model=args.model, local_model=not args.no_local_model)
+        _print_resume(resume)
+        content, name = client.resume_pdf(resume["id"])
+        # The API names the file from the approved name; only its last component is used here.
+        out = Path(args.out) if args.out else Path.cwd() / Path(name).name
+        out.write_bytes(content)
+        print(f"saved {out}")
+        print(f"next: aria explain {resume['id']}   aria gaps {resume['id']}")
+        return 0 if resume["status"] == "ok" else 1
+    if args.action == "list":
+        found = client.resumes().get("resumes", [])
+        if not found:
+            print("no resumes yet: aria resume build POSTING.txt")
+        for resume in found:
+            _print_resume(resume)
+        return 0
+    if not args.resume_id:
+        print(f"error: aria resume {args.action} needs a resume id", file=sys.stderr)
+        return 2
+    if args.action == "pdf":
+        content, name = client.resume_pdf(args.resume_id)
+        out = Path(args.out) if args.out else Path.cwd() / Path(name).name
+        out.write_bytes(content)
+        print(f"saved {out}")
+        return 0
+    detail = client.resume(args.resume_id)
+    _print_resume(detail)
+    report = detail.get("validation_report", {})
+    for check, found in sorted(report.get("findings", {}).items()):
+        for finding in found:
+            print(f"  {check}: [{finding['check']}] {_truncate(finding['detail'], 110)}")
+    for note in report.get("notes", []):
+        print(f"  note: {_truncate(note, 110)}")
+    return 0
+
+
+def _cmd_explain(client: AriaClient, args: argparse.Namespace) -> int:
+    for bullet in client.explain(args.resume_id).get("bullets", []):
+        print()
+        print(f"  {_truncate(bullet['text'], 110)}")
+        if bullet["requirements"]:
+            print(f"    for: {', '.join(bullet['requirements'])}")
+        for fact in bullet["facts"]:
+            print(f"    fact {fact['id']}: {_truncate(fact['text'], 100)}")
+    return 0
+
+
+def _resume_gaps(client: AriaClient, resume_id: str) -> int:
+    report = client.resume_gaps(resume_id)
+    print(f"coverage {report['coverage']:.2f}, fit {report['fit']}")
+    for title, key in (("missing", "missing"), ("weakly met", "light")):
+        for gap in report.get(key, []):
+            marker = "must-have" if gap["must_have"] else "preferred"
+            print(f"  {title} ({marker}): {gap['label']}")
+            print(f"    {_truncate(gap['suggestion'], 100)}")
     return 0
 
 
@@ -521,9 +593,28 @@ def build_parser() -> argparse.ArgumentParser:
     entities.add_argument("--status", default="draft", choices=["draft", "approved", "rejected"])
     entities.set_defaults(handler=_cmd_entities)
 
-    subparsers.add_parser("gaps", help="what is missing from the graph (read-only)").set_defaults(
-        handler=_cmd_gaps
+    gaps = subparsers.add_parser(
+        "gaps", help="what is missing from the graph, or, with a resume id, from that resume's evidence"
     )
+    gaps.add_argument("resume_id", nargs="?", default=None)
+    gaps.set_defaults(handler=_cmd_gaps)
+
+    resume = subparsers.add_parser("resume", help="build a resume page for a posting, or read one back")
+    resume.add_argument("action", choices=["build", "list", "show", "pdf"])
+    resume.add_argument("jd", nargs="?", default=None, help="build: the posting's text file")
+    resume.add_argument("--id", dest="resume_id", default=None, help="show, pdf: which resume")
+    resume.add_argument(
+        "--model", action="store_true", help="build: read and write with the model (costs money)"
+    )
+    resume.add_argument(
+        "--no-local-model", action="store_true", help="build: match with the word-hash stand-in, as CI does"
+    )
+    resume.add_argument("--out", default=None, help="build, pdf: where to save the PDF")
+    resume.set_defaults(handler=_cmd_resume)
+
+    explain = subparsers.add_parser("explain", help="why each bullet of a resume is there")
+    explain.add_argument("resume_id")
+    explain.set_defaults(handler=_cmd_explain)
 
     interview = subparsers.add_parser(
         "interview", help="ask about gaps (enrichment) or about what you want (motivations)"

@@ -16,7 +16,7 @@ from typing import Any
 
 import pytest
 from aria_resume.compose.planner import plan
-from aria_resume.compose.writer import INSTRUCTIONS, write_page
+from aria_resume.compose.writer import INSTRUCTIONS, RESPONSE_SCHEMA, write_page
 from aria_resume.jd.reader import read_jd
 from aria_resume.llm import LlmPurpose, LlmRequest, ScriptedLlm
 from aria_resume.match.embeddings import WordHashEmbedder
@@ -122,6 +122,16 @@ class TestWhatIsSent:
             assert request.untrusted_content == ()
             assert request.purpose is LlmPurpose.WRITE_BULLET
             assert request.trusted_instructions == INSTRUCTIONS
+
+    async def test_every_request_carries_the_schema_its_instructions_name(
+        self, inputs: Inputs, taxonomy: SkillTaxonomy
+    ) -> None:
+        # Without it the model was told to match a schema it was never sent, and the first live
+        # run fell back on all 16 bullets (DECISIONS 2026-11-08).
+        _, _, llm = await _write(inputs, taxonomy, *[_honest] * _slots(inputs))
+        assert "response_schema" in INSTRUCTIONS
+        for request in llm.requests:
+            assert json.loads(request.inputs["response_schema"]) == RESPONSE_SCHEMA
 
     async def test_the_requirement_is_the_taxonomy_s_name_not_the_posting_s_words(
         self, inputs: Inputs, taxonomy: SkillTaxonomy

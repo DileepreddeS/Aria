@@ -314,6 +314,18 @@ async def _settle(
         )
 
 
+def _api_error(error: BaseException) -> dict[str, object]:
+    """For the log only: a 4xx's status, type and message, which describe the request's shape
+    (DECISIONS 2026-11-08). The caller is never shown them."""
+    if not isinstance(error, ProviderRejected) or error.api_message is None:
+        return {}
+    return {
+        "status": error.status_code,
+        "api_error_type": error.api_error_type,
+        "api_message": error.api_message,
+    }
+
+
 def _response_schema(request: CompletionRequest) -> tuple[dict[str, Any] | None, Refusal | None]:
     raw = request.inputs.get("response_schema")
     if raw is None:
@@ -463,7 +475,10 @@ def create_app(
                     json.dumps(schema) if schema else ""
                 )
                 logger.warning(
-                    "llm_token_count_failed", purpose=body.purpose.value, error=type(error).__name__
+                    "llm_token_count_failed",
+                    purpose=body.purpose.value,
+                    error=type(error).__name__,
+                    **_api_error(error),
                 )
             reserve = price_table.worst_case(
                 body.model, geo, input_tokens=input_tokens, max_output_tokens=body.max_output_tokens
@@ -520,7 +535,9 @@ def create_app(
                     RefusalReason.PROVIDER_ERROR, (rejected.kind, str(rejected.status_code)), "provider"
                 ),
             )
-            logger.warning("llm_provider_failed", purpose=body.purpose.value, error=rejected.kind)
+            logger.warning(
+                "llm_provider_failed", purpose=body.purpose.value, error=rejected.kind, **_api_error(rejected)
+            )
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY, detail="the model provider failed"
             ) from rejected

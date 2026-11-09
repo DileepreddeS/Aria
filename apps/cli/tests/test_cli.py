@@ -736,3 +736,130 @@ class TestRetag:
     def test_there_is_no_flag_to_skip_the_question(self, monkeypatch: pytest.MonkeyPatch) -> None:
         with pytest.raises(SystemExit):
             run(self._recorder(), ["retag", "--yes"], monkeypatch)
+
+
+RESUME_ID = "00000000-0000-0000-0000-0000000000a1"
+BUILT = {
+    "id": RESUME_ID,
+    "status": "ok",
+    "fit": "ok",
+    "file_name": "Jordan_Rivera_Resume.pdf",
+    "used_model": False,
+    "created_at": "2026-11-08T12:00:00Z",
+    "findings": {"truth": 0, "recruiter": 0, "layout": 0, "ats": 0},
+}
+
+
+class TestResumes:
+    """Step 11b: aria resume, aria explain, and aria gaps with a resume id."""
+
+    def _pdf(self, name: str = "Jordan_Rivera_Resume.pdf") -> httpx.Response:
+        return httpx.Response(
+            200, content=b"%PDF-1.7 page", headers={"content-disposition": f'attachment; filename="{name}"'}
+        )
+
+    def test_build_sends_the_posting_and_saves_the_pdf_under_its_name(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        posting = tmp_path / "posting.txt"
+        posting.write_text("Backend engineer. Python, PostgreSQL.", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        recorder = Recorder({("POST", "/resumes"): BUILT, ("GET", f"/resumes/{RESUME_ID}/pdf"): self._pdf()})
+        assert run(recorder, ["resume", "build", str(posting)], monkeypatch) == 0
+        sent = json.loads(recorder.seen[0].content)
+        assert sent == {
+            "jd_text": "Backend engineer. Python, PostgreSQL.",
+            "use_model": False,
+            "local_model": True,
+        }
+        assert (tmp_path / "Jordan_Rivera_Resume.pdf").read_bytes() == b"%PDF-1.7 page"
+        assert f"aria explain {RESUME_ID}" in capsys.readouterr().out
+
+    def test_build_with_the_model_and_the_stand_in_matcher_says_so(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        posting = tmp_path / "posting.txt"
+        posting.write_text("Backend engineer.", encoding="utf-8")
+        recorder = Recorder(
+            {
+                ("POST", "/resumes"): BUILT | {"used_model": True},
+                ("GET", f"/resumes/{RESUME_ID}/pdf"): self._pdf(),
+            }
+        )
+        out = tmp_path / "out.pdf"
+        argv = ["resume", "build", str(posting), "--model", "--no-local-model", "--out", str(out)]
+        assert run(recorder, argv, monkeypatch) == 0
+        assert json.loads(recorder.seen[0].content) | {"jd_text": ""} == {
+            "jd_text": "",
+            "use_model": True,
+            "local_model": False,
+        }
+        assert out.exists()
+
+    def test_a_page_that_needs_review_exits_1(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        posting = tmp_path / "posting.txt"
+        posting.write_text("Backend engineer.", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        recorder = Recorder(
+            {
+                ("POST", "/resumes"): BUILT | {"status": "needs_review"},
+                ("GET", f"/resumes/{RESUME_ID}/pdf"): self._pdf(),
+            }
+        )
+        assert run(recorder, ["resume", "build", str(posting)], monkeypatch) == 1
+
+    def test_a_name_with_a_path_in_it_is_saved_in_place(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        posting = tmp_path / "posting.txt"
+        posting.write_text("Backend engineer.", encoding="utf-8")
+        work = tmp_path / "work"
+        work.mkdir()
+        monkeypatch.chdir(work)
+        recorder = Recorder(
+            {
+                ("POST", "/resumes"): BUILT,
+                ("GET", f"/resumes/{RESUME_ID}/pdf"): self._pdf("../../escaped.pdf"),
+            }
+        )
+        assert run(recorder, ["resume", "build", str(posting)], monkeypatch) == 0
+        assert (work / "escaped.pdf").exists() and not (tmp_path / "escaped.pdf").exists()
+
+    def test_explain_prints_each_bullet_with_its_facts(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        explained = {
+            "bullets": [
+                {
+                    "text": "Cut p95 API latency by 30% with Redis caching",
+                    "facts": [{"id": FACT_ID, "text": "Cut p95 API latency by 30% by adding Redis caching"}],
+                    "requirements": ["Redis"],
+                }
+            ]
+        }
+        recorder = Recorder({("GET", f"/resumes/{RESUME_ID}/explain"): explained})
+        assert run(recorder, ["explain", RESUME_ID], monkeypatch) == 0
+        out = capsys.readouterr().out
+        assert "for: Redis" in out and f"fact {FACT_ID}" in out
+
+    def test_gaps_with_a_resume_id_is_that_resume_s_and_without_it_the_graph_s(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        report = {
+            "coverage": 0.5,
+            "fit": "ok",
+            "missing": [
+                {"label": "Kubernetes", "must_have": True, "best_score": 0.1, "suggestion": "be ready"}
+            ],
+            "light": [],
+        }
+        recorder = Recorder(
+            {
+                ("GET", f"/resumes/{RESUME_ID}/gaps"): report,
+                ("GET", "/interview/gaps"): {"gaps": [], "total": 0},
+            }
+        )
+        assert run(recorder, ["gaps", RESUME_ID], monkeypatch) == 0
+        assert "missing (must-have): Kubernetes" in capsys.readouterr().out
+        assert run(recorder, ["gaps"], monkeypatch) == 0
+        assert recorder.seen[-1].url.path == "/interview/gaps"

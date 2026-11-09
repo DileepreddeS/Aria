@@ -22,6 +22,7 @@ from aria_resume.compose.fallback import fallback_document
 from aria_resume.compose.fit import fit_to_page
 from aria_resume.compose.line_budget import Page
 from aria_resume.compose.planner import plan
+from aria_resume.compose.summary import SUMMARY_LINES, SummaryResult, write_summary
 from aria_resume.compose.templates import RoleTemplate
 from aria_resume.compose.writer import WriterStats, write_page
 from aria_resume.document import ResumeDocument
@@ -34,6 +35,7 @@ from aria_resume.validate import Finding
 from aria_resume.validate.ats import check_ats
 from aria_resume.validate.layout import check_layout
 from aria_resume.validate.recruiter import check_recruiter
+from aria_resume.validate.six_second import SixSecondResult, six_second_check
 from aria_resume.validate.style import Style, load_style
 from aria_resume.validate.truth import check_truth
 
@@ -53,6 +55,10 @@ class PageResult:
     findings: dict[str, list[Finding]]
     #: None when no model wrote: every bullet is its fact's own words.
     writer: WriterStats | None = None
+    #: None when no model wrote; its ``text`` is None when no summary passed.
+    summary: SummaryResult | None = None
+    #: None when no model read the page (its 6-second test is a reader's judgement).
+    six_second: SixSecondResult | None = None
     notes: list[str] = field(default_factory=list)
 
 
@@ -71,19 +77,32 @@ def build_page(
     style = style or load_style()
 
     def build(page: Page) -> tuple[ResumePlan, bytes]:
-        planned = plan(normalized, evidence, snapshot, taxonomy, template=template, page=page)
+        # A model may add a summary, so its room is kept; without one there is none to keep.
+        planned = plan(
+            normalized,
+            evidence,
+            snapshot,
+            taxonomy,
+            template=template,
+            page=page,
+            summary_lines=SUMMARY_LINES if llm is not None else 0,
+        )
         document = fallback_document(planned, snapshot)
         return planned, add_links(asyncio.run(printer.print_pdf(render_html(document))), document)
 
     fitted = fit_to_page(build)
     stats: WriterStats | None = None
+    summary: SummaryResult | None = None
     if llm is None:
         document, pdf = fallback_document(fitted.plan, snapshot), fitted.pdf
     else:
         written, stats = asyncio.run(
             write_page(fitted.plan, snapshot, normalized, evidence, taxonomy, style, llm)
         )
-        document = fallback_document(fitted.plan, snapshot, written)
+        summary = asyncio.run(
+            write_summary(fitted.plan, snapshot, normalized, evidence, taxonomy, style, llm)
+        )
+        document = fallback_document(fitted.plan, snapshot, written, summary=summary.text)
         pdf = add_links(asyncio.run(printer.print_pdf(render_html(document))), document)
 
     keywords = [
@@ -94,9 +113,12 @@ def build_page(
     layout = check_layout(pdf, document)
     if not fitted.fits:
         layout.append(Finding("one_page", "the page did not fit on one page after fitting"))
+    six_second = (
+        asyncio.run(six_second_check(document, normalized, taxonomy, llm)) if llm is not None else None
+    )
     findings = {
         "truth": check_truth(document, snapshot, taxonomy),
-        "recruiter": check_recruiter(document, snapshot, style),
+        "recruiter": check_recruiter(document, snapshot, style) + (six_second.findings if six_second else []),
         "layout": layout,
         "ats": check_ats(pdf, document, taxonomy, today=today, keywords=keywords),
     }
@@ -108,5 +130,9 @@ def build_page(
         fit_rounds=fitted.rounds,
         findings=findings,
         writer=stats,
-        notes=list(stats.notes) if stats else [],
+        summary=summary,
+        six_second=six_second,
+        notes=(list(stats.notes) if stats else [])
+        + (list(summary.notes) if summary else [])
+        + (list(six_second.notes) if six_second else []),
     )

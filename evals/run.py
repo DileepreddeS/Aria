@@ -41,13 +41,23 @@ from evals.resume.suite import (
 def _table(report: Report) -> str:
     columns = (
         "posting", "status", "truth", "banned", "recruiter", "one page", "layout", "ATS", "labels",
-        "coverage", "fit", "rounds", "writer (first/rewritten/swapped/fallback)",
+        "coverage", "fit", "rounds", "writer (first/rewritten/swapped/fallback)", "summary (repairs)",
     )  # fmt: skip
     rows = ["| " + " | ".join(columns) + " |", "|" + "---|" * len(columns)]
     for posting in report.postings:
         gates, reported = posting.gates, posting.reported
         labels = gates.get("label_mismatches")
         writer = reported.get("writer")
+        summary = reported.get("summary")
+        summarised = (
+            "none (facts' own words)"
+            if summary is None
+            else (
+                f"yes ({summary['repairs']})"
+                if summary["written"]
+                else f"none ({summary['requests']} refused)"
+            )
+        )
         written = (
             "facts' own words"
             if writer is None
@@ -59,7 +69,7 @@ def _table(report: Report) -> str:
             f"{'yes' if gates['one_page'] else 'NO'} | {len(gates['layout_findings'])} | "
             f"{len(gates['ats_findings'])} | "
             f"{'n/a' if labels is None else len(labels)} | {reported['coverage']:.2f} | {reported['fit']} | "
-            f"{reported['fit_rounds']} | {written} |"
+            f"{reported['fit_rounds']} | {written} | {summarised} |"
         )
     return "\n".join(rows)
 

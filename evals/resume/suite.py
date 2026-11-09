@@ -271,6 +271,19 @@ def _run_posting(
         # How each bullet came to be, so it shows whether effort "low" holds.
         result.reported["writer"] = page.writer.as_dict()
         result.reported["writer_notes"] = page.notes
+    if page.six_second is not None:
+        result.reported["six_second"] = {
+            "ran": page.six_second.ran,
+            "asked": list(page.six_second.asked),
+            "shown": sorted(page.six_second.shown),
+        }
+    if page.summary is not None:
+        # Whether the page has a summary, and how many replies it took (DECISIONS 2026-11-08).
+        result.reported["summary"] = {
+            "written": page.summary.text is not None,
+            "requests": page.summary.requests,
+            "repairs": page.summary.repairs,
+        }
     for name in ("truth_violations", "banned_words", "recruiter_findings", "layout_findings", "ats_findings"):
         if gates[name]:
             result.failures.append(f"{name}: {gates[name]}")

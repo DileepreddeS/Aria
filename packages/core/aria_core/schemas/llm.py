@@ -29,6 +29,7 @@ class LlmPurpose(StrEnum):
 
     PARSE_JD = "parse_jd"
     WRITE_BULLET = "write_bullet"
+    WRITE_SUMMARY = "write_summary"
     SIX_SECOND_CHECK = "six_second_check"
     CLASSIFY_QUESTION = "classify_question"
     ANSWER_OPEN_ENDED = "answer_open_ended"

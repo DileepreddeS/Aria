@@ -20,6 +20,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 __all__ = [
+    "MAX_JD_CHARS",
     "AnswerRequest",
     "AnswerResponse",
     "ClassifiedLineBody",
@@ -29,6 +30,9 @@ __all__ = [
     "EditRequest",
     "EntityList",
     "EntityOut",
+    "ExplainedBullet",
+    "ExplainedFact",
+    "GapItem",
     "GapList",
     "GapOut",
     "ImportResponse",
@@ -38,6 +42,12 @@ __all__ = [
     "QuestionOut",
     "ReconsiderQuestionResponse",
     "RejectRequest",
+    "ResumeDetail",
+    "ResumeExplanation",
+    "ResumeGaps",
+    "ResumeList",
+    "ResumeOut",
+    "ResumeRequest",
     "RetagDeclared",
     "RetagEdge",
     "RetagFact",
@@ -349,3 +359,74 @@ class CompletenessResponse(Body):
     checks: list[dict[str, Any]]
     counts: dict[str, int]
     summary: list[str]
+
+
+#: The longest posting a resume is built from: the Stage 1 reader's own cap.
+MAX_JD_CHARS = 40_000
+
+
+class ResumeRequest(Body):
+    """Build a resume page for one posting (step 11b)."""
+
+    #: The posting as given: untrusted content, read as data.
+    jd_text: str = Field(min_length=1, max_length=MAX_JD_CHARS)
+    #: Read the posting and write the page with the model, through the gateway. It costs
+    #: money, so it is asked for; candidate data reaches it only for an opted-in tenant.
+    use_model: bool = False
+    #: Match with the local embedding model (``./tasks.ps1 models``). Without its weights the
+    #: request is refused rather than matched by the word-hash stand-in CI uses.
+    local_model: bool = True
+
+
+class ResumeOut(Body):
+    id: uuid.UUID
+    status: str
+    fit: str
+    file_name: str
+    used_model: bool
+    created_at: dt.datetime
+    #: Each check's number of findings: "truth", "recruiter", "layout", "ats".
+    findings: dict[str, int]
+
+
+class ResumeList(Body):
+    resumes: list[ResumeOut]
+
+
+class ResumeDetail(ResumeOut):
+    input_hash: str
+    versions: dict[str, Any]
+    #: Each check's findings and the notes: the page's validation report.
+    validation_report: dict[str, Any]
+
+
+class ExplainedFact(Body):
+    id: uuid.UUID
+    text: str
+
+
+class ExplainedBullet(Body):
+    text: str
+    facts: list[ExplainedFact]
+    #: The requirements the bullet's slot was planned to serve, in the posting's words.
+    requirements: list[str]
+
+
+class ResumeExplanation(Body):
+    """Why each bullet is on the page: the facts it says, and what it was chosen to prove."""
+
+    bullets: list[ExplainedBullet]
+
+
+class GapItem(Body):
+    label: str
+    must_have: bool
+    best_score: float
+    suggestion: str
+
+
+class ResumeGaps(Body):
+    coverage: float
+    fit: str
+    missing: list[GapItem]
+    light: list[GapItem]

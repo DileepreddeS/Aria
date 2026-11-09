@@ -28,14 +28,17 @@ __all__ = [
     "ScriptedLlm",
 ]
 
-#: The engine's three model calls and the inputs each may send. Must stay within the
+#: The engine's four model calls and the inputs each may send. Must stay within the
 #: gateway's PURPOSE_INPUT_KEYS.
 PURPOSE_INPUTS: dict[LlmPurpose, frozenset[str]] = {
     LlmPurpose.PARSE_JD: frozenset({"response_schema"}),
     LlmPurpose.WRITE_BULLET: frozenset(
-        {"fact_texts", "metrics", "allowed_tech", "target_requirement", "style_rules"}
+        {"fact_texts", "metrics", "allowed_tech", "target_requirement", "style_rules", "response_schema"}
     ),
-    LlmPurpose.SIX_SECOND_CHECK: frozenset({"top_requirements", "rendered_top_third"}),
+    LlmPurpose.WRITE_SUMMARY: frozenset(
+        {"identities", "years_claim", "proof_facts", "skills", "style_rules", "response_schema"}
+    ),
+    LlmPurpose.SIX_SECOND_CHECK: frozenset({"top_requirements", "rendered_top_third", "response_schema"}),
 }
 
 Reply = str | LlmReply | Callable[[LlmRequest], str]

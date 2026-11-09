@@ -65,10 +65,72 @@ class ProviderRejected(Exception):
     requests aren't charged." A timeout or disconnect is not this: it "is still charged".
     """
 
-    def __init__(self, kind: str, status_code: int) -> None:
+    def __init__(
+        self,
+        kind: str,
+        status_code: int,
+        *,
+        api_error_type: str | None = None,
+        api_message: str | None = None,
+    ) -> None:
         super().__init__(f"the provider answered {status_code} ({kind})")
         self.kind = kind
         self.status_code = status_code
+        #: For a 4xx only, the API's error type and message, for the gateway's log: they say
+        #: what about the request's shape it refused (DECISIONS 2026-11-08). Never returned to
+        #: the caller, and never kept for a 5xx, whose text says nothing about the request.
+        self.api_error_type = api_error_type
+        self.api_message = api_message
+
+    @classmethod
+    def from_status_error(cls, error: Any) -> ProviderRejected:
+        """From the SDK's APIStatusError: its class, its status and, for a 4xx, what it said."""
+        status_code: int = error.status_code
+        kind = type(error).__name__
+        if not 400 <= status_code < 500:
+            return cls(kind, status_code)
+        body: dict[str, Any] = error.body if isinstance(error.body, dict) else {}
+        nested = body.get("error")
+        detail: dict[str, Any] = nested if isinstance(nested, dict) else body
+        api_type, message = detail.get("type"), detail.get("message")
+        return cls(
+            kind,
+            status_code,
+            api_error_type=api_type[:60] if isinstance(api_type, str) else None,
+            api_message=_one_line(message) if isinstance(message, str) else None,
+        )
+
+
+#: Schema keywords the API refuses in a structured-output format, each added only on the API's
+#: own 400 message (DECISIONS 2026-11-08). Left out of the format alone: the caller's schema, and
+#: the copy the model reads in its inputs, keep them, and the caller enforces them on the reply.
+UNSUPPORTED_SCHEMA_KEYWORDS: Final = frozenset({"maxItems"})
+
+#: Keywords whose value maps names to subschemas: the names are data, never keywords.
+_NAMED_SUBSCHEMAS: Final = frozenset({"properties", "$defs", "definitions", "patternProperties"})
+
+
+def _for_structured_outputs(schema: Any) -> Any:
+    """A copy of ``schema`` without the keywords the API refuses, at any depth."""
+    if isinstance(schema, list):
+        return [_for_structured_outputs(item) for item in schema]
+    if not isinstance(schema, dict):
+        return schema
+    kept: dict[str, Any] = {}
+    for key, value in schema.items():
+        if key in UNSUPPORTED_SCHEMA_KEYWORDS:
+            continue
+        if key in _NAMED_SUBSCHEMAS and isinstance(value, dict):
+            kept[key] = {name: _for_structured_outputs(sub) for name, sub in value.items()}
+        else:
+            kept[key] = _for_structured_outputs(value)
+    return kept
+
+
+def _one_line(text: str, limit: int = 300) -> str:
+    """Whitespace runs as one space, other unprintable characters dropped, at most ``limit``."""
+    printable = "".join(character if character.isprintable() else " " for character in text)
+    return " ".join(printable.split())[:limit]
 
 
 class Provider(Protocol):
@@ -194,7 +256,10 @@ class AnthropicProvider:
         if response_schema is not None:
             # A convenience that saves retries. The caller still validates the reply against
             # its own schema and quotes; a reply that breaks it is that caller's failure path.
-            output_config["format"] = {"type": "json_schema", "schema": response_schema}
+            output_config["format"] = {
+                "type": "json_schema",
+                "schema": _for_structured_outputs(response_schema),
+            }
         return system, messages, output_config
 
     async def count_input_tokens(
@@ -212,7 +277,7 @@ class AnthropicProvider:
                 model=model, system=system, messages=messages, output_config=output_config
             )
         except anthropic.APIStatusError as error:
-            raise ProviderRejected(type(error).__name__, error.status_code) from error
+            raise ProviderRejected.from_status_error(error) from error
         return counted.input_tokens
 
     async def complete(
@@ -239,7 +304,7 @@ class AnthropicProvider:
         except anthropic.APIStatusError as error:
             # The API answered: not billed. Timeouts and connection errors are not caught
             # here, so the gateway counts them as possibly billed.
-            raise ProviderRejected(type(error).__name__, error.status_code) from error
+            raise ProviderRejected.from_status_error(error) from error
         reported = message.usage
         usage = Usage(
             input_tokens=reported.input_tokens,

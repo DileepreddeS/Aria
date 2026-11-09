@@ -6,6 +6,8 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "aria-core",
     "aria-document-parser",
+    # The Resume Engine: POST /resumes builds a page (step 11b). A workspace member, not a download.
+    "aria-resume",
     "fastapi>=0.115",
     # Required by FastAPI to parse multipart bodies, which is how a resume is
     # uploaded. Maintained under the encode org alongside Starlette, no build or

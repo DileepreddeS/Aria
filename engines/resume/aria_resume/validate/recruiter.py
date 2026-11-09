@@ -10,8 +10,8 @@ The rules come from style.yaml (§1 rules 4-5). Over the page, in reading order:
 - at least ``min_quantified_share`` of bullets carry a number, digits or words;
 - no vague phrase, unless a fact the bullet cites says it in those words.
 
-The 6-second test, which asks a model what the top third of the page shows, is a later
-step.
+The 6-second test, which asks a model what the top third of the page shows, is
+:mod:`aria_resume.validate.six_second`: its finding joins these as part of 6c.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from aria_resume.validate import Finding
 from aria_resume.validate.style import Style
 from aria_resume.validate.text import has_phrase, number_mentions, number_words, phrase_spans
 
-__all__ = ["check_bullet_style", "check_recruiter", "opening_verb"]
+__all__ = ["check_bullet_style", "check_recruiter", "check_summary_style", "opening_verb"]
 
 
 def _opening(text: str, phrases: tuple[str, ...]) -> str | None:
@@ -67,6 +67,22 @@ def check_bullet_style(text: str, cited: list[str], style: Style) -> list[Findin
     return findings
 
 
+def check_summary_style(text: str, cited: list[str], style: Style) -> list[Finding]:
+    """What a summary line can fail on: a banned word, ever, or a vague phrase no cited fact says.
+
+    A summary opens with who the candidate is, not a verb, so the opening rules are a
+    bullet's alone (DECISIONS 2026-11-08).
+    """
+    findings: list[Finding] = []
+    for word in style.banned:
+        if has_phrase(text, word):
+            findings.append(Finding("banned_word", f"{text!r} uses the banned word {word!r}"))
+    for phrase in style.vague_phrases:
+        if has_phrase(text, phrase) and not any(has_phrase(fact, phrase) for fact in cited):
+            findings.append(Finding("vague_phrase", f"{text!r} says {phrase!r}, which no cited fact says"))
+    return findings
+
+
 def check_recruiter(document: ResumeDocument, snapshot: CandidateSnapshot, style: Style) -> list[Finding]:
     findings: list[Finding] = []
     facts = {fact.fact_id: fact.text for fact in snapshot.facts}
@@ -77,10 +93,9 @@ def check_recruiter(document: ResumeDocument, snapshot: CandidateSnapshot, style
     bullets = [
         bullet for section in document.sections for entry in section.entries for bullet in entry.bullets
     ]
+    every_fact = list(facts.values())
     for text in lines:
-        for word in style.banned:
-            if has_phrase(text, word):
-                findings.append(Finding("banned_word", f"{text!r} uses the banned word {word!r}"))
+        findings.extend(check_summary_style(text, every_fact, style))
 
     counts: Counter[str] = Counter()
     previous: str | None = None

@@ -13,15 +13,25 @@ repos:
       - id: check-added-large-files
         args: ["--maxkb=512"]
 
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.6
-    hooks:
-      - id: ruff
-        args: ["--fix"]
-      - id: ruff-format
-
   - repo: local
     hooks:
+      # The lock's ruff, the one `make lint` and CI run: a hook pinned on its own drifted to
+      # 0.8.6 against the lock's 0.16.10 and failed what CI passes (DECISIONS 2026-11-08).
+      # --force-exclude applies extend-exclude to files named one by one, as `ruff check .` does.
+      - id: ruff
+        name: ruff (the lock's version)
+        entry: uv run ruff check --force-exclude --fix
+        language: system
+        types_or: [python, pyi, jupyter]
+        require_serial: true
+
+      - id: ruff-format
+        name: ruff format (the lock's version)
+        entry: uv run ruff format --force-exclude
+        language: system
+        types_or: [python, pyi, jupyter]
+        require_serial: true
+
       - id: no-control-characters
         name: no stray control characters
         entry: uv run python infra/checks/no_control_characters.py

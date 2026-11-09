@@ -20,7 +20,7 @@ from contextlib import asynccontextmanager
 import structlog
 from fastapi import FastAPI
 
-from aria_api.routers import drafts, entities, graph, interview, questions, report, uploads
+from aria_api.routers import drafts, entities, graph, interview, questions, report, resumes, uploads
 from aria_api.startup import run_preflight_checks
 from aria_api.uploads.quarantine import QuarantineStore
 from aria_api.uploads.scanner import MalwareScanner, assert_scanner_is_allowed, build_scanner
@@ -111,4 +111,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(interview.router)
     app.include_router(report.router)
     app.include_router(graph.router)
+    app.include_router(resumes.router)
     return app

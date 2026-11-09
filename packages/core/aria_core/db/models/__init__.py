@@ -24,6 +24,7 @@ from aria_core.db.models.graph import (
     Motivation,
     ProfileField,
     Project,
+    Resume,
     Upload,
     UserQuestion,
 )
@@ -67,6 +68,7 @@ __all__ = [
     "Motivation",
     "ProfileField",
     "Project",
+    "Resume",
     "SensitiveProfile",
     "Tenant",
     "TenantDataKey",

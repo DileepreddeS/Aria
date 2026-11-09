@@ -182,3 +182,35 @@ class AriaClient:
     # ------------------------------------------------------------------ report
     def completeness(self) -> dict[str, Any]:
         return dict(self._request("GET", "/report/completeness"))
+
+    # ----------------------------------------------------------------- resumes
+    def build_resume(
+        self, jd_text: str, *, use_model: bool = False, local_model: bool = True
+    ) -> dict[str, Any]:
+        body = {"jd_text": jd_text, "use_model": use_model, "local_model": local_model}
+        return dict(self._request("POST", "/resumes", json=body))
+
+    def resumes(self) -> dict[str, Any]:
+        return dict(self._request("GET", "/resumes"))
+
+    def resume(self, resume_id: uuid.UUID | str) -> dict[str, Any]:
+        return dict(self._request("GET", f"/resumes/{resume_id}"))
+
+    def explain(self, resume_id: uuid.UUID | str) -> dict[str, Any]:
+        return dict(self._request("GET", f"/resumes/{resume_id}/explain"))
+
+    def resume_gaps(self, resume_id: uuid.UUID | str) -> dict[str, Any]:
+        return dict(self._request("GET", f"/resumes/{resume_id}/gaps"))
+
+    def resume_pdf(self, resume_id: uuid.UUID | str) -> tuple[bytes, str]:
+        """The PDF's bytes and the name the API gives it (First_Last_Resume.pdf)."""
+        path = f"/resumes/{resume_id}/pdf"
+        try:
+            response = self._client.get(path)
+        except httpx.ConnectError as error:
+            raise ApiError(0, f"could not reach the API at {self._client.base_url}") from error
+        if not response.is_success:
+            self._request("GET", path)  # raises with the API's own detail
+        disposition = response.headers.get("content-disposition", "")
+        name = disposition.split("filename=", 1)[1].strip('"') if "filename=" in disposition else "Resume.pdf"
+        return response.content, name

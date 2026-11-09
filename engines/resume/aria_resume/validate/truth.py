@@ -62,7 +62,7 @@ from aria_resume.validate.text import (
     phrase_spans,
 )
 
-__all__ = ["check_bullet_text", "check_headers", "check_truth", "check_written"]
+__all__ = ["check_bullet_text", "check_headers", "check_summary", "check_truth", "check_written"]
 
 #: Claims of scope, by kind. A word of a kind needs some word of the same kind in the
 #: cited facts: "led" is backed by "leading", not by "built".
@@ -347,6 +347,12 @@ def check_headers(document: ResumeDocument, snapshot: CandidateSnapshot) -> list
         for entry in section.entries
         for finding in _entry(section.kind, entry, snapshot)
     ]
+
+
+def check_summary(line: str, snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy) -> list[Finding]:
+    """One summary line on its own: its years against the counted figure, every other claim
+    against the approved facts. What the summary writer judges each reply by."""
+    return _summary(line, snapshot, taxonomy)
 
 
 def check_truth(

@@ -428,7 +428,9 @@ class Bullet(BaseModel):
     requirement_ids: list[str]
 ```
 Summary: 2 lines built from the top evidence (identity + years + strongest proof, then 3–4 must-have skills
-that have evidence, never by implication). Skills section: candidate's verified skills only (declared, or
+that have evidence, never by implication). Code chooses each part from approved data (a role title on the page, the counted years phrase, the
+top slots' facts, evidenced must-haves an approved fact names) and the model only phrases them; a reply
+that fails any check is repaired at most twice, then the page has no summary (DECISIONS 2026-11-08). Skills section: candidate's verified skills only (declared, or
 named by an approved fact, plus the allowlisted one-step implications of those, §9 6b), reordered so JD
 must-haves come first,
 using the JD's surface forms (e.g. "PostgreSQL" rather than "Postgres" if the JD says so).

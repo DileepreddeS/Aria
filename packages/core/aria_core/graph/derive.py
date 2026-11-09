@@ -15,12 +15,10 @@ has not read yet is not evidence of anything.
 source, unpaid research, volunteer). Every experience lands in exactly one, so a
 summary can print all four without counting a month twice.
 
-**"Years of experience" means full-time.** By default, nothing else. An internship is
-real work that a hiring manager reads differently, a two-year assistantship at ten
-hours a week is not two years of experience, and a new grad who answers "2.6 years" on
-the strength of either has overstated. Part-time and internship months join the figure
-only when the question asks for them, or — for internships — when the candidate has
-turned the setting on. See :class:`ClaimPolicy`.
+**Buckets describe; they do not decide a claim.** A summary of the graph reports each
+bucket separately. How many years a resume or a form may *claim* is not decided here:
+it is :mod:`aria_core.graph.counted_years`, from the candidate's own per-role answer,
+never from the importer's kind (DECISIONS 2026-10-25, 2026-10-27).
 
 **Combining buckets unions, never adds.** A part-time campus job can run during a
 research post, so adding the totals would invent months the calendar does not contain.
@@ -43,7 +41,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from aria_core.db.models import Candidate, Experience, Project
+from aria_core.db.models import Experience, Project
 from aria_core.graph.facts import approved_skill_usage
 from aria_core.graph.months import MonthSpan, months_to_years, total_months, union_spans
 from aria_core.graph.status import ApprovalStatus, ExperienceBucket, ExperienceKind
@@ -52,109 +50,10 @@ from aria_core.taxonomy.model import SkillTaxonomy
 
 __all__ = [
     "CareerTotals",
-    "ClaimPolicy",
     "SkillExperience",
     "compute_career_totals",
     "compute_skill_experience",
-    "load_claim_policy",
 ]
-
-
-@dataclass(frozen=True, slots=True)
-class ClaimPolicy:
-    """Which buckets may be part of a "years of experience" claim.
-
-    Full-time always. Everything else only when somebody says so out loud:
-
-    * the question includes internships ("including internships, how many years...?")
-      or asks about work experience generally or part-time work — which the Answer
-      Engine determines when it classifies the question;
-    * the candidate has set ``count_internships_as_experience``.
-
-    There is deliberately no candidate setting for part-time. A setting is for a
-    standing preference about how to describe oneself, and "count my campus job as
-    experience" is a judgement that depends on what is being asked; leaving it
-    question-driven keeps the answer tied to the question rather than to a checkbox
-    set months earlier.
-
-    A type rather than two booleans, so a call site cannot opt in without a reason,
-    and the reason travels into the audit trail.
-    """
-
-    include_internships: bool = False
-    include_part_time: bool = False
-    reason: str = "default: full-time only"
-
-    @property
-    def buckets(self) -> frozenset[ExperienceBucket]:
-        """The buckets this policy permits. Project time is never among them."""
-        allowed = {ExperienceBucket.FULL_TIME}
-        if self.include_internships:
-            allowed.add(ExperienceBucket.INTERNSHIP)
-        if self.include_part_time:
-            allowed.add(ExperienceBucket.PART_TIME)
-        return frozenset(allowed)
-
-    @classmethod
-    def default(cls) -> ClaimPolicy:
-        return cls()
-
-    @classmethod
-    def general_work_experience(cls) -> ClaimPolicy:
-        """For "how much work experience do you have?" — every kind of paid work.
-
-        Full-time, part-time and internships, unioned. Not project work: a class
-        project is not a job however broadly the question is phrased.
-        """
-        return cls(True, True, "the question asks about work experience generally")
-
-    @classmethod
-    def resolve(
-        cls,
-        *,
-        question_includes_internships: bool = False,
-        question_includes_part_time: bool = False,
-        question_is_general_work_experience: bool = False,
-        candidate_setting: bool = False,
-    ) -> ClaimPolicy:
-        """Combine what the question asked with the candidate's setting."""
-        if question_is_general_work_experience:
-            return cls.general_work_experience()
-
-        include_internships = question_includes_internships or candidate_setting
-        reasons = []
-        if question_includes_internships:
-            reasons.append("the question includes internships")
-        if question_includes_part_time:
-            reasons.append("the question includes part-time work")
-        if candidate_setting and not question_includes_internships:
-            reasons.append("the candidate counts internships as experience")
-        elif candidate_setting:
-            reasons.append("the candidate opted in")
-
-        if not reasons:
-            return cls.default()
-        return cls(include_internships, question_includes_part_time, ", and ".join(reasons))
-
-
-async def load_claim_policy(
-    session: AsyncSession,
-    candidate_id: uuid.UUID,
-    *,
-    question_includes_internships: bool = False,
-    question_includes_part_time: bool = False,
-    question_is_general_work_experience: bool = False,
-) -> ClaimPolicy:
-    """The policy for one candidate, reading their setting from the graph."""
-    setting = await session.scalar(
-        select(Candidate.count_internships_as_experience).where(Candidate.id == candidate_id)
-    )
-    return ClaimPolicy.resolve(
-        question_includes_internships=question_includes_internships,
-        question_includes_part_time=question_includes_part_time,
-        question_is_general_work_experience=question_is_general_work_experience,
-        candidate_setting=bool(setting),
-    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,20 +105,6 @@ class SkillExperience:
             ExperienceBucket.INTERNSHIP: self.internship_spans,
             ExperienceBucket.PROJECT: self.project_spans,
         }[bucket]
-
-    # --------------------------------------------------------------------- claims
-    def claimable_months(self, policy: ClaimPolicy | None = None) -> int:
-        """Months this skill may be claimed for, under ``policy``.
-
-        Unions the permitted buckets, so overlapping roles cannot inflate the answer.
-        Project months are never part of a years-of-experience claim.
-        """
-        resolved = policy or ClaimPolicy.default()
-        spans = [span for bucket in resolved.buckets for span in self._spans_in(bucket)]
-        return total_months(spans, now=self.as_of)
-
-    def claimable_years(self, policy: ClaimPolicy | None = None) -> float:
-        return months_to_years(self.claimable_months(policy))
 
     @property
     def last_used(self) -> dt.date | None:
@@ -298,15 +183,6 @@ class CareerTotals:
     def months_in(self, bucket: ExperienceBucket) -> int:
         return total_months(list(self._spans_in(bucket)), now=self.as_of)
 
-    def claimable_months(self, policy: ClaimPolicy | None = None) -> int:
-        """Total months of experience claimable under ``policy``. Unions, never adds."""
-        resolved = policy or ClaimPolicy.default()
-        spans = [span for bucket in resolved.buckets for span in self._spans_in(bucket)]
-        return total_months(spans, now=self.as_of)
-
-    def claimable_years(self, policy: ClaimPolicy | None = None) -> float:
-        return months_to_years(self.claimable_months(policy))
-
     @property
     def first_working_month(self) -> dt.date | None:
         """When paid work started: full-time, part-time or internship, whichever first."""
@@ -319,9 +195,9 @@ class CareerTotals:
     def summary_lines(self) -> list[str]:
         """What a "graph complete" report prints. Four buckets, never a total.
 
-        There is deliberately no combined number here: which buckets count is a
-        question-by-question decision (see :class:`ClaimPolicy`), so a summary printing
-        one total would be asserting an answer nobody asked for.
+        There is deliberately no combined number here: the years a candidate may claim
+        come from their per-role answers (:mod:`aria_core.graph.counted_years`), not from
+        these buckets, so a total here would be a second figure nobody asked for.
         """
         return [
             f"full-time:  {self.full_time_months} months ({months_to_years(self.full_time_months):.1f}y)",

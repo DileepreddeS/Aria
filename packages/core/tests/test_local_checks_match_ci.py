@@ -65,6 +65,22 @@ class TestGitleaks:
         assert "entry: gitleaks" not in PRE_COMMIT
 
 
+class TestRuff:
+    """The hook ran ruff 0.8.6 from its own pin while CI ran the lock's 0.16.10, and each
+    failed code the other passed (DECISIONS 2026-11-08)."""
+
+    def test_the_hooks_run_the_lock_s_ruff(self) -> None:
+        assert "astral-sh/ruff-pre-commit" not in PRE_COMMIT
+        assert "entry: uv run ruff check --force-exclude --fix" in PRE_COMMIT
+        assert "entry: uv run ruff format --force-exclude" in PRE_COMMIT
+
+    def test_ci_and_the_local_task_run_the_lock_s_ruff_on_the_whole_tree(self) -> None:
+        for lint in (_make_target("lint"), _task("lint")):
+            assert "uv run ruff check ." in lint
+            assert "uv run ruff format --check ." in lint
+        assert "make lint" in CI
+
+
 class TestSemgrep:
     def test_the_local_version_is_the_one_ci_installs(self) -> None:
         ci_version = re.search(r"semgrep==(\S+)", CI)

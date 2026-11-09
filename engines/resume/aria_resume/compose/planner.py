@@ -212,7 +212,9 @@ def plan(
     template: RoleTemplate | None = None,
     implied: ImpliedSkills | None = None,
     page: Page = PAGE,
+    summary_lines: int = 0,
 ) -> ResumePlan:
+    """``summary_lines`` keeps room for a summary the writer may add: its heading and lines."""
     if not snapshot.contact.full_name:
         raise PlanError("the snapshot has no approved name: a page cannot be planned without one")
     template = template or load_template(evidence.role_type)
@@ -324,7 +326,8 @@ def plan(
     def slot_worth(slot: BulletSlot) -> float:
         return slot.value + (_MANDATORY if slot.mandatory else 0.0)
 
-    while _height(entries, skills, page, template.section_order, contact) > page.usable_height:
+    reserve = page.section_gap + page.heading + summary_lines * page.line if summary_lines else 0.0
+    while _height(entries, skills, page, template.section_order, contact) + reserve > page.usable_height:
         options: list[tuple[float, int, _Entry, BulletSlot | None]] = []
         for kind in (SectionKind.EXPERIENCE, SectionKind.PROJECTS):
             for entry in entries[kind]:
@@ -377,7 +380,7 @@ def plan(
         template_version=template.version,
         sections=tuple(sections),
         surface_forms=surface,
-        estimated_height=round(_height(entries, skills, page, template.section_order, contact), 2),
+        estimated_height=round(_height(entries, skills, page, template.section_order, contact) + reserve, 2),
         usable_height=page.usable_height,
         dropped=tuple(dropped),
     )

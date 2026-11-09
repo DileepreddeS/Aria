@@ -30,7 +30,18 @@ import datetime as dt
 import uuid
 from enum import StrEnum
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, Text, UniqueConstraint, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    LargeBinary,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -92,11 +103,10 @@ class Candidate(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    #: Whether "years of experience" may include internship months for this
-    #: candidate. Default false: by default the figure is full-time only, and a new
-    #: grad who answers "2.6 years" on the strength of internships has overstated.
-    #: Some candidates legitimately want them counted, so it is their setting to
-    #: make — not ours, and not a guess (see aria_core.graph.derive.ClaimPolicy).
+    #: No longer read (DECISIONS 2026-10-27). A role counts toward "years of experience"
+    #: only when the candidate answers yes for it (Experience.counts_toward_years), an
+    #: internship included, so a candidate-wide setting has nothing left to decide. The
+    #: column stays until a later migration drops it: a committed migration is never edited.
     count_internships_as_experience: Mapped[bool] = mapped_column(nullable=False, default=False)
     created_at: Mapped[dt.datetime] = created_at_column()
 
@@ -728,12 +738,63 @@ class UserQuestion(Base):
     )
 
 
+class Resume(Base):
+    """A built resume page: its PDF and the artifacts that explain and reproduce it (step 11b).
+
+    S1 throughout, so the PDF lives here under row-level security rather than in a file
+    whose path could be guessed (DECISIONS 2026-11-08). ``id`` is its generated name;
+    ``file_name`` (``First_Last_Resume.pdf``) is what it downloads as, from the approved name
+    alone. ``jd_text`` is the posting as given: untrusted data, never instruction text. A row
+    is never updated; a new build is a new row (migration 0011 grants no UPDATE).
+    """
+
+    __tablename__ = "resumes"
+
+    id: Mapped[uuid.UUID] = uuid_primary_key()
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    candidate_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("candidates.id", ondelete="CASCADE"), nullable=False
+    )
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    fit: Mapped[str] = mapped_column(String(20), nullable=False)
+    #: Untrusted: the posting as given.
+    jd_text: Mapped[str] = mapped_column(Text, nullable=False)
+    jd_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    input_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    used_model: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    versions: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    #: S1: the plan, the bullets with their fact ids, the evidence map, the validation report.
+    artifacts: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    #: S1: the printed page.
+    pdf: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    pdf_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    file_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    created_at: Mapped[dt.datetime] = created_at_column()
+
+    __table_args__ = (
+        CheckConstraint("status IN ('ok', 'needs_review', 'no_fit')", name="status_is_known"),
+        CheckConstraint("fit IN ('strong', 'ok', 'weak', 'no_fit')", name="fit_is_known"),
+        CheckConstraint("length(btrim(jd_text)) > 0", name="jd_text_is_not_blank"),
+        CheckConstraint("octet_length(pdf) > 0", name="pdf_is_not_empty"),
+        CheckConstraint("file_name ~ '^[A-Za-z0-9-]+(_[A-Za-z0-9-]+)*\\.pdf$'", name="file_name_is_plain"),
+        Index("ix_resumes_tenant_id", "tenant_id"),
+        Index("ix_resumes_candidate_newest", "candidate_id", "created_at"),
+        {"comment": "Built resume pages: S1. jd_text is untrusted data."},
+    )
+
+
 #: Graph tables, all tenant-scoped. Joined with the platform list in
 #: :mod:`aria_core.db.models`, which is what the row-level security sweep checks.
 GRAPH_TENANT_TABLES: frozenset[str] = frozenset(
     {
         "candidates",
         "uploads",
+        "resumes",
         "profile_fields",
         "experiences",
         "projects",

@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 import uuid
 from pathlib import Path
 
 import pytest
 from aria_resume.compose.build import build_page
 from aria_resume.compose.templates import load_template
+from aria_resume.document import SectionKind
 from aria_resume.jd.reader import read_jd
+from aria_resume.llm import LlmPurpose, LlmRequest, ScriptedLlm
 from aria_resume.match.embeddings import WordHashEmbedder
 from aria_resume.match.matcher import match
 from aria_resume.normalize.requirements import normalize
@@ -47,7 +50,12 @@ def _named(snapshot: CandidateSnapshot) -> CandidateSnapshot:
 
 
 def _build(
-    snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy, style: Style, *, portfolio_url: str | None = None
+    snapshot: CandidateSnapshot,
+    taxonomy: SkillTaxonomy,
+    style: Style,
+    *,
+    portfolio_url: str | None = None,
+    llm: ScriptedLlm | None = None,
 ) -> object:
     named = _named(snapshot)
     if portfolio_url is not None:
@@ -66,6 +74,7 @@ def _build(
         printer=ChromiumPrinter(),
         today=TODAY,
         style=style,
+        llm=llm,
     )
 
 
@@ -90,6 +99,42 @@ class TestTheEngineGate:
         assert page.status == "needs_review"  # type: ignore[attr-defined]
         checks = {finding.check for finding in page.findings["layout"]}  # type: ignore[attr-defined]
         assert {"contact_width", "scaled"} <= checks
+
+    def test_a_written_summary_is_first_and_the_page_still_fits(
+        self, snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy
+    ) -> None:
+        """The plan kept room for it, so a two-line summary costs no bullet's place twice."""
+
+        def fact_words(request: LlmRequest) -> str:
+            fact = json.loads(request.inputs["fact_texts"])[0]
+            metrics = [m for m in json.loads(request.inputs["metrics"]) if m in fact["text"]]
+            return json.dumps(
+                {"text": fact["text"], "fact_ids": [fact["id"]], "metrics_used": metrics, "tech_used": []}
+            )
+
+        def summary(request: LlmRequest) -> str:
+            identity = json.loads(request.inputs["identities"])[0]
+            proof = min(json.loads(request.inputs["proof_facts"]), key=lambda fact: len(fact["text"]))
+            text = f"{identity}; {proof['text']}"
+            return json.dumps(
+                {"text": text, "identity": identity, "fact_ids": [proof["id"]], "skills_used": []}
+            )
+
+        llm = ScriptedLlm({LlmPurpose.WRITE_BULLET: [fact_words] * 40, LlmPurpose.WRITE_SUMMARY: [summary]})
+        page = _build(snapshot, taxonomy, load_style(), llm=llm)
+        assert page.document.sections[0].kind is SectionKind.SUMMARY  # type: ignore[attr-defined]
+        assert page.summary.text is not None  # type: ignore[attr-defined]
+        assert page.findings["layout"] == []  # type: ignore[attr-defined]
+        assert page.status == "ready", page.findings  # type: ignore[attr-defined]
+
+    def test_a_top_third_that_shows_too_little_makes_it_needs_review(
+        self, snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy
+    ) -> None:
+        nothing = json.dumps({"requirements": []})
+        llm = ScriptedLlm({LlmPurpose.SIX_SECOND_CHECK: [nothing]})  # no writer replies: the facts' words
+        page = _build(snapshot, taxonomy, load_style(), llm=llm)
+        assert page.status == "needs_review"  # type: ignore[attr-defined]
+        assert "six_second" in {finding.check for finding in page.findings["recruiter"]}  # type: ignore[attr-defined]
 
     def test_a_single_recruiter_finding_makes_it_needs_review(
         self, snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy

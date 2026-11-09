@@ -55,13 +55,22 @@ def fact_bullet(slot: BulletSlot, snapshot: CandidateSnapshot) -> DocumentBullet
 
 
 def fallback_document(
-    plan: ResumePlan, snapshot: CandidateSnapshot, written: Mapping[SlotKey, DocumentBullet] | None = None
+    plan: ResumePlan,
+    snapshot: CandidateSnapshot,
+    written: Mapping[SlotKey, DocumentBullet] | None = None,
+    *,
+    summary: str | None = None,
 ) -> ResumeDocument:
-    """The plan as a document: each slot's written bullet where there is one, its fact's words where not."""
+    """The plan as a document: each slot's written bullet where there is one, its fact's words where not.
+
+    ``summary`` is the writer's judged summary line, placed first; without one there is none.
+    """
     if not snapshot.contact.full_name:
         raise PlanError("the snapshot has no approved name")
     written = written or {}
     sections: list[DocumentSection] = []
+    if summary is not None:
+        sections.append(DocumentSection(kind=SectionKind.SUMMARY, lines=(summary,)))
     for s, planned in enumerate(plan.sections):
         entries = []
         for e, entry in enumerate(planned.entries):

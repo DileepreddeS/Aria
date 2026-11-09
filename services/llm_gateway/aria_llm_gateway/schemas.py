@@ -41,9 +41,12 @@ __all__ = [
 PURPOSE_INPUT_KEYS: Final[dict[LlmPurpose, frozenset[str]]] = {
     LlmPurpose.PARSE_JD: frozenset({"response_schema"}),
     LlmPurpose.WRITE_BULLET: frozenset(
-        {"fact_texts", "metrics", "allowed_tech", "target_requirement", "style_rules"}
+        {"fact_texts", "metrics", "allowed_tech", "target_requirement", "style_rules", "response_schema"}
     ),
-    LlmPurpose.SIX_SECOND_CHECK: frozenset({"top_requirements", "rendered_top_third"}),
+    LlmPurpose.WRITE_SUMMARY: frozenset(
+        {"identities", "years_claim", "proof_facts", "skills", "style_rules", "response_schema"}
+    ),
+    LlmPurpose.SIX_SECOND_CHECK: frozenset({"top_requirements", "rendered_top_third", "response_schema"}),
     LlmPurpose.CLASSIFY_QUESTION: frozenset({"response_schema"}),
     LlmPurpose.ANSWER_OPEN_ENDED: frozenset(
         {"fact_texts", "motivations", "company_facts", "previous_answers", "length_limit"}
@@ -56,7 +59,12 @@ PURPOSE_INPUT_KEYS: Final[dict[LlmPurpose, frozenset[str]]] = {
 #: Purposes that carry a candidate's own data (facts, answers, the rendered page): refused for a
 #: tenant that has not opted in (aria_core.tenant_settings, DECISIONS 2026-10-23).
 CANDIDATE_DATA_PURPOSES: Final[frozenset[LlmPurpose]] = frozenset(
-    {LlmPurpose.WRITE_BULLET, LlmPurpose.ANSWER_OPEN_ENDED, LlmPurpose.SIX_SECOND_CHECK}
+    {
+        LlmPurpose.WRITE_BULLET,
+        LlmPurpose.WRITE_SUMMARY,
+        LlmPurpose.ANSWER_OPEN_ENDED,
+        LlmPurpose.SIX_SECOND_CHECK,
+    }
 )
 
 

@@ -50,7 +50,7 @@ from aria_resume.validate.truth import check_written
 
 __all__ = ["INSTRUCTIONS", "MAX_REPAIRS", "RESPONSE_SCHEMA", "WRITER_VERSION", "WriterStats", "write_page"]
 
-WRITER_VERSION = "2026.10.1"
+WRITER_VERSION = "2026.11.1"
 MAX_REPAIRS = 2
 
 #: Fixed text. Facts arrive as task inputs, never formatted into this.
@@ -145,6 +145,8 @@ def _request(
             "allowed_tech": json.dumps(allowed),
             "target_requirement": json.dumps(requirements),
             "style_rules": json.dumps(style_rules, sort_keys=True),
+            # The schema the instructions name; the gateway also sends it as the output format.
+            "response_schema": json.dumps(RESPONSE_SCHEMA, sort_keys=True),
         },
         max_output_tokens=1024,
     )
