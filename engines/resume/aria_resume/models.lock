@@ -6,7 +6,7 @@
 # https://huggingface.co/<repo>/resolve/<commit>/<path>: a commit, never a branch. A file whose
 # SHA-256 differs is deleted. At runtime the files are opened by path and checked against these
 # hashes again; nothing downloads, and HF_HUB_OFFLINE=1 is set as a second lock.
-version: "2026.10.1"
+version: "2026.11.1"
 
 models:
   embedding:
@@ -28,3 +28,22 @@ models:
       tokenizer.json:
         sha256: 91f1def9b9391fdabe028cd3f3fcc4efd34e5d1f08c3bf2de513ebb5911a1854
         size: 711649
+  nli:
+    # cross-encoder/nli-deberta-v3-base: Apache-2.0, fine-tuned on SNLI and MultiNLI only
+    # (docs/vetting/2026-10-18-ml-group.md; approved 2026-11-09). Commit of 2025-04-11. The 6b
+    # check that the cited facts entail each written bullet (RESUME_ENGINE section 9). Its labels
+    # are read from the pinned config.json, never assumed.
+    repo: cross-encoder/nli-deberta-v3-base
+    commit: 6c749ce3425cd33b46d187e45b92bbf96ee12ec7
+    licence: Apache-2.0
+    max_tokens: 512
+    files:
+      onnx/model.onnx:
+        sha256: 369ebf04fce8206c83b8fd62e9dc860144f10351a7f885ed3076beb17b7c6dda
+        size: 738574335
+      tokenizer.json:
+        sha256: 5124ef2ead1a10a717703bc436de7f353da76d6340e4587719b42b1693707964
+        size: 8656624
+      config.json:
+        sha256: 897e756eb59d3183adb505952e7910e7cbc7750a43f3b3747a96b688d2b02a47
+        size: 1052

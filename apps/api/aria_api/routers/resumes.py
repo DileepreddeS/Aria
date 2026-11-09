@@ -8,7 +8,9 @@ database; this route never writes a word of the page.
 The posting is untrusted content. It reaches the engine as data and the database as data, and
 never instruction text (SECURITY section 5). The model is used only when asked for, since it
 costs money, and the gateway sends candidate data to it only for a tenant that opted in; a
-refusal there leaves the page in the facts' own words.
+refusal there leaves the page in the facts' own words. What the model writes is checked by the
+local NLI model as well as by code, so ``use_model`` needs ``local_model``: a written page is
+never checked by less (DECISIONS 2026-11-09).
 
 The PDF downloads as ``First_Last_Resume.pdf``, from the approved name alone.
 """
@@ -23,6 +25,7 @@ from typing import Any
 from aria_resume.api import ResumeOptions, build_resume, file_name
 from aria_resume.match.embeddings import Embedder, WordHashEmbedder
 from aria_resume.render.pdf import ChromiumPrinter
+from aria_resume.validate.nli import Entailer
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import Response
 from sqlalchemy import select
@@ -66,6 +69,18 @@ def _embedder(local_model: bool) -> Embedder:
         ) from error
 
 
+def _entailer() -> Entailer:
+    try:
+        from aria_resume.validate.nli import OnnxEntailer
+
+        return OnnxEntailer()
+    except Exception as error:  # the ml group or the weights are missing
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="the local NLI model that checks written bullets is not installed (./tasks.ps1 models)",
+        ) from error
+
+
 def _counts(artifacts: dict[str, Any]) -> dict[str, int]:
     findings = artifacts.get("validation_report", {}).get("findings", {})
     return {check: len(found) for check, found in findings.items()}
@@ -97,6 +112,11 @@ async def _row(session: SessionDep, caller: CallerDep, resume_id: uuid.UUID) -> 
 async def create(
     body: ResumeRequest, caller: CallerDep, session: SessionDep, settings: SettingsDep, taxonomy: TaxonomyDep
 ) -> ResumeOut:
+    if body.use_model and not body.local_model:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="use_model needs local_model: the local NLI model checks every bullet the model writes",
+        )
     today = utc_now().date()
     snapshot = await build_candidate_snapshot(session, caller.candidate_id, taxonomy=taxonomy, now=today)
     if not snapshot.contact.full_name:
@@ -106,6 +126,7 @@ async def create(
         )
     embedder = _embedder(body.local_model)
     llm = None
+    entailer = None
     if body.use_model:
         if settings.llm_gateway_service_token is None:
             raise HTTPException(
@@ -118,6 +139,7 @@ async def create(
             tenant_id=caller.tenant_id,
             run_id=uuid.uuid4(),
         )
+        entailer = _entailer()
     # The engine prints through Chromium with asyncio.run, so it runs in a thread of its own.
     result = await asyncio.to_thread(
         build_resume,
@@ -128,6 +150,7 @@ async def create(
         taxonomy=taxonomy,
         embedder=embedder,
         printer=ChromiumPrinter(),
+        entailer=entailer,
     )
     artifacts = result.artifacts()
     # Plus each cited fact's text as the snapshot held it, so the page can be explained in

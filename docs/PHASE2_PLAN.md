@@ -20,7 +20,7 @@ sampled resumes "would send".
 | 7 | Eval harness, three synthetic postings, deterministic metrics in CI | done |
 | 8 | Real provider in the gateway, and the Stage 1 LLM step | done |
 | 9 | Stage 5b writer and the repair loop | 9a, 9b, 9c-1 (counted years), 9c-1b (form years from the counted figure) and 9c-2 (summary writer) done, and the matcher's years check on the counted figure |
-| 10 | NLI truth check and the 6-second check | 10a (the 6-second check) done; 10b (NLI) waits on the model's approval |
+| 10 | NLI truth check and the 6-second check | 10a (the 6-second check, on strongly evidenced requirements, with the top third planned for it) and 10b (NLI, cross-encoder/nli-deberta-v3-base) done |
 | 11 | Public API, migration 0011, API routes, CLI, artifacts | 11a (the engine's public API) and 11b (migration 0011, the resume routes, the CLI) done |
 | 12 | The 30-posting eval: tune, sample 10 for rating, report against "done when" | |
 

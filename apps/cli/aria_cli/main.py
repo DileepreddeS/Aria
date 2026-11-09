@@ -607,7 +607,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--model", action="store_true", help="build: read and write with the model (costs money)"
     )
     resume.add_argument(
-        "--no-local-model", action="store_true", help="build: match with the word-hash stand-in, as CI does"
+        "--no-local-model",
+        action="store_true",
+        help=(
+            "build: match with the word-hash stand-in, as CI does "
+            "(not with --model, whose bullets the local NLI model checks)"
+        ),
     )
     resume.add_argument("--out", default=None, help="build, pdf: where to save the PDF")
     resume.set_defaults(handler=_cmd_resume)

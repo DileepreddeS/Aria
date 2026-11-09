@@ -23,6 +23,7 @@ from aria_resume.match.embeddings import WordHashEmbedder
 from aria_resume.match.matcher import match
 from aria_resume.normalize.requirements import normalize
 from aria_resume.schemas import EvidenceMap, NormalizedJD, ResumePlan
+from aria_resume.validate.nli import Entailment
 from aria_resume.validate.style import load_style
 
 from aria_core.schemas.snapshot import CandidateSnapshot, SnapshotContact, SnapshotEducation
@@ -89,11 +90,34 @@ def _slots(inputs: Inputs) -> int:
     return sum(len(entry.bullets) for section in inputs[3].sections for entry in section.entries)
 
 
-async def _write(inputs: Inputs, taxonomy: SkillTaxonomy, *replies: Any) -> tuple[Any, Any, ScriptedLlm]:
+async def _write(
+    inputs: Inputs, taxonomy: SkillTaxonomy, *replies: Any, entailer: Any = None
+) -> tuple[Any, Any, ScriptedLlm]:
     snapshot, normalized, evidence, planned = inputs
     llm = ScriptedLlm({LlmPurpose.WRITE_BULLET: list(replies)})
-    written, stats = await write_page(planned, snapshot, normalized, evidence, taxonomy, load_style(), llm)
+    written, stats = await write_page(
+        planned, snapshot, normalized, evidence, taxonomy, load_style(), llm, entailer
+    )
     return written, stats, llm
+
+
+class _Reader:
+    """A stand-in NLI model: a bullet with any of ``beyond`` in it is not entailed."""
+
+    model_id = "stand-in-nli"
+
+    def __init__(self, *beyond: str) -> None:
+        self.beyond = beyond
+        self.asked: list[tuple[str, str]] = []
+
+    def judge(self, pairs: Any) -> list[Entailment]:
+        self.asked.extend(pairs)
+        return [
+            Entailment(0.01, 0.98, 0.01)
+            if any(word in bullet for word in self.beyond)
+            else Entailment(0.98, 0.01, 0.01)
+            for _, bullet in pairs
+        ]
 
 
 class TestAnHonestWriter:
@@ -264,3 +288,48 @@ class TestNoModel:
         assert len(llm.requests) == 1
         assert stats.fallback == _slots(inputs) == len(written)
         assert any("writer unavailable" in note for note in stats.notes)
+
+
+class TestTheEntailmentCheck:
+    """6b's NLI check on each written bullet (DECISIONS 2026-11-09)."""
+
+    async def test_a_claim_beyond_the_facts_is_rewritten_with_the_finding(
+        self, inputs: Inputs, taxonomy: SkillTaxonomy
+    ) -> None:
+        def wider(request: LlmRequest) -> str:
+            # Code passes it (no number, no technology, an allowed verb); only a reader sees it.
+            honest = json.loads(_honest(request))
+            return json.dumps(honest | {"text": honest["text"] + " for the billing team"})
+
+        count = _slots(inputs)
+        reader = _Reader("for the billing team")
+        written, stats, llm = await _write(inputs, taxonomy, wider, *[_honest] * count, entailer=reader)
+        assert stats.not_entailed == 1
+        assert stats.rewritten == 1 and stats.first_try == count - 1
+        assert all("billing team" not in bullet.text for bullet in written.values())
+        feedback = json.loads(llm.requests[1].inputs["style_rules"])["fix_these"]
+        assert any("goes beyond its facts" in item for item in feedback)
+
+    async def test_the_model_reads_only_what_code_has_passed(
+        self, inputs: Inputs, taxonomy: SkillTaxonomy
+    ) -> None:
+        count = _slots(inputs)
+        reader = _Reader()
+        invented = _with(text="Cut p95 API latency by 95% with Redis caching", metrics_used=["95%"])
+        await _write(inputs, taxonomy, invented, *[_honest] * count, entailer=reader)
+        assert len(reader.asked) == count  # the invented number was never put to it
+        assert all("95%" not in bullet for _, bullet in reader.asked)
+
+    async def test_the_facts_own_words_are_never_put_to_it(
+        self, inputs: Inputs, taxonomy: SkillTaxonomy
+    ) -> None:
+        reader = _Reader()
+        _, stats, _ = await _write(inputs, taxonomy, entailer=reader)  # writer unavailable
+        assert stats.fallback == _slots(inputs) and reader.asked == []
+
+    async def test_the_notes_say_whether_it_ran(self, inputs: Inputs, taxonomy: SkillTaxonomy) -> None:
+        count = _slots(inputs)
+        _, with_model, _ = await _write(inputs, taxonomy, *[_honest] * count, entailer=_Reader())
+        _, without, _ = await _write(inputs, taxonomy, *[_honest] * count)
+        assert any(note.startswith("nli: stand-in-nli") for note in with_model.notes)
+        assert any(note.startswith("nli: not run") for note in without.notes)

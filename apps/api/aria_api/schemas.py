@@ -373,8 +373,9 @@ class ResumeRequest(Body):
     #: Read the posting and write the page with the model, through the gateway. It costs
     #: money, so it is asked for; candidate data reaches it only for an opted-in tenant.
     use_model: bool = False
-    #: Match with the local embedding model (``./tasks.ps1 models``). Without its weights the
-    #: request is refused rather than matched by the word-hash stand-in CI uses.
+    #: Match with the local embedding model (``./tasks.ps1 models``), and, with ``use_model``,
+    #: check every written bullet with the local NLI model. Without their weights the request
+    #: is refused rather than matched by the word-hash stand-in CI uses, or left unchecked.
     local_model: bool = True
 
 

@@ -43,6 +43,7 @@ from aria_resume.render.html import TEMPLATE_VERSION
 from aria_resume.render.pdf import PdfPrinter
 from aria_resume.schemas import EvidenceMap, FitDecision, Gap, NormalizedJD
 from aria_resume.validate.implied import load_implied_skills
+from aria_resume.validate.nli import ENTAILMENT_MIN, Entailer
 from aria_resume.validate.six_second import SIX_SECOND_VERSION
 from aria_resume.validate.style import Style, load_style
 
@@ -118,7 +119,12 @@ def file_name(snapshot: CandidateSnapshot) -> str:
 
 
 def _versions(
-    taxonomy: SkillTaxonomy, style: Style, normalized: NormalizedJD, evidence: EvidenceMap, model: bool
+    taxonomy: SkillTaxonomy,
+    style: Style,
+    normalized: NormalizedJD,
+    evidence: EvidenceMap,
+    model: bool,
+    entailer: Entailer | None,
 ) -> dict[str, str]:
     return {
         "taxonomy": taxonomy.version,
@@ -131,6 +137,10 @@ def _versions(
         "writer": WRITER_VERSION if model else "none (facts' own words)",
         "summary": SUMMARY_VERSION if model else "none",
         "six_second": SIX_SECOND_VERSION if model else "not run",
+        # Only written bullets are checked: the facts' own words entail themselves.
+        "nli": f"{entailer.model_id} (entailment at least {ENTAILMENT_MIN})"
+        if model and entailer is not None
+        else "not run",
     }
 
 
@@ -158,8 +168,11 @@ def build_resume(
     taxonomy: SkillTaxonomy,
     embedder: Embedder,
     printer: PdfPrinter,
+    entailer: Entailer | None = None,
 ) -> ResumeResult:
     """One posting to one checked page. ``llm`` None prints the facts' own words, as CI does.
+
+    ``entailer``, the local NLI model, checks every bullet the model writes against its facts.
 
     Synchronous, as :func:`build_page` is (it prints through Chromium with ``asyncio.run``):
     an async caller runs it in a thread (``asyncio.to_thread``).
@@ -182,13 +195,14 @@ def build_resume(
         today=options.today,
         llm=llm,
         style=style,
+        entailer=entailer,
     )
     status: Literal["ok", "needs_review", "no_fit"]
     if evidence.fit_decision is FitDecision.NO_FIT:
         status = "no_fit"
     else:
         status = "ok" if page.status == "ready" else "needs_review"
-    versions = _versions(taxonomy, style, normalized, evidence, llm is not None)
+    versions = _versions(taxonomy, style, normalized, evidence, llm is not None, entailer)
     return ResumeResult(
         status=status,
         page=page,

@@ -9,7 +9,10 @@ what it used, and code decides:
 - 6b's written-bullet check: the facts it cites are the ones it was given, every number and
   technology is backed by them, every metric it declares is printed exactly;
 - 6c's per-bullet rules: an allowed opening verb, no banned word, no vague phrase;
-- the slot's line budget, measured with the page's own glyph widths.
+- the slot's line budget, measured with the page's own glyph widths;
+- then, when the local NLI model is given, 6b's entailment check: the cited facts must entail
+  what the bullet says (:mod:`aria_resume.validate.nli`). Without it the bullet is checked by
+  code alone, and a note says so.
 
 A failing bullet gets the findings back and one rewrite; then, once, another fact that proves
 the same requirement from the same role; then the facts' own words, which pass 6b by
@@ -44,6 +47,7 @@ from aria_resume.schemas import (
     ResumePlan,
 )
 from aria_resume.validate import Finding
+from aria_resume.validate.nli import ENTAILMENT_MIN, Entailer, check_entailed
 from aria_resume.validate.recruiter import check_bullet_style, opening_verb
 from aria_resume.validate.style import Style
 from aria_resume.validate.truth import check_written
@@ -90,6 +94,8 @@ class WriterStats:
     swapped: int = 0
     fallback: int = 0
     requests: int = 0
+    #: Replies the NLI check turned back: the facts did not entail them.
+    not_entailed: int = 0
     notes: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, int]:
@@ -99,6 +105,7 @@ class WriterStats:
             "swapped": self.swapped,
             "fallback": self.fallback,
             "requests": self.requests,
+            "not_entailed": self.not_entailed,
         }
 
 
@@ -160,6 +167,7 @@ def _judge(
     taxonomy: SkillTaxonomy,
     style: Style,
     avoid: set[str],
+    entailer: Entailer | None = None,
 ) -> tuple[DocumentBullet | None, list[Finding]]:
     try:
         written = WrittenBullet.model_validate_json(reply_text)
@@ -188,6 +196,9 @@ def _judge(
         findings.append(
             Finding("repeated_verb", f"{bullet.text!r} opens with {verb!r}, which the page has used up")
         )
+    if not findings and entailer is not None:
+        # Last, and only for a bullet code passes: the model is the slowest check.
+        findings = check_entailed(bullet.text, cited, entailer, taxonomy)
     if findings:
         return None, findings
     return DocumentBullet(text=bullet.text, fact_ids=bullet.fact_ids), []
@@ -223,9 +234,15 @@ async def write_page(
     taxonomy: SkillTaxonomy,
     style: Style,
     llm: LlmClient,
+    entailer: Entailer | None = None,
 ) -> tuple[dict[SlotKey, DocumentBullet], WriterStats]:
     """Every slot written, rewritten, swapped or left in its fact's words; in reading order."""
     stats = WriterStats(notes=[f"writer: instructions {WRITER_VERSION}"])
+    stats.notes.append(
+        f"nli: {entailer.model_id}, entailment at least {ENTAILMENT_MIN}"
+        if entailer is not None
+        else "nli: not run, no local model; written bullets were checked by code alone"
+    )
     written: dict[SlotKey, DocumentBullet] = {}
     on_page = {
         fact_id
@@ -271,7 +288,11 @@ async def write_page(
                         available = False
                         stats.notes.append(f"writer unavailable, facts' own words from here on ({error})")
                         break
-                    result, findings = _judge(reply.text, slot, provided, snapshot, taxonomy, style, avoid)
+                    result, findings = _judge(
+                        reply.text, slot, provided, snapshot, taxonomy, style, avoid, entailer
+                    )
+                    if any(finding.check == "not_entailed" for finding in findings):
+                        stats.not_entailed += 1
                     feedback = [finding.detail for finding in findings]
                     attempt += 1
                 if result is None:

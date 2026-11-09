@@ -195,6 +195,15 @@ class TestRefusals:
         response = await client.get(f"/resumes/{uuid.uuid4()}/pdf")
         assert response.status_code == 404
 
+    async def test_a_written_page_is_never_checked_by_less_than_the_nli_model(
+        self, client: httpx.AsyncClient
+    ) -> None:
+        response = await client.post(
+            "/resumes", json={"jd_text": JD, "use_model": True, "local_model": False}
+        )
+        assert response.status_code == 422
+        assert "NLI" in response.json()["detail"]
+
     async def test_an_unknown_field_is_refused(self, client: httpx.AsyncClient) -> None:
         response = await client.post("/resumes", json={"jd_text": JD, "company_name_in_file": True})
         assert response.status_code == 422

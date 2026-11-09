@@ -41,6 +41,7 @@ from aria_resume.render.html import TEMPLATE_VERSION
 from aria_resume.render.pdf import ChromiumPrinter
 from aria_resume.schemas import EvidenceMap, NormalizedJD, ParsedJD, RequirementKind, RoleType
 from aria_resume.validate.implied import load_implied_skills
+from aria_resume.validate.nli import Entailer
 from aria_resume.validate.style import load_style
 
 from aria_core.schemas.snapshot import CandidateSnapshot
@@ -219,6 +220,7 @@ def _run_posting(
     embedder: Embedder,
     labels: dict[str, Any] | None,
     llm: LlmFactory | None = None,
+    entailer: Entailer | None = None,
 ) -> PostingResult:
     text = path.read_text(encoding="utf-8")
     # One client per posting: its parse and its bullets are one run, capped as one.
@@ -239,6 +241,7 @@ def _run_posting(
         printer=ChromiumPrinter(),
         today=TODAY,
         llm=client,
+        entailer=entailer,
     )
     found = page.findings
     banned = [finding for finding in found["recruiter"] if finding.check == "banned_word"]
@@ -271,6 +274,15 @@ def _run_posting(
         # How each bullet came to be, so it shows whether effort "low" holds.
         result.reported["writer"] = page.writer.as_dict()
         result.reported["writer_notes"] = page.notes
+        # What the model wrote beside the facts it cites, for a person to read and for the NLI
+        # check's threshold to be set against (DECISIONS 2026-11-09). The candidate is synthetic,
+        # and reports are untracked.
+        result.reported["written"] = [
+            {"text": bullet.text, "facts": [candidate.fact(fact_id).text for fact_id in bullet.fact_ids]}
+            for section in document.sections
+            for entry in section.entries
+            for bullet in entry.bullets
+        ]
     if page.six_second is not None:
         result.reported["six_second"] = {
             "ran": page.six_second.ran,
@@ -303,7 +315,13 @@ def _run_posting(
     return result
 
 
-def run_suite(name: str, *, embedder: Embedder | None = None, llm: LlmFactory | None = None) -> Report:
+def run_suite(
+    name: str,
+    *,
+    embedder: Embedder | None = None,
+    llm: LlmFactory | None = None,
+    entailer: Entailer | None = None,
+) -> Report:
     directory = SUITES[name]
     taxonomy = load_default_taxonomy()
     embedder = embedder or WordHashEmbedder()
@@ -314,7 +332,7 @@ def run_suite(name: str, *, embedder: Embedder | None = None, llm: LlmFactory | 
         gated_labels = (
             yaml.safe_load(label_path.read_text(encoding="utf-8")) if name == "resume-synthetic" else None
         )
-        postings.append(_run_posting(path, candidate, taxonomy, embedder, gated_labels, llm))
+        postings.append(_run_posting(path, candidate, taxonomy, embedder, gated_labels, llm, entailer))
     configuration = {
         "embedder": embedder.model_id,
         "taxonomy": taxonomy.version,
@@ -332,4 +350,7 @@ def run_suite(name: str, *, embedder: Embedder | None = None, llm: LlmFactory | 
         "render_template": TEMPLATE_VERSION,
         "stage1": "rules" if llm is None else f"rules+model (instructions {INSTRUCTIONS_VERSION})",
     }
+    if entailer is not None:
+        # Only a --models run has it, and no such run is compared with the baseline.
+        configuration["nli"] = entailer.model_id
     return Report(name, configuration, postings)

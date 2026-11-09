@@ -3,6 +3,9 @@
 Suites: ``resume-synthetic`` (gated in CI), ``resume`` (real postings, reported), and
 ``security`` (the red-team postings; scripted hostile replies, as CI runs them).
 
+``--models`` uses the local models: the embedding model to match, and the NLI model to check
+each bullet the model writes (so it matters only with ``--llm``).
+
 ``--llm`` reads each posting with Stage 1's model step through a running gateway
 (``./tasks.ps1 gateway``), as the tenant ``--tenant`` names, one run per posting. It costs
 money and is never run in CI. What it finds is reported, never gated: label mismatches
@@ -120,7 +123,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run an eval suite.")
     parser.add_argument("suite", choices=sorted([*SUITES, "security"]))
     parser.add_argument(
-        "--models", action="store_true", help="use the local embedding model (./tasks.ps1 models)"
+        "--models",
+        action="store_true",
+        help="use the local embedding and NLI models (./tasks.ps1 models); NLI checks written bullets",
     )
     parser.add_argument(
         "--update-baseline",
@@ -153,11 +158,14 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     embedder = None
+    entailer = None
     if args.models:
         from aria_resume.match.onnx_embedder import OnnxEmbedder
+        from aria_resume.validate.nli import OnnxEntailer
 
         embedder = OnnxEmbedder()
-    report = run_suite(args.suite, embedder=embedder, llm=llm)
+        entailer = OnnxEntailer()
+    report = run_suite(args.suite, embedder=embedder, llm=llm, entailer=entailer)
     data: dict[str, Any] = report.as_dict()
 
     REPORTS.mkdir(parents=True, exist_ok=True)

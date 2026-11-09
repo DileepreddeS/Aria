@@ -6,7 +6,8 @@ Such a page comes back as ``needs_review`` with its findings, for a person to se
 
 With no model client the page is the facts' own words, which is what CI prints; with one,
 :func:`aria_resume.compose.writer.write_page` writes each slot within the line budget the
-fitted plan gave it, and the page is printed and checked again as written.
+fitted plan gave it, and the page is printed and checked again as written. The NLI model, when
+given, checks each written bullet against its facts; the facts' own words need no such check.
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ from aria_resume.schemas import EvidenceMap, NormalizedJD, RequirementKind, Resu
 from aria_resume.validate import Finding
 from aria_resume.validate.ats import check_ats
 from aria_resume.validate.layout import check_layout
+from aria_resume.validate.nli import Entailer
 from aria_resume.validate.recruiter import check_recruiter
 from aria_resume.validate.six_second import SixSecondResult, six_second_check
 from aria_resume.validate.style import Style, load_style
@@ -73,6 +75,7 @@ def build_page(
     today: dt.date,
     llm: LlmClient | None = None,
     style: Style | None = None,
+    entailer: Entailer | None = None,
 ) -> PageResult:
     style = style or load_style()
 
@@ -97,7 +100,7 @@ def build_page(
         document, pdf = fallback_document(fitted.plan, snapshot), fitted.pdf
     else:
         written, stats = asyncio.run(
-            write_page(fitted.plan, snapshot, normalized, evidence, taxonomy, style, llm)
+            write_page(fitted.plan, snapshot, normalized, evidence, taxonomy, style, llm, entailer)
         )
         summary = asyncio.run(
             write_summary(fitted.plan, snapshot, normalized, evidence, taxonomy, style, llm)
