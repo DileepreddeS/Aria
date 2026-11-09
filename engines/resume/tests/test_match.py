@@ -179,7 +179,7 @@ class TestLarkspur:
 
     def test_years_and_degree_are_checked_against_the_profile(self, evidence: EvidenceMap) -> None:
         assert "years:experience" in evidence.strong
-        assert evidence.profile_checks["years:experience"] == "3.0 full-time years against 1 asked"
+        assert evidence.profile_checks["years:experience"] == "3 counted years against 1 asked"
         assert "education:bachelor" in {gap.requirement_id for gap in evidence.missing}
         assert (
             evidence.profile_checks["education:bachelor"] == "no degree on the profile against bachelor asked"
@@ -223,13 +223,38 @@ class TestFit:
     def test_years_the_profile_does_not_have_are_missing(
         self, snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy
     ) -> None:
-        # 36 full-time months against five years asked.
+        # 36 counted months against five years asked.
         years = _req("experience", RequirementKind.YEARS, min_years=5)
         evidence = match(
             NormalizedJD(requirements=(years,), taxonomy_version="t"), snapshot, taxonomy, WordHashEmbedder()
         )
         assert [gap.requirement_id for gap in evidence.missing] == ["years:experience"]
-        assert evidence.profile_checks["years:experience"] == "3.0 full-time years against 5 asked"
+        assert evidence.profile_checks["years:experience"] == "3 counted years against 5 asked"
+
+    def test_years_are_the_counted_figure_not_the_importer_s_kind(
+        self, snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy
+    ) -> None:
+        # The figure the summary and a form answer state (DECISIONS 2026-11-08): a role the
+        # candidate says does not count is not counted, whatever kind the importer gave it.
+        years = _req("experience", RequirementKind.YEARS, min_years=1)
+        jd = NormalizedJD(requirements=(years,), taxonomy_version="t")
+        roles = tuple(role.model_copy(update={"counts_toward_years": False}) for role in snapshot.experiences)
+        evidence = match(jd, snapshot.model_copy(update={"experiences": roles}), taxonomy, WordHashEmbedder())
+        assert evidence.profile_checks["years:experience"] == "0 counted years against 1 asked"
+        assert "years:experience" not in evidence.strong
+
+    def test_an_unanswered_role_is_not_met_rather_than_guessed(
+        self, snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy
+    ) -> None:
+        years = _req("experience", RequirementKind.YEARS, min_years=1)
+        jd = NormalizedJD(requirements=(years,), taxonomy_version="t")
+        first, *rest = snapshot.experiences
+        roles = (first.model_copy(update={"counts_toward_years": None}), *rest)
+        evidence = match(jd, snapshot.model_copy(update={"experiences": roles}), taxonomy, WordHashEmbedder())
+        assert (
+            evidence.profile_checks["years:experience"] == "1 role(s) not yet marked as counting toward years"
+        )
+        assert "years:experience" not in evidence.strong
 
     def test_the_thresholds_are_configuration(
         self, snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy

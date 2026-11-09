@@ -3,8 +3,9 @@
 For every requirement that names a skill, a domain, a soft skill or a duty, every fact
 is scored on the five parts in :mod:`.scoring` and the best three are kept with their
 breakdowns, so "why is this bullet here?" has an answer. Years and degree requirements
-are met by the profile, not by a fact: full-time years under the default claim policy,
-and the highest degree held, each explained in words.
+are met by the profile, not by a fact: the counted years, the figure the summary and a
+form answer state (the roles the candidate says count, unioned, rounded down; DECISIONS
+2026-10-25, 2026-11-08), and the highest degree held, each explained in words.
 
 Then the posting as a whole:
 
@@ -25,7 +26,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from aria_core.graph.months import months_to_years
+from aria_core.graph.counted_years import counted_years
 from aria_core.schemas.snapshot import CandidateSnapshot, SnapshotFact
 from aria_core.taxonomy.model import SkillCategory, SkillTaxonomy
 from aria_resume.evidence import skills_named
@@ -158,9 +159,12 @@ def _label(requirement: Requirement) -> str:
 
 def _profile_check(requirement: Requirement, snapshot: CandidateSnapshot) -> tuple[bool, str]:
     if requirement.kind is RequirementKind.YEARS:
-        held = months_to_years(snapshot.full_time_months)
+        counted = counted_years(snapshot)
         wanted = requirement.min_years or 0
-        return held >= wanted, f"{held} full-time years against {wanted} asked"
+        if counted.unresolved:
+            # Not met rather than guessed: the same roles block a summary's years claim.
+            return False, f"{len(counted.unresolved)} role(s) not yet marked as counting toward years"
+        return counted.allows(wanted), f"{counted.whole_years} counted years against {wanted} asked"
     held_levels = [
         DEGREE_ORDER.index(level)
         for degree in snapshot.education
