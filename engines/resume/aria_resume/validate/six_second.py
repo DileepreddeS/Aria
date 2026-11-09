@@ -38,6 +38,7 @@ __all__ = [
     "RESPONSE_SCHEMA",
     "SIX_SECOND_VERSION",
     "SixSecondResult",
+    "ranked_requirements",
     "six_second_check",
     "top_requirements",
     "top_third",
@@ -86,11 +87,12 @@ class SixSecondResult:
     notes: list[str] = field(default_factory=list)
 
 
-def top_requirements(
+def ranked_requirements(
     normalized: NormalizedJD, evidence: EvidenceMap, taxonomy: SkillTaxonomy
-) -> tuple[str, ...]:
-    """The three most important nameable requirements the candidate can prove: must-haves
-    first, then by weight."""
+) -> tuple[tuple[str, frozenset[str]], ...]:
+    """The three most important nameable requirements the candidate can prove, each with the
+    requirement ids its name stands for: must-haves first, then by weight. The planner leads
+    the page with them, and this test asks for them."""
     proven = set(evidence.strong)
     ranked = sorted(
         (
@@ -100,14 +102,19 @@ def top_requirements(
         ),
         key=lambda requirement: (not requirement.must_have, -requirement.weight),
     )
-    names: list[str] = []
+    ids: dict[str, set[str]] = {}
     for requirement in ranked:
         name = taxonomy.display_form(requirement.canonical)
-        if name not in names:
-            names.append(name)
-        if len(names) == _TOP:
-            break
-    return tuple(names)
+        if name in ids or len(ids) < _TOP:
+            ids.setdefault(name, set()).add(requirement.id)
+    return tuple((name, frozenset(found)) for name, found in ids.items())
+
+
+def top_requirements(
+    normalized: NormalizedJD, evidence: EvidenceMap, taxonomy: SkillTaxonomy
+) -> tuple[str, ...]:
+    """The names of :func:`ranked_requirements`, most important first."""
+    return tuple(name for name, _ in ranked_requirements(normalized, evidence, taxonomy))
 
 
 def top_third(document: ResumeDocument) -> str:

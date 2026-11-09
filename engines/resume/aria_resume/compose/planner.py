@@ -14,7 +14,11 @@ Deterministic, no model. In order:
    bullet goes first; a role never keeps fewer than two, and one that cannot hold two
    keeps its header alone, employer, title and months, so the page shows no gap in
    employment (DECISIONS 2026-10-18). Projects go whole; degrees never.
-6. **Skills lines.** Every verified skill (declared, or named by an approved fact) and the
+6. **The top third.** In page order, each entry leads with the bullets that show the job's top
+   requirements not yet shown (the three the 6-second test asks for, from those with strong
+   evidence), most important first; the rest keep their order by value. The same bullets,
+   so the same height (RESUME_ENGINE §1 principle 3, DECISIONS 2026-11-09).
+7. **Skills lines.** Every verified skill (declared, or named by an approved fact) and the
    allowlisted implications of those (implied_skills.yaml), by the template's categories,
    the posting's own skills first, in the posting's spelling when it names the same skill
    (never a sibling's).
@@ -48,6 +52,7 @@ from aria_resume.schemas import (
     ResumePlan,
 )
 from aria_resume.validate.implied import ImpliedSkills, load_implied_skills
+from aria_resume.validate.six_second import ranked_requirements
 
 __all__ = ["PlanError", "plan"]
 
@@ -203,6 +208,30 @@ def _height(
     return height
 
 
+def _lead_with_the_top(
+    entries: dict[SectionKind, list[_Entry]],
+    order: tuple[SectionKind, ...],
+    top: tuple[tuple[str, frozenset[str]], ...],
+) -> None:
+    shown: set[int] = set()
+    for kind in order:
+        for entry in entries.get(kind, []):
+            if entry.dropped_whole:
+                continue
+            rest, led = list(entry.chosen), []
+            while rest:
+                needed = [ids for rank, (_, ids) in enumerate(top) if rank not in shown]
+                pick = next(
+                    (slot for ids in needed for slot in rest if ids & set(slot.requirement_ids)), None
+                )
+                if pick is None:
+                    break
+                led.append(pick)
+                rest.remove(pick)
+                shown |= {rank for rank, (_, ids) in enumerate(top) if ids & set(pick.requirement_ids)}
+            entry.chosen = led + rest
+
+
 def plan(
     normalized: NormalizedJD,
     evidence: EvidenceMap,
@@ -352,6 +381,8 @@ def plan(
                 entry.dropped_whole = True
             else:
                 entry.header_only = True
+
+    _lead_with_the_top(entries, template.section_order, ranked_requirements(normalized, evidence, taxonomy))
 
     sections: list[PlannedSection] = []
     for kind in template.section_order:

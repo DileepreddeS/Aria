@@ -33,6 +33,7 @@ from aria_resume.match.embeddings import WordHashEmbedder
 from aria_resume.match.matcher import match
 from aria_resume.normalize.requirements import normalize
 from aria_resume.schemas import EvidenceMap, NormalizedJD, ResumePlan
+from aria_resume.validate.six_second import ranked_requirements
 from aria_resume.validate.style import load_style
 
 from aria_core.graph.counted_years import counted_years
@@ -111,7 +112,7 @@ class TestWhatTheSummaryMaySay:
         chosen = summary_inputs(planned, snapshot, normalized, evidence, taxonomy)
         assert chosen is not None and chosen.years_claim == counted_years(snapshot).claim()
 
-    def test_proof_is_facts_on_the_page_and_skills_are_evidenced_must_haves(
+    def test_proof_is_facts_on_the_page_and_skills_are_evidenced(
         self, inputs: Inputs, taxonomy: SkillTaxonomy
     ) -> None:
         snapshot, normalized, evidence, planned = inputs
@@ -126,13 +127,50 @@ class TestWhatTheSummaryMaySay:
         }
         assert 1 <= len(chosen.proof) <= 3
         assert {fact_id for fact_id, _, _ in chosen.proof} <= on_page
-        must_have = {
+        top = {i for _, ids in ranked_requirements(normalized, evidence, taxonomy) for i in ids}
+        allowed = {
             form
             for requirement in normalized.requirements
-            if requirement.must_have and requirement.id in evidence.strong
+            if (requirement.must_have or requirement.id in top) and requirement.id in evidence.strong
             for form in requirement.surface_forms
         }
-        assert len(chosen.skills) <= 4 and set(chosen.skills) <= must_have
+        assert len(chosen.skills) <= 4 and set(chosen.skills) <= allowed
+
+    def test_an_evidenced_nice_to_have_the_test_asks_for_is_offered(
+        self, inputs: Inputs, taxonomy: SkillTaxonomy
+    ) -> None:
+        snapshot, normalized, evidence, planned = inputs
+        nice = normalized.model_copy(
+            update={
+                "requirements": tuple(
+                    r.model_copy(update={"must_have": False}) for r in normalized.requirements
+                )
+            }
+        )
+        chosen = summary_inputs(planned, snapshot, nice, evidence, taxonomy)
+        assert chosen is not None and chosen.skills
+        top = {i for _, ids in ranked_requirements(nice, evidence, taxonomy) for i in ids}
+        by_form = {form: r for r in nice.requirements for form in r.surface_forms}
+        assert all(by_form[skill].id in top for skill in chosen.skills)
+
+    def test_the_six_second_test_s_top_requirements_lead_the_skills(
+        self, inputs: Inputs, taxonomy: SkillTaxonomy
+    ) -> None:
+        """Where the first role proves none of them, the summary is the top third's only chance
+        to show them (DECISIONS 2026-11-09). The posting lists them last, so the order is the
+        ranking's, not the posting's."""
+        snapshot, normalized, evidence, planned = inputs
+        backwards = normalized.model_copy(update={"requirements": tuple(reversed(normalized.requirements))})
+        chosen = summary_inputs(planned, snapshot, backwards, evidence, taxonomy)
+        assert chosen is not None
+        by_form = {form: r for r in backwards.requirements for form in r.surface_forms}
+        ranked = ranked_requirements(backwards, evidence, taxonomy)
+        ranks = [
+            next((rank for rank, (_, ids) in enumerate(ranked) if by_form[skill].id in ids), len(ranked))
+            for skill in chosen.skills
+        ]
+        assert len([rank for rank in ranks if rank < len(ranked)]) >= 2
+        assert ranks == sorted(ranks)
 
 
 class TestWhatIsSent:

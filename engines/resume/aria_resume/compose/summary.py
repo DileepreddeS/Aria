@@ -8,8 +8,10 @@ and the model only phrases them (DECISIONS 2026-11-08):
 * **years** is the counted figure's own phrase (``counted_years(...).claim()``, "2+ years"),
   or nothing when it may print none;
 * **proof** is the facts of the page's highest-value bullet slots, with their metrics;
-* **skills** are must-haves with strong evidence that an approved fact names, in the
-  posting's spelling.
+* **skills** are the 6-second test's top requirements, then the other must-haves, each with
+  strong evidence and named by an approved fact, in the posting's spelling: where fewer than
+  three must-haves have evidence, the next most important evidenced skill is the summary's
+  to show, since the first role may prove none of them (DECISIONS 2026-11-09).
 
 Each reply is judged as a bullet is: the schema, then the truth check (its years against the
 counted figure, every other claim against the facts), the recruiter's banned words and vague
@@ -37,6 +39,7 @@ from aria_resume.llm import LlmClient, LlmPurpose, LlmRequest, LlmUnavailable
 from aria_resume.schemas import BulletSlot, EvidenceMap, NormalizedJD, RequirementKind, ResumePlan
 from aria_resume.validate import Finding
 from aria_resume.validate.recruiter import check_summary_style
+from aria_resume.validate.six_second import ranked_requirements
 from aria_resume.validate.style import Style
 from aria_resume.validate.truth import check_summary
 
@@ -138,16 +141,21 @@ def summary_inputs(
     if not identities or not proof:
         return None
     named = skills_named(snapshot.facts, taxonomy)
-    skills: list[str] = []
+    # The summary is the top of the top third: what the 6-second test asks for leads it.
+    top = [ids for _, ids in ranked_requirements(normalized, evidence, taxonomy)]
+    ranked: list[tuple[int, str]] = []
     for requirement in normalized.requirements:
+        spelt = requirement.surface_forms[0]
+        rank = next((rank for rank, ids in enumerate(top) if requirement.id in ids), len(top))
         if (
-            requirement.must_have
+            (requirement.must_have or rank < len(top))
             and requirement.kind is RequirementKind.SKILL
             and requirement.id in evidence.strong
             and requirement.canonical in named
-            and requirement.surface_forms[0] not in skills
+            and all(spelt != skill for _, skill in ranked)
         ):
-            skills.append(requirement.surface_forms[0])
+            ranked.append((rank, spelt))
+    skills = [skill for _, skill in sorted(ranked, key=lambda item: item[0])]
     return SummaryInputs(
         identities=tuple(identities[:3]),
         years_claim=counted_years(snapshot).claim(),

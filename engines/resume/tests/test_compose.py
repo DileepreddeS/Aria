@@ -7,6 +7,7 @@ import io
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 import yaml
@@ -28,7 +29,7 @@ from aria_resume.jd.reader import read_jd
 from aria_resume.match.embeddings import WordHashEmbedder
 from aria_resume.match.matcher import match
 from aria_resume.normalize.requirements import normalize
-from aria_resume.schemas import EvidenceMap, NormalizedJD, PlannedEntry, ResumePlan, RoleType
+from aria_resume.schemas import BulletSlot, EvidenceMap, NormalizedJD, PlannedEntry, ResumePlan, RoleType
 from aria_resume.validate.truth import check_truth
 
 from aria_core.schemas.snapshot import CandidateSnapshot, SnapshotContact, SnapshotEducation
@@ -497,3 +498,69 @@ def test_an_estimate_that_overshoots_is_caught_by_the_print(
     assert fitted.fits and fitted.rounds > 1
     assert overflow(fitted.pdf) == 0.0
     assert len(fitted.plan.dropped) > len(first.dropped)
+
+
+class TestTheTopThird:
+    """In page order, each entry leads with what the job's top requirements still need: the
+    6-second test reads the first bullets (DECISIONS 2026-11-09)."""
+
+    @staticmethod
+    def _entry(*serves: tuple[str, ...]) -> Any:
+        from aria_resume.compose.planner import _Entry
+
+        slots = [
+            BulletSlot(fact_ids=(uuid.UUID(int=100 + n),), requirement_ids=ids, value=1.0 - n / 10, lines=1)
+            for n, ids in enumerate(serves)
+        ]
+        return _Entry(SectionKind.EXPERIENCE, uuid.uuid4(), [], 0, 5, chosen=slots)
+
+    @staticmethod
+    def _order(entry: Any) -> list[tuple[str, ...]]:
+        return [slot.requirement_ids for slot in entry.chosen]
+
+    TOP = (("Python", frozenset({"skill:python"})), ("PostgreSQL", frozenset({"skill:postgresql"})))
+
+    def test_the_top_requirement_s_bullet_goes_first_the_rest_by_value(self) -> None:
+        from aria_resume.compose.planner import _lead_with_the_top
+
+        entry = self._entry(("skill:redis",), ("skill:react",), ("skill:postgresql",), ("skill:python",))
+        _lead_with_the_top({SectionKind.EXPERIENCE: [entry]}, (SectionKind.EXPERIENCE,), self.TOP)
+        assert self._order(entry) == [
+            ("skill:python",),
+            ("skill:postgresql",),
+            ("skill:redis",),
+            ("skill:react",),
+        ]
+
+    def test_what_an_earlier_entry_shows_is_not_led_with_again(self) -> None:
+        from aria_resume.compose.planner import _lead_with_the_top
+
+        first = self._entry(("skill:redis",), ("skill:python",))
+        second = self._entry(("skill:react",), ("skill:python",), ("skill:postgresql",))
+        _lead_with_the_top({SectionKind.EXPERIENCE: [first, second]}, (SectionKind.EXPERIENCE,), self.TOP)
+        assert self._order(first) == [("skill:python",), ("skill:redis",)]
+        assert self._order(second) == [("skill:postgresql",), ("skill:react",), ("skill:python",)]
+
+    def test_one_bullet_showing_two_is_enough_for_both(self) -> None:
+        from aria_resume.compose.planner import _lead_with_the_top
+
+        entry = self._entry(("skill:redis",), ("skill:postgresql",), ("skill:python", "skill:postgresql"))
+        _lead_with_the_top({SectionKind.EXPERIENCE: [entry]}, (SectionKind.EXPERIENCE,), self.TOP)
+        assert self._order(entry) == [
+            ("skill:python", "skill:postgresql"),
+            ("skill:redis",),
+            ("skill:postgresql",),
+        ]
+
+    def test_the_plan_is_led_with_the_test_s_own_ranking(
+        self, monkeypatch: pytest.MonkeyPatch, snapshot: CandidateSnapshot, taxonomy: SkillTaxonomy
+    ) -> None:
+        import aria_resume.compose.planner as planner
+        from aria_resume.validate.six_second import ranked_requirements
+
+        seen: list[Any] = []
+        monkeypatch.setattr(planner, "_lead_with_the_top", lambda entries, order, top: seen.append(top))
+        candidate = _named(snapshot)
+        normalized, evidence = _inputs("larkspur_backend", candidate, taxonomy)
+        plan(normalized, evidence, candidate, taxonomy)
+        assert seen == [ranked_requirements(normalized, evidence, taxonomy)]
